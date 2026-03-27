@@ -1,0 +1,64 @@
+BitFun Git 工作流指南
+========================
+
+远程仓库配置
+------------
+origin   -> https://github.com/yelongll/BitFun.git  (你的仓库)
+upstream -> https://github.com/GCWing/BitFun.git    (别人的仓库)
+
+
+日常工作流
+==========
+
+1. 从别人仓库拉取最新代码
+--------------------------
+git fetch upstream
+git merge upstream/main
+
+
+2. 推送你的修改到自己的仓库
+--------------------------
+git add .
+git commit -m "你的修改描述"
+git push origin main
+
+
+避免冲突的关键
+==============
+先提交，再拉取！
+
+完整流程:
+---------
+# 1. 先提交本地修改
+git add .
+git commit -m "我的修改"
+
+# 2. 再拉取上游更新
+git fetch upstream
+git merge upstream/main
+
+# 3. 解决冲突（如果有），然后推送
+git push origin main
+
+
+常用命令
+========
+# 查看远程仓库
+git remote -v
+
+# 查看当前状态
+git status
+
+# 查看提交历史
+git log --oneline -10
+
+# 强制同步到上游版本（谨慎使用，会丢失本地修改）
+git fetch upstream
+git reset --hard upstream/main
+
+
+配置命令（已完成，仅供参考）
+============================
+git remote rename BitFun upstream
+git remote set-url upstream https://github.com/GCWing/BitFun.git
+git remote add origin https://github.com/yelongll/BitFun.git
