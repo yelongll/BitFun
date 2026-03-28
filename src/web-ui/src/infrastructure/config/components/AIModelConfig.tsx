@@ -29,6 +29,7 @@ interface SelectedModelDraft {
   key: string;
   configId?: string;
   modelName: string;
+  displayName?: string;
   category: ModelCategory;
   contextWindow: number;
   maxTokens: number;
@@ -56,6 +57,7 @@ function createModelDraft(
     key: overrides?.key ?? overrides?.configId ?? baseConfig?.id ?? trimmedModelName,
     configId: overrides?.configId ?? baseConfig?.id,
     modelName: trimmedModelName,
+    displayName: overrides?.displayName ?? baseConfig?.display_name,
     category: overrides?.category ?? baseConfig?.category ?? 'general_chat',
     contextWindow: overrides?.contextWindow ?? baseConfig?.context_window ?? 128000,
     maxTokens: overrides?.maxTokens ?? baseConfig?.max_tokens ?? 8192,
@@ -782,6 +784,7 @@ const AIModelConfig: React.FC = () => {
           ),
           api_key: editingConfig.api_key || '',
           model_name: draft.modelName,
+          display_name: draft.displayName || undefined,
           provider: editingConfig.provider || 'openai',
           enabled: editingConfig.enabled ?? true,
           description: editingConfig.description,
@@ -1242,6 +1245,15 @@ const AIModelConfig: React.FC = () => {
                 )}
               </div>
               <div className="bitfun-ai-model-config__selected-model-grid">
+                <div className="bitfun-ai-model-config__selected-model-field">
+                  <span>{t('form.displayName')}</span>
+                  <Input
+                    value={draft.displayName || ''}
+                    onChange={(e) => updateModelDraft(draft.modelName, { displayName: e.target.value || undefined })}
+                    placeholder={draft.modelName}
+                    inputSize="small"
+                  />
+                </div>
                 <div className="bitfun-ai-model-config__selected-model-field">
                   <span>{t('category.label')}</span>
                   <Select

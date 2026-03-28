@@ -134,6 +134,8 @@
     "modelName": "Model Name",
     "modelSelection": "Select Models",
     "modelNameHint": "GLM-ASR uses glm-asr, other speech models use their corresponding model names",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "Custom display name (optional)",
     "baseUrl": "API URL",
     "resolvedUrlLabel": "Request URL: ",
     "forceUrlHint": "Append # to force use the exact URL you entered",

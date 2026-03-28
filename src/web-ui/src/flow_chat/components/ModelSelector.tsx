@@ -37,11 +37,14 @@ interface ModelInfo {
   configName: string;
   /** Actual model identifier (AIModelConfig.model_name). */
   modelName: string;
+  /** Custom display name shown in UI (optional, falls back to modelName). */
+  displayName?: string;
   providerName: string;
   provider: string;
   contextWindow?: number;
   enableThinking?: boolean;
   reasoningEffort?: string;
+  category?: ModelCategory;
 }
 
 // Helper: identify special model IDs.
@@ -88,7 +91,7 @@ const buildResolvedModelTooltipText = (
 const getModelDisplayLabel = (model: ModelInfo | null, fallback: string): string => {
   if (!model) return fallback;
   if (isSpecialModel(model.id)) return model.configName;
-  return model.modelName || model.configName || fallback;
+  return model.displayName || model.modelName || model.configName || fallback;
 };
 
 const getModelTooltipText = (model: ModelInfo | null, fallback: string): string => {
@@ -214,11 +217,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         id: modelId,
         configName: modelId === 'primary' ? t('modelSelector.primaryModel') : t('modelSelector.fastModel'),
         modelName: model.model_name,
+        displayName: model.display_name,
         providerName: getProviderDisplayName(model),
         provider: model.provider,
         contextWindow: model.context_window,
         enableThinking: model.enable_thinking_process,
         reasoningEffort: model.reasoning_effort,
+        category: model.category,
       };
     }
 
@@ -229,11 +234,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       id: model.id || '',
       configName: model.name,
       modelName: model.model_name,
+      displayName: model.display_name,
       providerName: getProviderDisplayName(model),
       provider: model.provider,
       contextWindow: model.context_window,
       enableThinking: model.enable_thinking_process,
       reasoningEffort: model.reasoning_effort,
+      category: model.category,
     };
   }, [getCurrentModelId, allModels, defaultModels, t]);
   
@@ -249,11 +256,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         id: m.id || '',
         configName: m.name,
         modelName: m.model_name,
+        displayName: m.display_name,
         providerName: getProviderDisplayName(m),
         provider: m.provider,
         contextWindow: m.context_window,
         enableThinking: m.enable_thinking_process,
         reasoningEffort: m.reasoning_effort,
+        category: m.category,
       }));
   }, [allModels]);
   
@@ -401,30 +410,51 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           <div className="bitfun-model-selector__divider" />
 
           <div className="bitfun-model-selector__list">
-            {availableModels.map(model => {
-              const isSelected = currentModelId === model.id;
+            {(() => {
+              const modelsByProvider = availableModels.reduce((acc, model) => {
+                const providerName = model.providerName || 'Other';
+                if (!acc[providerName]) {
+                  acc[providerName] = [];
+                }
+                acc[providerName].push(model);
+                return acc;
+              }, {} as Record<string, ModelInfo[]>);
 
-              return (
-                <Tooltip key={model.id} content={buildModelMetaText(model)} placement="right">
-                  <div
-                    className={`bitfun-model-selector__option ${isSelected ? 'bitfun-model-selector__option--selected' : ''}`}
-                    onClick={() => handleSelectModel(model.id)}
-                  >
-                    <div className="bitfun-model-selector__option-main">
-                      <span className="bitfun-model-selector__option-name">
-                        {model.modelName}
-                        {model.enableThinking && (
-                          <Sparkles size={10} className="bitfun-model-selector__option-thinking" />
-                        )}
-                      </span>
-                    </div>
-                    {isSelected && (
-                      <Check size={14} className="bitfun-model-selector__option-check" />
-                    )}
+              const providerOrder = Object.keys(modelsByProvider).sort((a, b) => a.localeCompare(b));
+
+              return providerOrder.map(providerName => (
+                <div key={providerName} className="bitfun-model-selector__category-group">
+                  <div className="bitfun-model-selector__category-label">
+                    {providerName} {t('modelSelector.providerSuffix')}
                   </div>
-                </Tooltip>
-              );
-            })}
+                  {modelsByProvider[providerName].map(model => {
+                    const isSelected = currentModelId === model.id;
+                    const displayLabel = model.displayName || model.modelName;
+
+                    return (
+                      <Tooltip key={model.id} content={buildModelMetaText(model)} placement="right">
+                        <div
+                          className={`bitfun-model-selector__option ${isSelected ? 'bitfun-model-selector__option--selected' : ''}`}
+                          onClick={() => handleSelectModel(model.id)}
+                        >
+                          <div className="bitfun-model-selector__option-main">
+                            <span className="bitfun-model-selector__option-name">
+                              {displayLabel}
+                              {model.enableThinking && (
+                                <Sparkles size={10} className="bitfun-model-selector__option-thinking" />
+                              )}
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <Check size={14} className="bitfun-model-selector__option-check" />
+                          )}
+                        </div>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              ));
+            })()}
           </div>
         </div>
       )}

@@ -919,7 +919,10 @@
     "autoModelDesc": "Automatically Routing",
     "primaryModel": "Primary Model",
     "fastModel": "Fast Model",
-    "modelNotConfigured": "Not Configured"
+    "modelNotConfigured": "Not Configured",
+    "categoryGeneralChat": "Text Generation",
+    "categoryMultimodal": "Multimodal",
+    "providerSuffix": "Provider"
   },
   "reasoningEffort": {
     "title": "Reasoning Effort",

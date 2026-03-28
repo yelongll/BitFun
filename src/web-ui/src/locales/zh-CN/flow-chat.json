@@ -912,7 +912,10 @@
     "autoModelDesc": "自动路由最优模型",
     "primaryModel": "Primary 模型",
     "fastModel": "Fast 模型",
-    "modelNotConfigured": "未配置"
+    "modelNotConfigured": "未配置",
+    "categoryGeneralChat": "文本生成",
+    "categoryMultimodal": "多模态",
+    "providerSuffix": "服务商"
   },
   "reasoningEffort": {
     "title": "推理深度",

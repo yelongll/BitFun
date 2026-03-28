@@ -104,7 +104,9 @@ export interface AIModelConfig {
   base_url: string;
   /** Computed actual request URL, derived from base_url + provider format. Stored on save. */
   request_url?: string;
-  model_name: string;      
+  model_name: string;
+  /** Custom display name shown in UI (optional, falls back to model_name if not set). */
+  display_name?: string;
   description?: string;    
   context_window?: number; 
   max_tokens?: number;     

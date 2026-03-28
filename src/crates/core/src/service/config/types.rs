@@ -756,6 +756,9 @@ pub struct AIModelConfig {
     pub name: String,
     pub provider: String,
     pub model_name: String,
+    /// Custom display name shown in UI (optional, falls back to model_name if not set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
     pub base_url: String,
 
     /// Computed actual request URL (auto-derived from base_url + provider format).
@@ -1194,6 +1197,7 @@ impl Default for AIModelConfig {
             name: String::new(),
             provider: String::new(),
             model_name: String::new(),
+            display_name: None,
             base_url: String::new(),
             request_url: None,
             api_key: String::new(),
