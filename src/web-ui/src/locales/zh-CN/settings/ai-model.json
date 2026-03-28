@@ -96,6 +96,30 @@
     "openrouter": {
       "name": "OpenRouter",
       "description": "OpenRouter 大模型平台"
+    },
+    "azure": {
+      "name": "Azure OpenAI",
+      "description": "微软 Azure OpenAI 服务"
+    },
+    "tencent": {
+      "name": "腾讯混元",
+      "description": "腾讯混元大模型"
+    },
+    "baidu": {
+      "name": "百度文心",
+      "description": "百度文心一言大模型"
+    },
+    "yi": {
+      "name": "零一万物",
+      "description": "零一万物 Yi 系列大模型"
+    },
+    "mistral": {
+      "name": "Mistral AI",
+      "description": "Mistral AI 大模型"
+    },
+    "cohere": {
+      "name": "Cohere",
+      "description": "Cohere 大模型平台"
     }
   },
   "tabs": {

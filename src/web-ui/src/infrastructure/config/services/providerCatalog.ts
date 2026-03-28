@@ -71,6 +71,30 @@ export const PROVIDER_URL_CATALOG: ProviderUrlCatalogItem[] = [
     id: 'openrouter',
     baseUrl: 'https://openrouter.ai/api/v1',
   },
+  {
+    id: 'azure',
+    baseUrl: 'https://your-resource.openai.azure.com/openai/deployments',
+  },
+  {
+    id: 'tencent',
+    baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+  },
+  {
+    id: 'baidu',
+    baseUrl: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop',
+  },
+  {
+    id: 'yi',
+    baseUrl: 'https://api.lingyiwanwu.com/v1',
+  },
+  {
+    id: 'mistral',
+    baseUrl: 'https://api.mistral.ai/v1',
+  },
+  {
+    id: 'cohere',
+    baseUrl: 'https://api.cohere.ai/v1',
+  },
 ];
 
 export function normalizeProviderBaseUrl(url: string): string {

@@ -203,6 +203,72 @@ export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
     requiresApiKey: true,
     description: t('settings/ai-model:providers.openrouter.description'),
     helpUrl: 'https://openrouter.ai/keys'
+  },
+
+  azure: {
+    id: 'azure',
+    name: t('settings/ai-model:providers.azure.name'),
+    baseUrl: 'https://your-resource.openai.azure.com/openai/deployments',
+    format: 'openai',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.azure.description'),
+    helpUrl: 'https://portal.azure.com/'
+  },
+
+  tencent: {
+    id: 'tencent',
+    name: t('settings/ai-model:providers.tencent.name'),
+    baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+    format: 'openai',
+    models: ['hunyuan-lite', 'hunyuan-standard', 'hunyuan-pro'],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.tencent.description'),
+    helpUrl: 'https://console.cloud.tencent.com/hunyuan'
+  },
+
+  baidu: {
+    id: 'baidu',
+    name: t('settings/ai-model:providers.baidu.name'),
+    baseUrl: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop',
+    format: 'openai',
+    models: ['ernie-4.0-8k', 'ernie-3.5-8k', 'ernie-speed-8k'],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.baidu.description'),
+    helpUrl: 'https://console.bce.baidu.com/qianfan/'
+  },
+
+  yi: {
+    id: 'yi',
+    name: t('settings/ai-model:providers.yi.name'),
+    baseUrl: 'https://api.lingyiwanwu.com/v1',
+    format: 'openai',
+    models: ['yi-lightning', 'yi-large', 'yi-medium'],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.yi.description'),
+    helpUrl: 'https://platform.lingyiwanwu.com/'
+  },
+
+  mistral: {
+    id: 'mistral',
+    name: t('settings/ai-model:providers.mistral.name'),
+    baseUrl: 'https://api.mistral.ai/v1',
+    format: 'openai',
+    models: ['mistral-large-latest', 'mistral-medium', 'mistral-small'],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.mistral.description'),
+    helpUrl: 'https://console.mistral.ai/'
+  },
+
+  cohere: {
+    id: 'cohere',
+    name: t('settings/ai-model:providers.cohere.name'),
+    baseUrl: 'https://api.cohere.ai/v1',
+    format: 'openai',
+    models: ['command-r-plus', 'command-r', 'command'],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.cohere.description'),
+    helpUrl: 'https://dashboard.cohere.com/'
   }
 };
 

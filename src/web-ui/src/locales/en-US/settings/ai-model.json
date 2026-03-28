@@ -96,6 +96,30 @@
     "openrouter": {
       "name": "OpenRouter",
       "description": "OpenRouter Model Platform"
+    },
+    "azure": {
+      "name": "Azure OpenAI",
+      "description": "Microsoft Azure OpenAI Service"
+    },
+    "tencent": {
+      "name": "Tencent Hunyuan",
+      "description": "Tencent Hunyuan Large Model"
+    },
+    "baidu": {
+      "name": "Baidu ERNIE",
+      "description": "Baidu ERNIE Large Model"
+    },
+    "yi": {
+      "name": "01.AI",
+      "description": "01.AI Yi Series Large Model"
+    },
+    "mistral": {
+      "name": "Mistral AI",
+      "description": "Mistral AI Large Model"
+    },
+    "cohere": {
+      "name": "Cohere",
+      "description": "Cohere Model Platform"
     }
   },
   "tabs": {
