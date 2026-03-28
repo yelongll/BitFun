@@ -15,13 +15,15 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ToolCardProps } from '../types/flow-chat';
-import { Terminal, Play, X, ExternalLink, Square } from 'lucide-react';
+import { Terminal, Play, X, ExternalLink, Square, Copy, Check, RefreshCw, Edit2 } from 'lucide-react';
 import { createTerminalTab } from '@/shared/utils/tabUtils';
 import { BaseToolCard, ToolCardHeader } from './BaseToolCard';
 import { CubeLoading, IconButton, Tooltip } from '../../component-library';
 import { TerminalOutputRenderer } from '@/tools/terminal/components';
 import { createLogger } from '@/shared/utils/logger';
 import { useToolCardHeightContract } from './useToolCardHeightContract';
+import { globalEventBus } from '@/infrastructure/event-bus';
+import { flowChatManager } from '../services/FlowChatManager';
 import './TerminalToolCard.scss';
 
 const log = createLogger('TerminalToolCard');
@@ -128,6 +130,7 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
   });
   
   const [accumulatedOutput, setAccumulatedOutput] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const applyExpandedState = useCallback((
     nextExpanded: boolean,
@@ -392,6 +395,49 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
     return { output, exitCode, workingDir, executionTimeMs, wasInterrupted };
   }, [toolResult?.result, toolResult?.duration_ms]);
 
+  const handleCopyCommand = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!command || !command.trim()) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      log.error('Failed to copy command', error);
+    }
+  }, [command]);
+
+  const handleRerunCommand = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!command || !command.trim()) {
+      return;
+    }
+
+    try {
+      const message = `请执行命令: \`${command}\``;
+      await flowChatManager.sendMessage(message);
+    } catch (error) {
+      log.error('Failed to rerun command', { command, error });
+    }
+  }, [command]);
+
+  const handleEditAndRun = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!command || !command.trim()) {
+      return;
+    }
+
+    globalEventBus.emit('fill-chat-input', {
+      content: command
+    });
+  }, [command]);
+
   const isLoading = status === 'preparing' || status === 'streaming' || status === 'running';
   const isFailed = status === 'error';
 
@@ -400,23 +446,93 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
   };
 
   const renderStatusIcon = () => {
+    const hasCommand = command && command.trim();
+    
     if (terminalSessionId) {
       return (
-        <IconButton 
-          className="terminal-action-btn external-btn"
-          variant="ghost"
-          size="xs"
-          onClick={handleOpenInPanel}
-          tooltip={t('toolCards.terminal.openInPanel')}
-        >
-          <ExternalLink size={12} />
-        </IconButton>
+        <>
+          {isTerminalState && hasCommand && (
+            <>
+              <Tooltip content={t('toolCards.terminal.rerunCommand')}>
+                <button
+                  className="terminal-action-btn rerun-btn"
+                  onClick={handleRerunCommand}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </Tooltip>
+              <Tooltip content={t('toolCards.terminal.editAndRun')}>
+                <button
+                  className="terminal-action-btn edit-run-btn"
+                  onClick={handleEditAndRun}
+                >
+                  <Edit2 size={12} />
+                </button>
+              </Tooltip>
+            </>
+          )}
+          {hasCommand && (
+            <Tooltip content={copied ? t('toolCards.terminal.copiedCommand') : t('toolCards.terminal.copyCommand')}>
+              <button
+                className={`terminal-action-btn copy-btn ${copied ? 'copied' : ''}`}
+                onClick={handleCopyCommand}
+              >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+              </button>
+            </Tooltip>
+          )}
+          <IconButton 
+            className="terminal-action-btn external-btn"
+            variant="ghost"
+            size="xs"
+            onClick={handleOpenInPanel}
+            tooltip={t('toolCards.terminal.openInPanel')}
+          >
+            <ExternalLink size={12} />
+          </IconButton>
+        </>
       );
     }
 
     if (isLoading) {
       return <CubeLoading size="small" />;
     }
+    
+    if (hasCommand) {
+      return (
+        <>
+          {isTerminalState && (
+            <>
+              <Tooltip content={t('toolCards.terminal.rerunCommand')}>
+                <button
+                  className="terminal-action-btn rerun-btn"
+                  onClick={handleRerunCommand}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </Tooltip>
+              <Tooltip content={t('toolCards.terminal.editAndRun')}>
+                <button
+                  className="terminal-action-btn edit-run-btn"
+                  onClick={handleEditAndRun}
+                >
+                  <Edit2 size={12} />
+                </button>
+              </Tooltip>
+            </>
+          )}
+          <Tooltip content={copied ? t('toolCards.terminal.copiedCommand') : t('toolCards.terminal.copyCommand')}>
+            <button
+              className={`terminal-action-btn copy-btn ${copied ? 'copied' : ''}`}
+              onClick={handleCopyCommand}
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+            </button>
+          </Tooltip>
+        </>
+      );
+    }
+    
     return null;
   };
 

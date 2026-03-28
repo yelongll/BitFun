@@ -465,7 +465,11 @@
       "workingDirectory": "Working directory:",
       "exitCode": "Exit code: {{code}}",
       "commandInterrupted": "Command interrupted",
-      "executionFailed": "Command execution failed"
+      "executionFailed": "Command execution failed",
+      "copyCommand": "Copy command",
+      "copiedCommand": "Copied",
+      "rerunCommand": "Rerun command",
+      "editAndRun": "Edit and run"
     },
     "plan": {
       "loadingPlan": "Loading plan...",

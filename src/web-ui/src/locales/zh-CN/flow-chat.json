@@ -457,7 +457,11 @@
       "workingDirectory": "工作目录:",
       "exitCode": "退出码: {{code}}",
       "commandInterrupted": "命令已被中断",
-      "executionFailed": "命令执行失败"
+      "executionFailed": "命令执行失败",
+      "copyCommand": "复制命令",
+      "copiedCommand": "已复制",
+      "rerunCommand": "重新执行",
+      "editAndRun": "编辑后执行"
     },
     "plan": {
       "loadingPlan": "正在加载计划...",
