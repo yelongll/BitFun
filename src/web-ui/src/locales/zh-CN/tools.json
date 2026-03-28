@@ -276,10 +276,10 @@
       "emptyLine": "(空行)"
     },
     "errors": {
-      "loadPluginsFailed": "Failed to load plugins",
-      "installPluginFailed": "Failed to install plugin",
-      "uninstallPluginFailed": "Failed to uninstall plugin",
-      "initializeFailed": "Failed to initialize LSP"
+      "loadPluginsFailed": "加载插件失败",
+      "installPluginFailed": "安装插件失败",
+      "uninstallPluginFailed": "卸载插件失败",
+      "initializeFailed": "初始化 LSP 失败"
     }
   },
   "fileTree": {
