@@ -293,18 +293,18 @@ pub fn parse_command(text: &str) -> BotCommand {
 pub fn welcome_message(language: BotLanguage) -> &'static str {
     if language.is_chinese() {
         "\
-欢迎使用 BitFun！
+欢迎使用 空灵语言！
 
-要连接你的 BitFun 桌面端，请发送 BitFun Remote Connect 面板里显示的 6 位配对码。
+要连接你的 空灵语言 桌面端，请发送 空灵语言 Remote Connect 面板里显示的 6 位配对码。
 
-如果你还没有配对码，请打开 BitFun Desktop -> Remote Connect -> Telegram/飞书/微信机器人，复制 6 位配对码并发送到这里。"
+如果你还没有配对码，请打开 空灵语言 Desktop -> Remote Connect -> Telegram/飞书/微信机器人，复制 6 位配对码并发送到这里。"
     } else {
         "\
-Welcome to BitFun!
+Welcome to 空灵语言!
 
-To connect your BitFun desktop app, please enter the 6-digit pairing code shown in your BitFun Remote Connect panel.
+To connect your 空灵语言 desktop app, please enter the 6-digit pairing code shown in your 空灵语言 Remote Connect panel.
 
-Need a pairing code? Open BitFun Desktop -> Remote Connect -> Telegram/Feishu/WeChat bot -> copy the 6-digit code and send it here."
+Need a pairing code? Open 空灵语言 Desktop -> Remote Connect -> Telegram/Feishu/WeChat bot -> copy the 6-digit code and send it here."
     }
 }
 
@@ -342,10 +342,10 @@ Available commands:
 
 pub fn paired_success_message(language: BotLanguage) -> String {
     if language.is_chinese() {
-        format!("配对成功！BitFun 已连接。\n\n{}", help_message(language))
+        format!("配对成功！空灵语言 已连接。\n\n{}", help_message(language))
     } else {
         format!(
-            "Pairing successful! BitFun is now connected.\n\n{}",
+            "Pairing successful! 空灵语言 is now connected.\n\n{}",
             help_message(language)
         )
     }
@@ -366,9 +366,9 @@ pub async fn bootstrap_im_chat_after_pairing(state: &mut BotChatState) -> String
         Some(s) => s,
         None => {
             return if language.is_chinese() {
-                "自动准备未能完成：工作区服务不可用。请稍后在 BitFun 桌面端打开工作区后再试。".to_string()
+                "自动准备未能完成：工作区服务不可用。请稍后在 空灵语言 桌面端打开工作区后再试。".to_string()
             } else {
-                "Auto-setup incomplete: workspace service unavailable. Open a workspace in BitFun Desktop and try again."
+                "Auto-setup incomplete: workspace service unavailable. Open a workspace in 空灵语言 Desktop and try again."
                     .to_string()
             };
         }
@@ -799,10 +799,10 @@ async fn dispatch_im_bot_command_inner(
         }
         BotCommand::PairingCode(_) => HandleResult {
             reply: if language.is_chinese() {
-                "配对码会自动处理。如果你需要重新配对，请在 BitFun Desktop 中重新启动连接。"
+                "配对码会自动处理。如果你需要重新配对，请在 空灵语言 Desktop 中重新启动连接。"
                     .to_string()
             } else {
-                "Pairing codes are handled automatically. If you need to re-pair, please restart the connection from BitFun Desktop."
+                "Pairing codes are handled automatically. If you need to re-pair, please restart the connection from 空灵语言 Desktop."
                     .to_string()
             },
             actions: vec![],
@@ -918,9 +918,9 @@ pub async fn handle_command(
 fn not_paired(language: BotLanguage) -> HandleResult {
     HandleResult {
         reply: if language.is_chinese() {
-            "尚未连接到 BitFun Desktop。请先发送 6 位配对码。".to_string()
+            "尚未连接到 空灵语言 Desktop。请先发送 6 位配对码。".to_string()
         } else {
-            "Not connected to BitFun Desktop. Please enter the 6-digit pairing code first."
+            "Not connected to 空灵语言 Desktop. Please enter the 6-digit pairing code first."
                 .to_string()
         },
         actions: vec![],
@@ -1118,9 +1118,9 @@ async fn handle_switch_workspace(state: &mut BotChatState) -> HandleResult {
     if workspaces.is_empty() {
         return HandleResult {
             reply: if language.is_chinese() {
-                "未找到工作区。请先在 BitFun Desktop 中打开一个项目。".to_string()
+                "未找到工作区。请先在 空灵语言 Desktop 中打开一个项目。".to_string()
             } else {
-                "No workspaces found. Please open a project in BitFun Desktop first.".to_string()
+                "No workspaces found. Please open a project in 空灵语言 Desktop first.".to_string()
             },
             actions: vec![],
             forward_to_session: None,
@@ -1188,9 +1188,9 @@ async fn handle_switch_assistant(state: &mut BotChatState) -> HandleResult {
     if assistants.is_empty() {
         return HandleResult {
             reply: if language.is_chinese() {
-                "未找到助理。请先在 BitFun Desktop 中创建助理。".to_string()
+                "未找到助理。请先在 空灵语言 Desktop 中创建助理。".to_string()
             } else {
-                "No assistants found. Please create an assistant in BitFun Desktop first.".to_string()
+                "No assistants found. Please create an assistant in 空灵语言 Desktop first.".to_string()
             },
             actions: assistant_mode_actions(language),
             forward_to_session: None,
@@ -1434,9 +1434,9 @@ async fn handle_new_session(state: &mut BotChatState, agent_type: &str) -> Handl
         None => {
             return HandleResult {
                 reply: if language.is_chinese() {
-                    "BitFun 会话系统尚未就绪。".to_string()
+                    "空灵语言 会话系统尚未就绪。".to_string()
                 } else {
-                    "BitFun session system not ready.".to_string()
+                    "空灵语言 session system not ready.".to_string()
                 },
                 actions: vec![],
                 forward_to_session: None,

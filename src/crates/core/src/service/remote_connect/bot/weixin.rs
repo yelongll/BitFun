@@ -1506,9 +1506,9 @@ impl WeixinBot {
                         }
                     } else if !text.is_empty() {
                         let err = if language.is_chinese() {
-                            "请输入 BitFun 桌面端远程连接中显示的 6 位配对码。"
+                            "请输入 空灵语言 桌面端远程连接中显示的 6 位配对码。"
                         } else {
-                            "Please send the 6-digit pairing code from BitFun Desktop Remote Connect."
+                            "Please send the 6-digit pairing code from 空灵语言 Desktop Remote Connect."
                         };
                         let _ = self.send_text(&peer, err).await;
                     } else if Self::has_inbound_image_items(msg) {
