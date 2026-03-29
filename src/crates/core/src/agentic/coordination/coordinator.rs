@@ -11,7 +11,7 @@ use crate::agentic::core::{
 use crate::agentic::events::{
     AgenticEvent, EventPriority, EventQueue, EventRouter, EventSubscriber,
 };
-use crate::agentic::execution::{ExecutionContext, ExecutionEngine};
+use crate::agentic::execution::{ContextCompactionOutcome, ExecutionContext, ExecutionEngine};
 use crate::agentic::image_analysis::ImageContextData;
 use crate::agentic::round_preempt::DialogRoundPreemptSource;
 use crate::agentic::session::SessionManager;
@@ -28,6 +28,9 @@ use std::sync::OnceLock;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration, Instant};
 use tokio_util::sync::CancellationToken;
+
+const MANUAL_COMPACTION_COMMAND: &str = "/compact";
+const CONTEXT_COMPRESSION_TOOL_NAME: &str = "ContextCompression";
 
 /// Subagent execution result
 ///
@@ -121,68 +124,32 @@ impl ConversationCoordinator {
         let workspace_path = config.workspace_path.as_ref()?;
         let path_buf = PathBuf::from(workspace_path);
 
-        let remote_id = config
-            .remote_connection_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
+        let identity = crate::service::remote_ssh::workspace_state::resolve_workspace_session_identity(
+            workspace_path,
+            config.remote_connection_id.as_deref(),
+            config.remote_ssh_host.as_deref(),
+        )
+        .await?;
 
-        // Remote tool routing must not be inferred from path alone: the same string can be a
-        // client path (e.g. macOS `/Users/...`) or a POSIX path on an SSH host. Only treat the
-        // workspace as remote when the session was created with an explicit SSH connection id.
-        let Some(rid) = remote_id else {
-            return Some(WorkspaceBinding::new(None, path_buf));
-        };
-
-        let path_norm =
-            crate::service::remote_ssh::workspace_state::normalize_remote_workspace_path(
-                workspace_path,
-            );
-        let host_from_config = config
-            .remote_ssh_host
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-
-        let entry =
-            crate::service::remote_ssh::workspace_state::lookup_remote_connection_with_hint(
+        if let Some(rid) = identity.remote_connection_id.as_deref() {
+            let connection_name = crate::service::remote_ssh::workspace_state::lookup_remote_connection_with_hint(
                 workspace_path,
                 Some(rid),
             )
-            .await;
-
-        let local_session_path = if let Some(ref e) = entry {
-            if !e.ssh_host.trim().is_empty() {
-                crate::service::remote_ssh::workspace_state::remote_workspace_session_mirror_dir(
-                    &e.ssh_host,
-                    &e.remote_root,
-                )
-            } else {
-                crate::service::remote_ssh::workspace_state::unresolved_remote_session_storage_dir(
-                    rid, &path_norm,
-                )
-            }
-        } else if let Some(h) = host_from_config {
-            crate::service::remote_ssh::workspace_state::remote_workspace_session_mirror_dir(
-                h, &path_norm,
-            )
-        } else {
-            crate::service::remote_ssh::workspace_state::unresolved_remote_session_storage_dir(
-                rid, &path_norm,
-            )
-        };
-
-        let connection_name = entry
+            .await
             .map(|e| e.connection_name)
             .unwrap_or_else(|| rid.to_string());
 
-        Some(WorkspaceBinding::new_remote(
-            None,
-            path_buf,
-            rid.to_string(),
-            connection_name,
-            local_session_path,
-        ))
+            return Some(WorkspaceBinding::new_remote(
+                None,
+                path_buf,
+                rid.to_string(),
+                connection_name,
+                identity,
+            ));
+        }
+
+        Some(WorkspaceBinding::new(None, path_buf))
     }
 
     /// Build `WorkspaceServices` from a resolved `WorkspaceBinding`.
@@ -293,6 +260,139 @@ Treat the user message `{kickoff_query}` only as a start signal, begin bootstrap
 Use {expected_reply_language} for all user-facing replies during bootstrap unless the user later asks to switch languages. \
 Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complete."
         )
+    }
+
+    fn estimate_context_tokens(messages: &[Message]) -> usize {
+        let mut cloned = messages.to_vec();
+        cloned.iter_mut().map(|message| message.get_tokens()).sum()
+    }
+
+    fn manual_compaction_metadata() -> serde_json::Value {
+        serde_json::json!({
+            "kind": "manual_compaction",
+            "command": MANUAL_COMPACTION_COMMAND,
+        })
+    }
+
+    fn build_manual_compaction_round_completed(
+        turn_id: &str,
+        outcome: &ContextCompactionOutcome,
+        context_window: usize,
+        threshold: f32,
+    ) -> crate::service::session::ModelRoundData {
+        use crate::service::session::{ModelRoundData, ToolCallData, ToolItemData, ToolResultData};
+
+        let completed_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let started_at = completed_at.saturating_sub(outcome.duration_ms);
+
+        ModelRoundData {
+            id: format!("{}-manual-compaction-round", turn_id),
+            turn_id: turn_id.to_string(),
+            round_index: 0,
+            timestamp: started_at,
+            text_items: Vec::new(),
+            tool_items: vec![ToolItemData {
+                id: outcome.compression_id.clone(),
+                tool_name: CONTEXT_COMPRESSION_TOOL_NAME.to_string(),
+                tool_call: ToolCallData {
+                    input: serde_json::json!({
+                        "trigger": "manual",
+                        "tokens_before": outcome.tokens_before,
+                        "context_window": context_window,
+                        "threshold": threshold,
+                    }),
+                    id: outcome.compression_id.clone(),
+                },
+                tool_result: Some(ToolResultData {
+                    result: serde_json::json!({
+                        "compression_count": outcome.compression_count,
+                        "tokens_before": outcome.tokens_before,
+                        "tokens_after": outcome.tokens_after,
+                        "compression_ratio": outcome.compression_ratio,
+                        "duration": outcome.duration_ms,
+                        "applied": outcome.applied,
+                        "has_summary": outcome.has_summary,
+                        "summary_source": outcome.summary_source,
+                    }),
+                    success: true,
+                    result_for_assistant: None,
+                    error: None,
+                    duration_ms: Some(outcome.duration_ms),
+                }),
+                ai_intent: None,
+                start_time: started_at,
+                end_time: Some(completed_at),
+                duration_ms: Some(outcome.duration_ms),
+                order_index: Some(0),
+                is_subagent_item: None,
+                parent_task_tool_id: None,
+                subagent_session_id: None,
+                status: Some("completed".to_string()),
+            }],
+            thinking_items: Vec::new(),
+            start_time: started_at,
+            end_time: Some(completed_at),
+            status: "completed".to_string(),
+        }
+    }
+
+    fn build_manual_compaction_round_failed(
+        turn_id: &str,
+        compression_id: String,
+        error: &str,
+        context_window: usize,
+        threshold: f32,
+    ) -> crate::service::session::ModelRoundData {
+        use crate::service::session::{ModelRoundData, ToolCallData, ToolItemData, ToolResultData};
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        ModelRoundData {
+            id: format!("{}-manual-compaction-round", turn_id),
+            turn_id: turn_id.to_string(),
+            round_index: 0,
+            timestamp,
+            text_items: Vec::new(),
+            tool_items: vec![ToolItemData {
+                id: compression_id.clone(),
+                tool_name: CONTEXT_COMPRESSION_TOOL_NAME.to_string(),
+                tool_call: ToolCallData {
+                    input: serde_json::json!({
+                        "trigger": "manual",
+                        "context_window": context_window,
+                        "threshold": threshold,
+                        "summary_source": "none",
+                    }),
+                    id: compression_id,
+                },
+                tool_result: Some(ToolResultData {
+                    result: serde_json::Value::Null,
+                    success: false,
+                    result_for_assistant: None,
+                    error: Some(error.to_string()),
+                    duration_ms: None,
+                }),
+                ai_intent: None,
+                start_time: timestamp,
+                end_time: Some(timestamp),
+                duration_ms: Some(0),
+                order_index: Some(0),
+                is_subagent_item: None,
+                parent_task_tool_id: None,
+                subagent_session_id: None,
+                status: Some("error".to_string()),
+            }],
+            thinking_items: Vec::new(),
+            start_time: timestamp,
+            end_time: Some(timestamp),
+            status: "error".to_string(),
+        }
     }
 
     pub fn new(
@@ -438,8 +538,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             )
             .await?;
 
-        self.sync_session_metadata_to_workspace(&session, workspace_path.clone())
-            .await;
+        // SessionManager::create_session_with_id_and_creator already persists the
+        // session into the effective workspace session storage path. Avoid writing
+        // a second copy here using the raw workspace path, because remote workspaces
+        // resolve to a different effective storage path and double-writing can leave
+        // metadata/turn files split across two locations.
 
         self.emit_event(AgenticEvent::SessionCreated {
             session_id: session.session_id.clone(),
@@ -449,102 +552,6 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         })
         .await;
         Ok(session)
-    }
-
-    async fn sync_session_metadata_to_workspace(&self, session: &Session, workspace_path: String) {
-        use crate::agentic::persistence::PersistenceManager;
-        use crate::infrastructure::PathManager;
-        use crate::service::session::{SessionMetadata, SessionStatus};
-
-        let path_manager = match PathManager::new() {
-            Ok(pm) => Arc::new(pm),
-            Err(e) => {
-                warn!("Failed to initialize PathManager for session metadata sync: {e}");
-                return;
-            }
-        };
-
-        let binding = Self::build_workspace_binding(&session.config).await;
-        let workspace_path_buf = binding
-            .as_ref()
-            .map(|b| b.session_storage_path().to_path_buf())
-            .unwrap_or_else(|| PathBuf::from(&workspace_path));
-
-        let persistence_manager = match PersistenceManager::new(path_manager) {
-            Ok(manager) => manager,
-            Err(e) => {
-                warn!("Failed to initialize PersistenceManager for session metadata sync: {e}");
-                return;
-            }
-        };
-
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-
-        let existing = match persistence_manager
-            .load_session_metadata(&workspace_path_buf, &session.session_id)
-            .await
-        {
-            Ok(meta) => meta,
-            Err(e) => {
-                debug!(
-                    "Failed to load existing session metadata before sync: session_id={}, error={}",
-                    session.session_id, e
-                );
-                None
-            }
-        };
-
-        let metadata = SessionMetadata {
-            session_id: session.session_id.clone(),
-            session_name: session.session_name.clone(),
-            agent_type: session.agent_type.clone(),
-            created_by: session
-                .created_by
-                .clone()
-                .or_else(|| existing.as_ref().and_then(|m| m.created_by.clone())),
-            model_name: existing
-                .as_ref()
-                .map(|m| m.model_name.clone())
-                .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| "default".to_string()),
-            created_at: existing.as_ref().map(|m| m.created_at).unwrap_or(now_ms),
-            last_active_at: now_ms,
-            turn_count: existing.as_ref().map(|m| m.turn_count).unwrap_or(0),
-            message_count: existing.as_ref().map(|m| m.message_count).unwrap_or(0),
-            tool_call_count: existing.as_ref().map(|m| m.tool_call_count).unwrap_or(0),
-            status: existing
-                .as_ref()
-                .map(|m| m.status.clone())
-                .unwrap_or(SessionStatus::Active),
-            terminal_session_id: existing
-                .as_ref()
-                .and_then(|m| m.terminal_session_id.clone()),
-            snapshot_session_id: session.snapshot_session_id.clone().or_else(|| {
-                existing
-                    .as_ref()
-                    .and_then(|m| m.snapshot_session_id.clone())
-            }),
-            tags: existing
-                .as_ref()
-                .map(|m| m.tags.clone())
-                .unwrap_or_default(),
-            custom_metadata: existing.as_ref().and_then(|m| m.custom_metadata.clone()),
-            todos: existing.as_ref().and_then(|m| m.todos.clone()),
-            workspace_path: Some(workspace_path),
-        };
-
-        if let Err(e) = persistence_manager
-            .save_session_metadata(&workspace_path_buf, &metadata)
-            .await
-        {
-            warn!(
-                "Failed to sync session metadata to workspace: session_id={}, error={}",
-                session.session_id, e
-            );
-        }
     }
 
     /// Ensure the completed/failed/cancelled turn is persisted to the workspace
@@ -567,9 +574,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         status: crate::service::session::TurnStatus,
         user_message_metadata: Option<serde_json::Value>,
     ) {
+        use crate::agentic::core::SessionConfig;
         use crate::agentic::persistence::PersistenceManager;
         use crate::infrastructure::PathManager;
-        use crate::service::session::{DialogTurnData, UserMessageData};
+        use crate::service::session::{DialogTurnData, SessionMetadata, SessionStatus, UserMessageData};
 
         let path_manager = match PathManager::new() {
             Ok(pm) => std::sync::Arc::new(pm),
@@ -603,6 +611,42 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
+
+        if let Ok(None) = persistence_manager
+            .load_session_metadata(&workspace_path_buf, session_id)
+            .await
+        {
+            let metadata = SessionMetadata {
+                session_id: session_id.to_string(),
+                session_name: "Recovered Session".to_string(),
+                agent_type: "agentic".to_string(),
+                created_by: None,
+                model_name: "default".to_string(),
+                created_at: now_ms,
+                last_active_at: now_ms,
+                turn_count: 0,
+                message_count: 0,
+                tool_call_count: 0,
+                status: SessionStatus::Active,
+                terminal_session_id: None,
+                snapshot_session_id: None,
+                tags: Vec::new(),
+                custom_metadata: None,
+                todos: None,
+                workspace_path: Some(workspace_path.to_string()),
+                workspace_hostname: None,
+            };
+            if let Err(e) = persistence_manager
+                .save_session_metadata(&workspace_path_buf, &metadata)
+                .await
+            {
+                warn!(
+                    "Failed to create fallback session metadata during turn finalization: session_id={}, error={}",
+                    session_id, e
+                );
+                return;
+            }
+        }
 
         let mut turn_data = DialogTurnData::new(
             turn_id.to_string(),
@@ -854,6 +898,164 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             false,
         )
         .await
+    }
+
+    /// Compact the active session context as a persisted maintenance turn.
+    pub async fn compact_session_manually(&self, session_id: String) -> BitFunResult<()> {
+        let session = self
+            .session_manager
+            .get_session(&session_id)
+            .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
+
+        match &session.state {
+            SessionState::Idle => {}
+            SessionState::Processing {
+                current_turn_id,
+                phase,
+            } => {
+                return Err(BitFunError::Validation(format!(
+                    "Session is still processing: current_turn_id={}, phase={:?}",
+                    current_turn_id, phase
+                )));
+            }
+            SessionState::Error { error, .. } => {
+                return Err(BitFunError::Validation(format!(
+                    "Session must be idle before manual compaction: {}",
+                    error
+                )));
+            }
+        }
+
+        let context_messages = self
+            .session_manager
+            .get_context_messages(&session_id)
+            .await?;
+        let needs_restore = if context_messages.is_empty() {
+            true
+        } else {
+            context_messages.len() == 1 && session.dialog_turn_ids.len() > 0
+        };
+
+        if needs_restore {
+            let workspace_path = session.config.workspace_path.as_deref().ok_or_else(|| {
+                BitFunError::Validation(format!(
+                    "workspace_path is required when restoring session: {}",
+                    session_id
+                ))
+            })?;
+            self.session_manager
+                .restore_session(Path::new(workspace_path), &session_id)
+                .await?;
+        }
+
+        let context_messages = self
+            .session_manager
+            .get_context_messages(&session_id)
+            .await?;
+        let turn_index = self.session_manager.get_turn_count(&session_id);
+        let user_message_metadata = Some(Self::manual_compaction_metadata());
+        let turn_id = self
+            .session_manager
+            .start_maintenance_turn(
+                &session_id,
+                MANUAL_COMPACTION_COMMAND.to_string(),
+                None,
+                user_message_metadata.clone(),
+            )
+            .await?;
+
+        self.emit_event(AgenticEvent::DialogTurnStarted {
+            session_id: session_id.clone(),
+            turn_id: turn_id.clone(),
+            turn_index,
+            user_input: MANUAL_COMPACTION_COMMAND.to_string(),
+            original_user_input: None,
+            user_message_metadata: user_message_metadata.clone(),
+            subagent_parent_info: None,
+        })
+        .await;
+
+        let current_tokens = Self::estimate_context_tokens(&context_messages);
+        let context_window = session.config.max_context_tokens;
+        let compression_threshold = session.config.compression_threshold;
+
+        match self
+            .execution_engine
+            .compact_session_context(
+                &session_id,
+                &turn_id,
+                context_messages,
+                current_tokens,
+                context_window,
+                "manual",
+                crate::agentic::session::CompressionTailPolicy::CollapseAll,
+            )
+            .await
+        {
+            Ok(outcome) => {
+                let model_round = Self::build_manual_compaction_round_completed(
+                    &turn_id,
+                    &outcome,
+                    context_window,
+                    compression_threshold,
+                );
+                self.session_manager
+                    .complete_maintenance_turn(
+                        &session_id,
+                        &turn_id,
+                        vec![model_round],
+                        outcome.duration_ms,
+                    )
+                    .await?;
+                self.session_manager
+                    .update_session_state(&session_id, SessionState::Idle)
+                    .await?;
+
+                self.emit_event(AgenticEvent::DialogTurnCompleted {
+                    session_id,
+                    turn_id,
+                    total_rounds: 1,
+                    total_tools: 1,
+                    duration_ms: outcome.duration_ms,
+                    subagent_parent_info: None,
+                })
+                .await;
+
+                Ok(())
+            }
+            Err(err) => {
+                let error_text = err.to_string();
+                let compression_id = format!("compression_{}", uuid::Uuid::new_v4());
+                let model_round = Self::build_manual_compaction_round_failed(
+                    &turn_id,
+                    compression_id,
+                    &error_text,
+                    context_window,
+                    compression_threshold,
+                );
+                let _ = self
+                    .session_manager
+                    .fail_maintenance_turn(
+                        &session_id,
+                        &turn_id,
+                        error_text.clone(),
+                        vec![model_round],
+                    )
+                    .await;
+                let _ = self
+                    .session_manager
+                    .update_session_state(&session_id, SessionState::Idle)
+                    .await;
+                self.emit_event(AgenticEvent::DialogTurnFailed {
+                    session_id,
+                    turn_id,
+                    error: error_text.clone(),
+                    subagent_parent_info: None,
+                })
+                .await;
+                Err(err)
+            }
+        }
     }
 
     async fn start_dialog_turn_internal(

@@ -763,6 +763,7 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
         errorContent={isFailed ? renderErrorContent() : null}
         isFailed={isFailed}
         requiresConfirmation={showConfirmButtons}
+        headerExpandAffordance
       />
     </div>
   );

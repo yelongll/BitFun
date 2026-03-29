@@ -739,6 +739,12 @@ struct ComputerUseSessionMutableState {
     /// After `screenshot`, block `pointer_move_rel` / `ComputerUseMouseStep` until an absolute move
     /// from AX/OCR/globals (`mouse_move`, `move_to_text`, `click_element`, `click_label`) clears this.
     block_vision_pixel_nudge_after_screenshot: bool,
+    /// After click / key / type / scroll / drag: recommend a **`screenshot`** to confirm UI state (Cowork verify).
+    /// Cleared on the next successful `screenshot_display`.
+    pending_verify_screenshot: bool,
+    /// After `move_to_text` (global OCR coordinates): next guarded **`click`** may run without a prior
+    /// `screenshot_display` / fine-crop basis — same idea as `click_element` relaxed guard.
+    pointer_trusted_after_ocr_move: bool,
     /// Action optimizer for loop detection, history, and visual verification.
     optimizer: ComputerUseOptimizer,
 }
@@ -752,6 +758,8 @@ impl ComputerUseSessionMutableState {
             navigation_focus: None,
             screenshot_cache: None,
             block_vision_pixel_nudge_after_screenshot: false,
+            pending_verify_screenshot: false,
+            pointer_trusted_after_ocr_move: false,
             optimizer: ComputerUseOptimizer::new(),
         }
     }
@@ -767,17 +775,27 @@ impl ComputerUseSessionMutableState {
         self.last_shot_refinement = Some(refinement);
         self.navigation_focus = nav_focus;
         self.click_needs_fresh_screenshot = false;
+        self.pending_verify_screenshot = false;
+        self.pointer_trusted_after_ocr_move = false;
         self.block_vision_pixel_nudge_after_screenshot = true;
     }
 
     /// Called after pointer mutation (move, step, relative), click, scroll, key_chord, or type_text.
     fn transition_after_pointer_mutation(&mut self) {
         self.click_needs_fresh_screenshot = true;
+        self.pointer_trusted_after_ocr_move = false;
     }
 
     /// Called after click (same effect as pointer mutation for freshness).
     fn transition_after_click(&mut self) {
         self.click_needs_fresh_screenshot = true;
+        self.pending_verify_screenshot = true;
+        self.pointer_trusted_after_ocr_move = false;
+    }
+
+    /// Called after key, typing, scroll, or drag — UI likely changed; next `screenshot` should confirm.
+    fn transition_after_committed_ui_action(&mut self) {
+        self.pending_verify_screenshot = true;
     }
 }
 
@@ -1040,10 +1058,10 @@ end tell"#])
             "space" => Key::Space,
             "backspace" => Key::Backspace,
             "delete" => Key::Delete,
-            "up" => Key::UpArrow,
-            "down" => Key::DownArrow,
-            "left" => Key::LeftArrow,
-            "right" => Key::RightArrow,
+            "up" | "arrow_up" | "arrowup" => Key::UpArrow,
+            "down" | "arrow_down" | "arrowdown" => Key::DownArrow,
+            "left" | "arrow_left" | "arrowleft" => Key::LeftArrow,
+            "right" | "arrow_right" | "arrowright" => Key::RightArrow,
             "home" => Key::Home,
             "end" => Key::End,
             "pageup" | "page_up" => Key::PageUp,
@@ -1159,6 +1177,24 @@ end tell"#])
         {
             Self::ocr_full_primary_display_region()
         }
+    }
+
+    /// Square region in global logical coordinates for raw OCR preview crops around `(cx, cy)`.
+    fn ocr_region_square_around_point(
+        cx: f64,
+        cy: f64,
+        half: u32,
+    ) -> BitFunResult<OcrRegionNative> {
+        let hh = half as f64;
+        let x0 = (cx - hh).floor() as i32;
+        let y0 = (cy - hh).floor() as i32;
+        let w = half.saturating_mul(2).max(1);
+        Ok(OcrRegionNative {
+            x0,
+            y0,
+            width: w,
+            height: w,
+        })
     }
 
     /// Capture **raw** display pixels (no pointer/SoM overlay), cropped to `region` intersected with the chosen display.
@@ -1920,8 +1956,9 @@ impl ComputerUseHost for DesktopComputerUseHost {
         let s = self.state.lock().unwrap();
         let last_ref = s.last_shot_refinement;
         let click_needs_fresh = s.click_needs_fresh_screenshot;
+        let pending_verify = s.pending_verify_screenshot;
 
-        let (click_ready, screenshot_kind, recommended_next_action) = match last_ref {
+        let (click_ready, screenshot_kind, mut recommended_next_action) = match last_ref {
             Some(ComputerUseScreenshotRefinement::RegionAroundPoint { .. }) => (
                 !click_needs_fresh,
                 Some(ComputerUseInteractionScreenshotKind::RegionCrop),
@@ -1949,11 +1986,16 @@ impl ComputerUseHost for DesktopComputerUseHost {
             None => (false, None, Some("screenshot".to_string())),
         };
 
+        if pending_verify && recommended_next_action.is_none() {
+            recommended_next_action = Some("screenshot".to_string());
+        }
+
         ComputerUseInteractionState {
             click_ready,
             enter_ready: !click_needs_fresh,
             requires_fresh_screenshot_before_click: click_needs_fresh,
             requires_fresh_screenshot_before_enter: click_needs_fresh,
+            recommend_screenshot_to_verify_last_action: pending_verify,
             last_screenshot_kind: screenshot_kind,
             last_mutation: None,
             recommended_next_action,
@@ -2122,6 +2164,58 @@ impl ComputerUseHost for DesktopComputerUseHost {
                 bounds_height: m.bounds_height,
             })
             .collect())
+    }
+
+    async fn accessibility_hit_at_global_point(
+        &self,
+        gx: f64,
+        gy: f64,
+    ) -> BitFunResult<Option<bitfun_core::agentic::tools::computer_use_host::OcrAccessibilityHit>>
+    {
+        #[cfg(target_os = "macos")]
+        {
+            let hit = tokio::task::spawn_blocking(move || {
+                crate::computer_use::macos_ax_ui::accessibility_hit_at_global_point(gx, gy)
+            })
+            .await
+            .map_err(|e| BitFunError::tool(e.to_string()))?;
+            return Ok(hit);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return tokio::task::spawn_blocking(move || {
+                crate::computer_use::windows_ax_ui::accessibility_hit_at_global_point(gx, gy)
+            })
+            .await
+            .map_err(|e| BitFunError::tool(e.to_string()))?;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let _ = (gx, gy);
+            Ok(None)
+        }
+        #[cfg(not(any(
+            target_os = "macos",
+            target_os = "windows",
+            target_os = "linux"
+        )))]
+        {
+            let _ = (gx, gy);
+            Ok(None)
+        }
+    }
+
+    async fn ocr_preview_crop_jpeg(
+        &self,
+        gx: f64,
+        gy: f64,
+        half_extent_native: u32,
+    ) -> BitFunResult<Vec<u8>> {
+        let region = Self::ocr_region_square_around_point(gx, gy, half_extent_native)?;
+        let shot = tokio::task::spawn_blocking(move || Self::screenshot_raw_native_region(region))
+            .await
+            .map_err(|e| BitFunError::tool(e.to_string()))??;
+        Ok(shot.bytes)
     }
 
     fn last_screenshot_refinement(&self) -> Option<ComputerUseScreenshotRefinement> {
@@ -2394,6 +2488,7 @@ impl ComputerUseHost for DesktopComputerUseHost {
         .await
         .map_err(|e| BitFunError::tool(e.to_string()))??;
         ComputerUseHost::computer_use_after_pointer_mutation(self);
+        ComputerUseHost::computer_use_after_committed_ui_action(self);
         Ok(())
     }
 
@@ -2412,7 +2507,6 @@ impl ComputerUseHost for DesktopComputerUseHost {
                     .iter()
                     .map(|s| Self::map_key(s))
                     .collect::<BitFunResult<_>>()?;
-                #[cfg(target_os = "macos")]
                 let chord_has_modifier = keys_for_job.iter().any(|s| {
                     matches!(
                         s.to_lowercase().as_str(),
@@ -2423,21 +2517,29 @@ impl ComputerUseHost for DesktopComputerUseHost {
                     e.key(mapped[0], Direction::Click)
                         .map_err(|err| BitFunError::tool(format!("key: {}", err)))?;
                 } else {
-                    for k in &mapped[..mapped.len() - 1] {
+                    let mods = &mapped[..mapped.len() - 1];
+                    let last = *mapped.last().unwrap();
+                    for k in mods {
                         e.key(*k, Direction::Press)
                             .map_err(|err| BitFunError::tool(format!("key press: {}", err)))?;
                     }
-                    let last = *mapped.last().unwrap();
+                    if chord_has_modifier {
+                        // Modifiers must be registered before the main key; otherwise macOS / IME
+                        // treats the letter as plain typing (e.g. Cmd+F becomes "f" in the text box).
+                        #[cfg(target_os = "macos")]
+                        std::thread::sleep(std::time::Duration::from_millis(160));
+                        #[cfg(not(target_os = "macos"))]
+                        std::thread::sleep(std::time::Duration::from_millis(55));
+                    }
                     e.key(last, Direction::Click)
                         .map_err(|err| BitFunError::tool(format!("key click: {}", err)))?;
-                    for k in mapped[..mapped.len() - 1].iter().rev() {
+                    for k in mods.iter().rev() {
                         e.key(*k, Direction::Release)
                             .map_err(|err| BitFunError::tool(format!("key release: {}", err)))?;
                     }
-                }
-                #[cfg(target_os = "macos")]
-                if chord_has_modifier {
-                    std::thread::sleep(std::time::Duration::from_millis(95));
+                    if chord_has_modifier {
+                        std::thread::sleep(std::time::Duration::from_millis(35));
+                    }
                 }
                 Ok(())
             })
@@ -2445,6 +2547,7 @@ impl ComputerUseHost for DesktopComputerUseHost {
         .await
         .map_err(|e| BitFunError::tool(e.to_string()))??;
         ComputerUseHost::computer_use_after_pointer_mutation(self);
+        ComputerUseHost::computer_use_after_committed_ui_action(self);
         Ok(())
     }
 
@@ -2461,7 +2564,9 @@ impl ComputerUseHost for DesktopComputerUseHost {
         })
         .await
         .map_err(|e| BitFunError::tool(e.to_string()))??;
-        ComputerUseHost::computer_use_after_pointer_mutation(self);
+        // Typing does not move the pointer; do not set click_needs (would block Enter after search).
+        ComputerUseHost::computer_use_after_committed_ui_action(self);
+        ComputerUseHost::computer_use_trust_pointer_after_text_input(self);
         Ok(())
     }
 
@@ -2492,6 +2597,26 @@ impl ComputerUseHost for DesktopComputerUseHost {
         }
     }
 
+    fn computer_use_after_committed_ui_action(&self) {
+        if let Ok(mut s) = self.state.lock() {
+            s.transition_after_committed_ui_action();
+        }
+    }
+
+    fn computer_use_trust_pointer_after_ocr_move(&self) {
+        if let Ok(mut s) = self.state.lock() {
+            // `mouse_move` already set click_needs; OCR globals are authoritative like AX.
+            s.click_needs_fresh_screenshot = false;
+            s.pointer_trusted_after_ocr_move = true;
+        }
+    }
+
+    fn computer_use_trust_pointer_after_text_input(&self) {
+        if let Ok(mut s) = self.state.lock() {
+            s.click_needs_fresh_screenshot = false;
+        }
+    }
+
     fn computer_use_guard_click_allowed(&self) -> BitFunResult<()> {
         let s = self
             .state
@@ -2499,6 +2624,9 @@ impl ComputerUseHost for DesktopComputerUseHost {
             .map_err(|e| BitFunError::tool(format!("lock: {}", e)))?;
         if s.click_needs_fresh_screenshot {
             return Err(BitFunError::tool(STALE_CAPTURE_TOOL_MESSAGE.to_string()));
+        }
+        if s.pointer_trusted_after_ocr_move {
+            return Ok(());
         }
         match s.last_shot_refinement {
             Some(ComputerUseScreenshotRefinement::RegionAroundPoint { .. }) => {}

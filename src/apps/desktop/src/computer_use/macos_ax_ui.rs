@@ -3,7 +3,9 @@
 //! Coordinates match CoreGraphics global space used by [`crate::computer_use::DesktopComputerUseHost`].
 
 use crate::computer_use::ui_locate_common;
-use bitfun_core::agentic::tools::computer_use_host::{SomElement, UiElementLocateQuery, UiElementLocateResult};
+use bitfun_core::agentic::tools::computer_use_host::{
+    OcrAccessibilityHit, SomElement, UiElementLocateQuery, UiElementLocateResult,
+};
 use bitfun_core::util::errors::{BitFunError, BitFunResult};
 use core_foundation::array::{CFArray, CFArrayRef};
 use core_foundation::base::{CFTypeRef, TCFType};
@@ -23,6 +25,12 @@ unsafe extern "C" {
         element: AXUIElementRef,
         attribute: CFStringRef,
         value: *mut CFTypeRef,
+    ) -> i32;
+    fn AXUIElementCopyElementAtPosition(
+        element: AXUIElementRef,
+        x: f32,
+        y: f32,
+        out_elem: *mut AXUIElementRef,
     ) -> i32;
     fn AXValueGetType(value: AXValueRef) -> u32;
     fn AXValueGetValue(value: AXValueRef, the_type: u32, ptr: *mut c_void) -> bool;
@@ -216,6 +224,20 @@ impl CandidateMatch {
             score += 20;
         }
 
+        // WeChat (and similar): global search field is often the first AXTextField match but is the wrong target
+        // when the user wants the **chat composer**. Deprioritize known search chrome.
+        if let Some(ref id) = self.identifier {
+            if id.contains("_SC_SEARCH_FIELD") {
+                score -= 1500;
+            }
+        }
+
+        // Among text inputs, the composer is usually **lower** on screen than the top search bar.
+        let rl = self.role.to_lowercase();
+        if rl.contains("textfield") || rl.contains("textarea") {
+            score += ((self.gy / 8.0) as i64).clamp(0, 400);
+        }
+
         score
     }
 
@@ -344,13 +366,28 @@ pub fn locate_ui_element_center(query: &UiElementLocateQuery) -> BitFunResult<Ui
 
     if candidates.is_empty() {
         return Err(BitFunError::tool(
-            "No accessibility element matched in the frontmost app. Tips: use `filter_combine: \"any\"` for OR matching; use only `role_substring` or only `title_contains`; match UI language; ensure the target app is focused. Or fall back to `screenshot` + vision path."
+            "No accessibility element matched in the frontmost app. Tips: `role_substring` **`TextArea`** also matches **`AXTextField`** (WeChat compose is often TextField). Use `filter_combine: \"any\"` for OR matching; match UI language; ensure the target app is focused. For chat apps, if the conversation is already open, **`type_text`** may work without clicking. Or use `move_to_text` / `screenshot` + `click_label`."
                 .to_string(),
         ));
     }
 
-    // Sort by rank score (descending)
-    candidates.sort_by(|a, b| b.rank_score().cmp(&a.rank_score()));
+    // Sort by rank score (descending); tie-break text fields toward **lower on screen** (chat input).
+    candidates.sort_by(|a, b| {
+        let sa = a.rank_score();
+        let sb = b.rank_score();
+        match sb.cmp(&sa) {
+            std::cmp::Ordering::Equal => {
+                let a_txt = a.role.contains("TextField") || a.role.contains("TextArea");
+                let b_txt = b.role.contains("TextField") || b.role.contains("TextArea");
+                if a_txt && b_txt {
+                    b.gy.partial_cmp(&a.gy).unwrap_or(std::cmp::Ordering::Equal)
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+            o => o,
+        }
+    });
 
     let total = candidates.len() as u32;
     let best = &candidates[0];
@@ -487,6 +524,54 @@ pub fn enumerate_interactive_elements(max_elements: usize) -> Vec<SomElement> {
     }
 
     results
+}
+
+unsafe fn ax_parent_context_line(elem: AXUIElementRef) -> Option<String> {
+    let parent_val = ax_copy_attr(elem, "AXParent")?;
+    let parent = parent_val as AXUIElementRef;
+    if parent.is_null() {
+        ax_release(parent_val);
+        return None;
+    }
+    let (r, t, _) = read_role_title_id(parent);
+    ax_release(parent_val);
+    Some(element_short_desc(r.as_deref(), t.as_deref()))
+}
+
+/// Hit-test the accessibility element at global screen coordinates (OCR `move_to_text` disambiguation).
+pub fn accessibility_hit_at_global_point(gx: f64, gy: f64) -> Option<OcrAccessibilityHit> {
+    unsafe {
+        let sys = AXUIElementCreateSystemWide();
+        if sys.is_null() {
+            return None;
+        }
+        let mut elem: AXUIElementRef = std::ptr::null();
+        let err = AXUIElementCopyElementAtPosition(sys, gx as f32, gy as f32, &mut elem);
+        ax_release(sys as CFTypeRef);
+        if err != 0 || elem.is_null() {
+            if !elem.is_null() {
+                ax_release(elem as CFTypeRef);
+            }
+            return None;
+        }
+        let (role, title, ident) = read_role_title_id(elem);
+        let parent_context = ax_parent_context_line(elem);
+        ax_release(elem as CFTypeRef);
+        let desc = format!(
+            "{} | title={:?} | id={:?} | parent=[{}]",
+            role.as_deref().unwrap_or("?"),
+            title.as_deref().unwrap_or(""),
+            ident.as_deref().unwrap_or(""),
+            parent_context.as_deref().unwrap_or("?"),
+        );
+        Some(OcrAccessibilityHit {
+            role,
+            title,
+            identifier: ident,
+            parent_context,
+            description: desc,
+        })
+    }
 }
 
 // ── Raw OCR: frontmost window bounds (separate from agent screenshot pipeline) ─────────────────

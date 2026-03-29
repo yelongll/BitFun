@@ -347,7 +347,20 @@ impl WorkspaceInfo {
             metadata: HashMap::new(),
         };
 
-        if !is_remote {
+        if is_remote {
+            if let Some(ssh_host) = options.remote_ssh_host.as_ref().filter(|s| !s.trim().is_empty()) {
+                workspace.metadata.insert(
+                    "sshHost".to_string(),
+                    serde_json::Value::String(ssh_host.trim().to_string()),
+                );
+            }
+            if let Some(conn_id) = options.remote_connection_id.as_ref().filter(|s| !s.trim().is_empty()) {
+                workspace.metadata.insert(
+                    "connectionId".to_string(),
+                    serde_json::Value::String(conn_id.trim().to_string()),
+                );
+            }
+        } else {
             workspace.metadata.insert(
                 "sshHost".to_string(),
                 serde_json::Value::String(LOCAL_WORKSPACE_SSH_HOST.to_string()),
@@ -982,6 +995,20 @@ impl WorkspaceManager {
                 if let Some(display_name) = &options.display_name {
                     workspace.name = display_name.clone();
                 }
+                if options.workspace_kind == WorkspaceKind::Remote {
+                    if let Some(ssh_host) = options.remote_ssh_host.as_ref().filter(|s| !s.trim().is_empty()) {
+                        workspace.metadata.insert(
+                            "sshHost".to_string(),
+                            serde_json::Value::String(ssh_host.trim().to_string()),
+                        );
+                    }
+                    if let Some(conn_id) = options.remote_connection_id.as_ref().filter(|s| !s.trim().is_empty()) {
+                        workspace.metadata.insert(
+                            "connectionId".to_string(),
+                            serde_json::Value::String(conn_id.trim().to_string()),
+                        );
+                    }
+                }
                 workspace.load_identity().await;
                 workspace.load_worktree().await;
             }
@@ -1350,6 +1377,22 @@ impl WorkspaceManager {
             .into_iter()
             .filter(|id| self.workspaces.contains_key(id))
             .collect();
+    }
+
+    /// Removes a workspace id from recent lists only (does not unregister the workspace).
+    pub fn remove_from_recent_workspaces_only(&mut self, workspace_id: &str) -> bool {
+        let mut changed = false;
+        let before = self.recent_workspaces.len();
+        self.recent_workspaces.retain(|id| id != workspace_id);
+        if self.recent_workspaces.len() != before {
+            changed = true;
+        }
+        let before_a = self.recent_assistant_workspaces.len();
+        self.recent_assistant_workspaces.retain(|id| id != workspace_id);
+        if self.recent_assistant_workspaces.len() != before_a {
+            changed = true;
+        }
+        changed
     }
 
     /// Returns a reference to the recent-workspaces list.

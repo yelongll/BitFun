@@ -263,6 +263,21 @@ pub struct UiElementLocateResult {
     pub other_matches: Vec<String>,
 }
 
+/// Hit-tested accessibility node at a global screen point (OCR disambiguation).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct OcrAccessibilityHit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_context: Option<String>,
+    /// One-line summary for the model (role, title, parent).
+    pub description: String,
+}
+
 #[async_trait]
 pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
     async fn permission_snapshot(&self) -> BitFunResult<ComputerUsePermissionSnapshot>;
@@ -298,6 +313,28 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
         let _ = (text_query, region_native);
         Err(BitFunError::tool(
             "OCR text recognition is not available on this host.".to_string(),
+        ))
+    }
+
+    /// Best-effort accessibility element at a global screen point (native hit-test).
+    /// Desktop uses AX (macOS) / UIA (Windows). Returns `None` when unavailable or on miss.
+    async fn accessibility_hit_at_global_point(
+        &self,
+        _gx: f64,
+        _gy: f64,
+    ) -> BitFunResult<Option<OcrAccessibilityHit>> {
+        Ok(None)
+    }
+
+    /// JPEG crop (no pointer overlay) around `(gx, gy)` for OCR candidate previews.
+    async fn ocr_preview_crop_jpeg(
+        &self,
+        _gx: f64,
+        _gy: f64,
+        _half_extent_native: u32,
+    ) -> BitFunResult<Vec<u8>> {
+        Err(BitFunError::tool(
+            "OCR preview crops are not available on this host.".to_string(),
         ))
     }
 
@@ -378,6 +415,18 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
 
     /// After `mouse_click`, require a fresh screenshot before the next click (unless pointer moved, which also invalidates).
     fn computer_use_after_click(&self) {}
+
+    /// After a committed UI action that should be **visually confirmed** on the next `screenshot`
+    /// (Cowork-style: observe → act → verify). Desktop sets a pending flag; cleared when `screenshot_display` runs.
+    fn computer_use_after_committed_ui_action(&self) {}
+
+    /// After `move_to_text` positioned the pointer with **trusted global OCR coordinates** (not JPEG guesses),
+    /// clear the stale-capture guard so the next **`click`** or Enter **`key_chord`** may proceed without another `screenshot`.
+    fn computer_use_trust_pointer_after_ocr_move(&self) {}
+
+    /// After `type_text`: the pointer did not move; clear the stale-capture guard so Enter **`key_chord`**
+    /// is not blocked solely because of a prior click / scroll.
+    fn computer_use_trust_pointer_after_text_input(&self) {}
 
     /// Refuse `mouse_click` if the pointer moved (or a click happened) since the last screenshot,
     /// or if the latest capture is not a valid “fine” basis (desktop: ~500×500 point crop **or**
@@ -518,6 +567,10 @@ pub struct ComputerUseInteractionState {
     pub enter_ready: bool,
     pub requires_fresh_screenshot_before_click: bool,
     pub requires_fresh_screenshot_before_enter: bool,
+    /// When true, the last action (click, key, typing, scroll, etc.) changed the UI; take **`screenshot`**
+    /// next to **confirm** the outcome (Cowork-style verify step), ideally after **`wait`** if the UI animates.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub recommend_screenshot_to_verify_last_action: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_screenshot_kind: Option<ComputerUseInteractionScreenshotKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -539,6 +592,7 @@ mod tests {
             enter_ready: true,
             requires_fresh_screenshot_before_click: true,
             requires_fresh_screenshot_before_enter: false,
+            recommend_screenshot_to_verify_last_action: true,
             last_screenshot_kind: Some(ComputerUseInteractionScreenshotKind::FullDisplay),
             last_mutation: Some(ComputerUseLastMutationKind::Screenshot),
             recommended_next_action: Some("screenshot_navigate_quadrant".to_string()),
@@ -564,6 +618,10 @@ mod tests {
         assert_eq!(
             value["recommended_next_action"],
             serde_json::json!("screenshot_navigate_quadrant")
+        );
+        assert_eq!(
+            value["recommend_screenshot_to_verify_last_action"],
+            serde_json::json!(true)
         );
     }
 }
