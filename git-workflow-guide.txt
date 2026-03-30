@@ -37,7 +37,7 @@ git commit -m "我的修改"
 git fetch upstream
 git merge upstream/main
 
-合并git merge upstream/main
+
 # 3. 解决冲突（如果有），然后推送
 git push origin main
 
