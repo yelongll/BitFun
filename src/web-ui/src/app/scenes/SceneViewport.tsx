@@ -16,9 +16,11 @@ import { useDialogCompletionNotify } from '../hooks/useDialogCompletionNotify';
 import { ProcessingIndicator } from '@/flow_chat/components/modern/ProcessingIndicator';
 import SettingsScene from './settings/SettingsScene';
 import AssistantScene from './assistant/AssistantScene';
+import SessionScene from './session/SessionScene';
 import './SceneViewport.scss';
 
-const SessionScene    = lazy(() => import('./session/SessionScene'));
+// Session is the primary interaction path. Keep it in the main scene bundle so
+// first open does not stall on a lazy chunk fetch/parse before FlowChat mounts.
 const TerminalScene   = lazy(() => import('./terminal/TerminalScene'));
 const GitScene        = lazy(() => import('./git/GitScene'));
 const FileViewerScene = lazy(() => import('./file-viewer/FileViewerScene'));
@@ -84,7 +86,7 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
                   ) : null
                 }
               >
-                {renderScene(tab.id, workspacePath, isEntering)}
+                {renderScene(tab.id, workspacePath, isEntering, isActive)}
               </Suspense>
             </div>
           );
@@ -94,16 +96,21 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
   );
 };
 
-function renderScene(id: SceneTabId, workspacePath?: string, isEntering?: boolean) {
+function renderScene(
+  id: SceneTabId,
+  workspacePath?: string,
+  isEntering?: boolean,
+  isActive: boolean = false
+) {
   switch (id) {
     case 'welcome':
       return <WelcomeScene />;
     case 'session':
-      return <SessionScene workspacePath={workspacePath} isEntering={isEntering} />;
+      return <SessionScene workspacePath={workspacePath} isEntering={isEntering} isActive={isActive} />;
     case 'terminal':
-      return <TerminalScene />;
+      return <TerminalScene isActive={isActive} />;
     case 'git':
-      return <GitScene workspacePath={workspacePath} />;
+      return <GitScene workspacePath={workspacePath} isActive={isActive} />;
     case 'settings':
       return <SettingsScene />;
     case 'file-viewer':
@@ -125,7 +132,7 @@ function renderScene(id: SceneTabId, workspacePath?: string, isEntering?: boolea
     case 'insights':
       return <InsightsScene />;
     case 'shell':
-      return <ShellScene />;
+      return <ShellScene isActive={isActive} />;
     case 'panel-view':
       return <PanelViewScene workspacePath={workspacePath} />;
     default:

@@ -24,7 +24,7 @@ import {
   isRemoteWorkspace,
   type WorkspaceInfo,
 } from '@/shared/types';
-import { SSHContext } from '@/features/ssh-remote/SSHRemoteProvider';
+import { SSHContext } from '@/features/ssh-remote/SSHRemoteContext';
 
 interface WorkspaceItemProps {
   workspace: WorkspaceInfo;
@@ -198,7 +198,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
     setIsResettingWorkspace(true);
     try {
       await resetAssistantWorkspace(workspace.id);
-      await flowChatManager.resetWorkspaceSessions(workspace.rootPath, {
+      await flowChatManager.resetWorkspaceSessions(workspace, {
         reinitialize: isActive,
         preferredMode: 'Claw',
         ensureAssistantBootstrap:
@@ -213,7 +213,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
     } finally {
       setIsResettingWorkspace(false);
     }
-  }, [isActive, isDefaultAssistantWorkspace, isResettingWorkspace, resetAssistantWorkspace, t, workspace.id, workspace.rootPath]);
+  }, [isActive, isDefaultAssistantWorkspace, isResettingWorkspace, resetAssistantWorkspace, t, workspace]);
 
   const handleReveal = useCallback(async () => {
     setMenuOpen(false);
@@ -274,10 +274,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   }, [
     setActiveWorkspace,
     t,
-    workspace.id,
-    workspace.rootPath,
-    workspace.workspaceKind,
-    workspace.connectionId,
+    workspace,
   ]);
 
   const handleCreateCodeSession = useCallback(() => {
@@ -606,11 +603,11 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
             >
               <button type="button" className="bitfun-nav-panel__workspace-item-menu-item" onClick={handleCreateCodeSession}>
                 <Plus size={13} />
-                <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.newCodeSession')}</span>
+                <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.sessions.newCodeSessionShort')}</span>
               </button>
               <button type="button" className="bitfun-nav-panel__workspace-item-menu-item" onClick={handleCreateCoworkSession}>
                 <Plus size={13} />
-                <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.newCoworkSession')}</span>
+                <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.sessions.newCoworkSessionShort')}</span>
               </button>
               {isLinkedWorktree ? (
                 <button
