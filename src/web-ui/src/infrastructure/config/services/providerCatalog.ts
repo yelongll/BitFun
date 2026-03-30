@@ -6,6 +6,15 @@ export interface ProviderUrlCatalogItem {
 
 export const PROVIDER_URL_CATALOG: ProviderUrlCatalogItem[] = [
   {
+    id: 'opencode-zen',
+    baseUrl: 'https://opencode.ai/zen/v1/chat/completions',
+    baseUrlOptions: [
+      'https://opencode.ai/zen/v1/chat/completions',
+      'https://opencode.ai/zen/v1/responses',
+      'https://opencode.ai/zen/v1/messages',
+    ],
+  },
+  {
     id: 'openbitfun',
     baseUrl: 'https://api.openbitfun.com',
   },

@@ -56,6 +56,29 @@ export function getModelDisplayName(config: ProviderConfigLike): string {
 }
 
 export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
+  'opencode-zen': {
+    id: 'opencode-zen',
+    name: t('settings/ai-model:providers.opencode-zen.name'),
+    baseUrl: 'https://opencode.ai/zen/v1/chat/completions',
+    format: 'openai',
+    models: [
+      'gpt-5-nano',
+      'big-pickle',
+      'mimo-v2-pro-free',
+      'mimo-v2-omni-free',
+      'nemotron-3-super-free',
+      'minimax-m2.5-free',
+    ],
+    requiresApiKey: false,
+    description: t('settings/ai-model:providers.opencode-zen.description'),
+    helpUrl: 'https://opencode.ai/zen',
+    baseUrlOptions: [
+      { url: 'https://opencode.ai/zen/v1/chat/completions', format: 'openai', note: 'OpenAI Chat' },
+      { url: 'https://opencode.ai/zen/v1/responses', format: 'responses', note: 'Responses API' },
+      { url: 'https://opencode.ai/zen/v1/messages', format: 'anthropic', note: 'Anthropic' },
+    ]
+  },
+
   openbitfun: {
     id: 'openbitfun',
     name: t('settings/ai-model:providers.openbitfun.name'),

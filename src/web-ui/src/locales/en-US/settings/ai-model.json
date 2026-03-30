@@ -40,6 +40,15 @@
     "formatHint": "Automatically selected based on provider, usually no need to change"
   },
   "providers": {
+    "opencode-zen": {
+      "name": "OpenCode Zen (Free Models)",
+      "description": "OpenCode Zen free models: GPT-5-Nano, BigPickle, MiMo, Nemotron, MiniMax",
+      "urlOptions": {
+        "openai": "OpenAI Chat Completions API",
+        "responses": "OpenAI Responses API",
+        "anthropic": "Anthropic Messages API"
+      }
+    },
     "openbitfun": {
       "name": "OpenBitFun",
       "description": "OpenBitFun Model Platform"

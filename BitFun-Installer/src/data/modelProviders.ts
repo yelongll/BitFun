@@ -22,6 +22,7 @@ export interface ProviderTemplate {
 
 /** Same order as `AIModelConfig.tsx` `providerOrder`. */
 export const PROVIDER_DISPLAY_ORDER: string[] = [
+  'opencode-zen',
   'openbitfun',
   'zhipu',
   'qwen',
@@ -37,6 +38,39 @@ export const PROVIDER_DISPLAY_ORDER: string[] = [
 ];
 
 export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
+  'opencode-zen': {
+    id: 'opencode-zen',
+    nameKey: 'model.providers.opencode-zen.name',
+    descriptionKey: 'model.providers.opencode-zen.description',
+    baseUrl: 'https://opencode.ai/zen/v1/chat/completions',
+    format: 'openai',
+    models: [
+      'gpt-5-nano',
+      'big-pickle',
+      'mimo-v2-pro-free',
+      'mimo-v2-omni-free',
+      'nemotron-3-super-free',
+      'minimax-m2.5-free',
+    ],
+    helpUrl: 'https://opencode.ai/zen',
+    baseUrlOptions: [
+      {
+        url: 'https://opencode.ai/zen/v1/chat/completions',
+        format: 'openai',
+        noteKey: 'model.providers.opencode-zen.urlOptions.openai',
+      },
+      {
+        url: 'https://opencode.ai/zen/v1/responses',
+        format: 'responses',
+        noteKey: 'model.providers.opencode-zen.urlOptions.responses',
+      },
+      {
+        url: 'https://opencode.ai/zen/v1/messages',
+        format: 'anthropic',
+        noteKey: 'model.providers.opencode-zen.urlOptions.anthropic',
+      },
+    ],
+  },
   openbitfun: {
     id: 'openbitfun',
     nameKey: 'model.providers.openbitfun.name',
