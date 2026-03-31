@@ -138,6 +138,9 @@ pub async fn run() {
                 .level_for("ignore", log::LevelFilter::Off)
                 .level_for("ignore::walk", log::LevelFilter::Off)
                 .level_for("globset", log::LevelFilter::Off)
+                .level_for("tracing", log::LevelFilter::Off)
+                .level_for("opentelemetry_sdk", log::LevelFilter::Off)
+                .level_for("opentelemetry-otlp", log::LevelFilter::Off)
                 .level_for("hyper_util", log::LevelFilter::Info)
                 .level_for("h2", log::LevelFilter::Info)
                 .level_for("portable_pty", log::LevelFilter::Info)
@@ -313,6 +316,7 @@ pub async fn run() {
             theme::show_main_window,
             api::agentic_api::create_session,
             api::agentic_api::update_session_model,
+            api::agentic_api::update_session_title,
             api::agentic_api::ensure_coordinator_session,
             api::agentic_api::start_dialog_turn,
             api::agentic_api::compact_session,
@@ -670,6 +674,7 @@ pub async fn run() {
             api::ssh_api::ssh_list_saved_connections,
             api::ssh_api::ssh_save_connection,
             api::ssh_api::ssh_delete_connection,
+            api::ssh_api::ssh_has_stored_password,
             api::ssh_api::ssh_connect,
             api::ssh_api::ssh_disconnect,
             api::ssh_api::ssh_disconnect_all,

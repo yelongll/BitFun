@@ -211,6 +211,12 @@
     "compactBusy": "Wait until the session is idle before using /compact.",
     "compactUsage": "Use /compact without extra arguments.",
     "compactFailed": "Session compaction failed",
+    "initAction": "Generate AGENTS.md",
+    "initNoSession": "No active session for /init",
+    "initBusy": "Wait until the session is idle before using /init.",
+    "initUsage": "Use /init without extra arguments.",
+    "initFailed": "AGENTS.md initialization failed",
+    "initPrompt": "Please generate or update AGENTS.md based on the current project content",
     "currentMode": "Current mode: {{mode}}",
     "noMatchingMode": "No matching mode",
     "noMatchingCommand": "No matching command",
@@ -813,7 +819,11 @@
       "aiProcessing": "AI is processing...",
       "inputMessage": "Enter message...",
       "processing": "Processing...",
-      "startNewChat": "Start new chat..."
+      "startNewChat": "Start new chat...",
+      "openSessionMenu": "Sessions & new",
+      "moreMenu": "More",
+      "newCodeSessionItem": "Code session",
+      "newCoworkSessionItem": "Cowork session"
     },
     "chatInput": {
       "inputHint": "Enter content..."

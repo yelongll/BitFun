@@ -32,6 +32,39 @@ function sshHostForRemoteWorkspace(connectionId: string, remotePath: string): st
   return undefined;
 }
 
+/** After parallel reconnects: prefer the user's active remote workspace, else last in sidebar order (matches legacy serial last-write). */
+function pickGlobalRemoteAfterReconnect(
+  connected: Array<{ workspace: RemoteWorkspace; connectionId: string }>,
+  orderedList: RemoteWorkspace[]
+): { workspace: RemoteWorkspace; connectionId: string } | null {
+  if (connected.length === 0) return null;
+  const st = workspaceManager.getState();
+  const aid = st.activeWorkspaceId;
+  if (aid) {
+    const aw = st.openedWorkspaces.get(aid);
+    if (aw && aw.workspaceKind === WorkspaceKind.Remote && aw.connectionId) {
+      const arp = normalizeRemoteWorkspacePath(aw.rootPath);
+      const hit = connected.find(
+        c =>
+          c.connectionId === aw.connectionId &&
+          normalizeRemoteWorkspacePath(c.workspace.remotePath) === arp
+      );
+      if (hit) return hit;
+    }
+  }
+  for (let i = orderedList.length - 1; i >= 0; i--) {
+    const ws = orderedList[i];
+    const hit = connected.find(
+      c =>
+        c.connectionId === ws.connectionId &&
+        normalizeRemoteWorkspacePath(c.workspace.remotePath) ===
+          normalizeRemoteWorkspacePath(ws.remotePath)
+    );
+    if (hit) return hit;
+  }
+  return connected[connected.length - 1] ?? null;
+}
+
 interface SSHRemoteProviderProps {
   children: React.ReactNode;
 }
@@ -88,17 +121,15 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
       return false;
     }
 
-    // Determine auth method from tagged enum
+    // Determine auth method from tagged enum (password uses empty string; backend fills from vault)
     let authMethod: SSHConnectionConfig['auth'] | null = null;
     if (savedConn.authType.type === 'PrivateKey') {
       authMethod = { type: 'PrivateKey', keyPath: savedConn.authType.keyPath };
     } else if (savedConn.authType.type === 'Agent') {
       authMethod = { type: 'Agent' };
     } else {
-      // Password auth cannot auto-reconnect because BitFun intentionally does not
-      // persist passwords. The user must reconnect manually after restarting the app.
-      log.warn('Skipping auto-reconnect: password auth requires user input', { connectionId: workspace.connectionId });
-      return false;
+      // Caller must only invoke password reconnect when vault has a password (see checkRemoteWorkspace).
+      authMethod = { type: 'Password', password: '' };
     }
 
     const reconnectConfig: SSHConnectionConfig = {
@@ -195,7 +226,8 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
   const checkRemoteWorkspace = useCallback(async () => {
     try {
       // ── Collect all remote workspaces to reconnect ──────────────────────
-      const allWorkspaces = Array.from(workspaceManager.getState().openedWorkspaces.values());
+      const wmState0 = workspaceManager.getState();
+      const allWorkspaces = Array.from(wmState0.openedWorkspaces.values());
       const openedRemote = allWorkspaces.filter(
         ws => ws.workspaceKind === WorkspaceKind.Remote && ws.connectionId
       );
@@ -239,90 +271,130 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
 
       log.info(`checkRemoteWorkspace: found ${toReconnect.size} remote workspace(s)`);
 
-      // Mark all as 'connecting' immediately so the UI shows the pending state
+      const reconnectList = Array.from(toReconnect.values());
+      const savedConnectionsList = await sshApi.listSavedConnections();
+
+      const skipPasswordAutoReconnect = new Set<string>();
+      for (const ws of reconnectList) {
+        const sc = savedConnectionsList.find(c => c.id === ws.connectionId);
+        if (sc?.authType.type === 'Password') {
+          let hasVault = false;
+          try {
+            hasVault = await sshApi.hasStoredPassword(sc.id);
+          } catch {
+            hasVault = false;
+          }
+          if (!hasVault) {
+            skipPasswordAutoReconnect.add(ws.connectionId);
+          }
+        }
+      }
+
       const initialStatuses: Record<string, ConnectionStatus> = {};
       for (const [, ws] of toReconnect) {
-        initialStatuses[ws.connectionId] = 'connecting';
+        initialStatuses[ws.connectionId] = skipPasswordAutoReconnect.has(ws.connectionId)
+          ? 'error'
+          : 'connecting';
       }
       setWorkspaceStatuses(prev => ({ ...prev, ...initialStatuses }));
 
-      // ── Process each workspace ──────────────────────────────────────────
-      for (const [, workspace] of toReconnect) {
-        const isAlreadyOpened = openedRemote.some(
-          ws =>
-            ws.connectionId === workspace.connectionId &&
-            normalizeRemoteWorkspacePath(ws.rootPath) ===
-              normalizeRemoteWorkspacePath(workspace.remotePath)
-        );
+      type ConnectedEntry = { workspace: RemoteWorkspace; connectionId: string };
+      const results = await Promise.all(
+        reconnectList.map(async workspace => {
+          const isAlreadyOpened = openedRemote.some(
+            ws =>
+              ws.connectionId === workspace.connectionId &&
+              normalizeRemoteWorkspacePath(ws.rootPath) ===
+                normalizeRemoteWorkspacePath(workspace.remotePath)
+          );
 
-        // Check if SSH is already live
-        const alreadyConnected = await sshApi.isConnected(workspace.connectionId).catch(() => false);
+          const alreadyConnected = await sshApi.isConnected(workspace.connectionId).catch(() => false);
 
-        if (alreadyConnected) {
-          log.info('Remote workspace already connected', { connectionId: workspace.connectionId });
-          // Register with SSH state manager (idempotent)
-          await sshApi.openWorkspace(workspace.connectionId, workspace.remotePath).catch(() => {});
-          setWorkspaceStatus(workspace.connectionId, 'connected');
-          setIsConnected(true);
-          setConnectionId(workspace.connectionId);
-          setRemoteWorkspace(workspace);
-          startHeartbeatRef.current(workspace.connectionId);
+          if (alreadyConnected) {
+            log.info('Remote workspace already connected', { connectionId: workspace.connectionId });
+            await sshApi.openWorkspace(workspace.connectionId, workspace.remotePath).catch(() => {});
+            setWorkspaceStatus(workspace.connectionId, 'connected');
 
-          if (!isAlreadyOpened) {
-            await workspaceManager.openRemoteWorkspace(workspace).catch(() => {});
+            if (!isAlreadyOpened) {
+              await workspaceManager.openRemoteWorkspace(workspace).catch(() => {});
+            }
+            void flowChatStore
+              .initializeFromDisk(
+                workspace.remotePath,
+                workspace.connectionId,
+                workspace.sshHost?.trim() ||
+                  sshHostForRemoteWorkspace(workspace.connectionId, workspace.remotePath)
+              )
+              .catch(() => {});
+
+            return { ok: true as const, connected: { workspace, connectionId: workspace.connectionId } };
           }
-          // Re-initialize sessions now that the workspace is registered in the state manager
-          void flowChatStore
-            .initializeFromDisk(
-              workspace.remotePath,
-              workspace.connectionId,
-              workspace.sshHost?.trim() ||
-                sshHostForRemoteWorkspace(workspace.connectionId, workspace.remotePath)
-            )
-            .catch(() => {});
-          continue;
-        }
 
-        // Not connected — attempt auto-reconnect
-        log.info('Remote workspace disconnected, attempting auto-reconnect', {
-          connectionId: workspace.connectionId,
-          remotePath: workspace.remotePath,
-        });
-
-        const result = await tryReconnectWithRetry(workspace, 5, 5000);
-
-        if (result !== false) {
-          log.info('Reconnection successful', { newConnectionId: result.connectionId });
-          setWorkspaceStatus(result.workspace.connectionId, 'connected');
-          setIsConnected(true);
-          setConnectionId(result.connectionId);
-          setRemoteWorkspace(result.workspace);
-          startHeartbeatRef.current(result.connectionId);
-
-          if (!isAlreadyOpened) {
-            await workspaceManager.openRemoteWorkspace(result.workspace).catch(() => {});
+          if (skipPasswordAutoReconnect.has(workspace.connectionId)) {
+            log.info('Skipping auto-reconnect: password auth but no stored password', {
+              connectionId: workspace.connectionId,
+            });
+            return { ok: false as const };
           }
-          // Re-initialize sessions now that the workspace is registered in the state manager
-          void flowChatStore
-            .initializeFromDisk(
-              result.workspace.remotePath,
-              result.workspace.connectionId,
-              result.workspace.sshHost?.trim() ||
-                sshHostForRemoteWorkspace(
-                  result.workspace.connectionId,
-                  result.workspace.remotePath
-                )
-            )
-            .catch(() => {});
-        } else {
-          // Reconnection failed (or skipped for password auth) — remove the workspace
-          // from the sidebar. Password-auth workspaces can never auto-reconnect, and
-          // showing a permanently-broken entry would confuse the user.
-          log.warn('Auto-reconnect failed, removing workspace from sidebar', {
+
+          log.info('Remote workspace disconnected, attempting auto-reconnect', {
             connectionId: workspace.connectionId,
+            remotePath: workspace.remotePath,
           });
-          await workspaceManager.removeRemoteWorkspace(workspace.connectionId, workspace.remotePath).catch(() => {});
-        }
+          const result = await tryReconnectWithRetry(workspace, 5, 5000);
+
+          if (result !== false) {
+            log.info('Reconnection successful', { newConnectionId: result.connectionId });
+            setWorkspaceStatus(result.workspace.connectionId, 'connected');
+
+            if (!isAlreadyOpened) {
+              await workspaceManager.openRemoteWorkspace(result.workspace).catch(() => {});
+            }
+            void flowChatStore
+              .initializeFromDisk(
+                result.workspace.remotePath,
+                result.workspace.connectionId,
+                result.workspace.sshHost?.trim() ||
+                  sshHostForRemoteWorkspace(
+                    result.workspace.connectionId,
+                    result.workspace.remotePath
+                  )
+              )
+              .catch(() => {});
+
+            return {
+              ok: true as const,
+              connected: { workspace: result.workspace, connectionId: result.connectionId },
+            };
+          }
+
+          const savedConn = savedConnectionsList.find(c => c.id === workspace.connectionId);
+          log.warn('Auto-reconnect failed', {
+            connectionId: workspace.connectionId,
+            auth: savedConn?.authType.type,
+          });
+          if (savedConn?.authType.type === 'Password') {
+            // Keep workspace in sidebar; user reconnects manually. No auto password dialog.
+            setWorkspaceStatus(workspace.connectionId, 'error');
+          } else {
+            await workspaceManager
+              .removeRemoteWorkspace(workspace.connectionId, workspace.remotePath)
+              .catch(() => {});
+          }
+          return { ok: false as const };
+        })
+      );
+
+      const connectedEntries: ConnectedEntry[] = results
+        .filter((r): r is { ok: true; connected: ConnectedEntry } => r.ok)
+        .map(r => r.connected);
+
+      const chosen = pickGlobalRemoteAfterReconnect(connectedEntries, reconnectList);
+      if (chosen) {
+        setIsConnected(true);
+        setConnectionId(chosen.connectionId);
+        setRemoteWorkspace(chosen.workspace);
+        startHeartbeatRef.current(chosen.connectionId);
       }
     } catch (e) {
       log.error('checkRemoteWorkspace failed', e);
