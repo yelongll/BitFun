@@ -65,3 +65,5 @@ git reset --hard upstream/main
 git remote rename BitFun upstream
 git remote set-url upstream https://github.com/GCWing/BitFun.git
 git remote add origin https://github.com/yelongll/BitFun.git
+
+项目编译 pnpm run desktop:dev

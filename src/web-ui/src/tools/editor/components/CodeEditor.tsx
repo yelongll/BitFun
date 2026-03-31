@@ -443,6 +443,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           fontSize: appliedFontSize,
           fontFamily: config.font_family || "'Fira Code', 'Noto Sans SC', Consolas, 'Courier New', monospace",
           fontWeight: config.font_weight || 'normal',
+          fontLigatures: config.font_ligatures ?? true,
           lineHeight: config.line_height 
             ? Math.round(appliedFontSize * config.line_height)
             : 0,
@@ -463,16 +464,58 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           bracketPairColorization: { enabled: largeFileMode ? false : (config.bracket_pair_colorization ?? true) },
           formatOnPaste: config.format_on_paste ?? false,
           trimAutoWhitespace: config.trim_auto_whitespace ?? true,
-          inlayHints: { enabled: largeFileMode ? 'off' : 'on' },
+          scrollBeyondLastLine: config.scroll_beyond_last_line ?? true,
+          mouseWheelZoom: config.mouse_wheel_zoom ?? false,
+          folding: largeFileMode ? false : (config.folding ?? true),
+          links: config.links ?? true,
+          rulers: config.rulers ?? [],
+          guides: {
+            indentation: config.guides?.indentation ?? true,
+            bracketPairs: config.guides?.bracket_pairs ?? true,
+            bracketPairsHorizontal: config.guides?.bracket_pairs_horizontal === 'active' 
+              ? 'active' 
+              : config.guides?.bracket_pairs_horizontal === 'true',
+            highlightActiveBracketPair: config.guides?.highlight_active_bracket_pair ?? true,
+            highlightActiveIndentation: config.guides?.highlight_active_indentation ?? true,
+          },
+          scrollbar: {
+            vertical: config.scrollbar?.vertical || 'auto',
+            horizontal: config.scrollbar?.horizontal || 'visible',
+            verticalScrollbarSize: config.scrollbar?.vertical_scrollbar_size ?? 10,
+            horizontalScrollbarSize: config.scrollbar?.horizontal_scrollbar_size ?? 12,
+            useShadows: config.scrollbar?.use_shadows ?? false,
+          },
+          hover: {
+            enabled: config.hover?.enabled ?? true,
+            delay: config.hover?.delay ?? 300,
+            sticky: config.hover?.sticky ?? false,
+            above: config.hover?.above ?? false,
+          },
+          suggest: {
+            showKeywords: config.suggest?.show_keywords ?? true,
+            showSnippets: config.suggest?.show_snippets ?? true,
+            preview: config.suggest?.preview ?? true,
+            showInlineDetails: config.suggest?.show_inline_details ?? true,
+          },
           quickSuggestions: largeFileMode
             ? { other: false, comments: false, strings: false }
-            : { other: true, comments: false, strings: false },
+            : {
+                other: config.quick_suggestions?.other ?? true,
+                comments: config.quick_suggestions?.comments ?? false,
+                strings: config.quick_suggestions?.strings ?? false,
+              },
+          inlayHints: {
+            enabled: largeFileMode ? 'off' : (config.inlay_hints?.enabled || 'on'),
+            fontSize: config.inlay_hints?.font_size ?? 12,
+            fontFamily: config.inlay_hints?.font_family || "'Fira Code', Consolas, 'Courier New', monospace",
+            padding: config.inlay_hints?.padding ?? false,
+          },
           'semanticHighlighting.enabled': !largeFileMode,
           renderValidationDecorations: largeFileMode ? 'off' : 'on',
           largeFileOptimizations: true,
           maxTokenizationLineLength: largeFileMode ? LARGE_FILE_MAX_TOKENIZATION_LINE_LENGTH : LARGE_FILE_MAX_LINE_LENGTH,
-          occurrencesHighlight: largeFileMode ? 'off' : 'singleFile',
-          selectionHighlight: !largeFileMode,
+          occurrencesHighlight: largeFileMode ? 'off' : (config.occurrences_highlight || 'singleFile'),
+          selectionHighlight: largeFileMode ? false : (config.selection_highlight ?? true),
           matchBrackets: largeFileMode ? 'never' : 'always',
           disableMonospaceOptimizations: !largeFileMode,
           stopRenderingLineAfter: largeFileMode ? LARGE_FILE_RENDER_LINE_LIMIT : -1,

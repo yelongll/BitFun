@@ -17,6 +17,26 @@
     "advanced": {
       "title": "高级功能",
       "description": "编辑器增强功能开关"
+    },
+    "guides": {
+      "title": "参考线",
+      "description": "编辑器参考线设置"
+    },
+    "scrollbar": {
+      "title": "滚动条",
+      "description": "编辑器滚动条设置"
+    },
+    "hover": {
+      "title": "悬停提示",
+      "description": "鼠标悬停时的提示设置"
+    },
+    "suggest": {
+      "title": "代码建议",
+      "description": "代码自动建议的详细设置"
+    },
+    "inlayHints": {
+      "title": "内联提示",
+      "description": "代码内联提示设置"
     }
   },
   "appearance": {
@@ -28,6 +48,11 @@
     "lineHeight": "行高",
     "cursorStyle": "光标样式",
     "cursorBlinking": "光标闪烁",
+    "fontLigatures": "字体连字",
+    "fontLigaturesDesc": "启用编程字体连字效果（如将 => 变成箭头）",
+    "rulers": "标尺列",
+    "rulersDesc": "在指定列位置显示垂直参考线（如：80, 120）",
+    "rulersPlaceholder": "例如: 80, 120",
     "cursorStyles": {
       "line": "竖线",
       "lineThin": "细竖线",
@@ -65,7 +90,21 @@
     "smoothScrolling": "平滑滚动",
     "smoothScrollingDesc": "启用平滑滚动动画",
     "scrollBeyondLastLine": "允许滚动超过最后一行",
-    "scrollBeyondLastLineDesc": "可以将文件末尾滚动到屏幕中央"
+    "scrollBeyondLastLineDesc": "可以将文件末尾滚动到屏幕中央",
+    "autoSave": "自动保存",
+    "autoSaveOptions": {
+      "off": "关闭",
+      "afterDelay": "延迟后保存",
+      "onFocusChange": "失去焦点时",
+      "onWindowChange": "窗口切换时"
+    },
+    "autoSaveDelay": "自动保存延迟",
+    "mouseWheelZoom": "滚轮缩放字体",
+    "mouseWheelZoomDesc": "按住 Ctrl 键滚动鼠标滚轮缩放字体大小",
+    "folding": "代码折叠",
+    "foldingDesc": "启用代码折叠功能",
+    "links": "可点击链接",
+    "linksDesc": "编辑器中的 URL 链接可点击"
   },
   "display": {
     "minimap": "显示缩略图",
@@ -103,7 +142,71 @@
     "formatOnPaste": "粘贴时格式化",
     "formatOnPasteDesc": "粘贴代码时自动格式化",
     "trimAutoWhitespace": "自动删除行尾空格",
-    "trimAutoWhitespaceDesc": "保存时移除行尾多余的空格"
+    "trimAutoWhitespaceDesc": "保存时移除行尾多余的空格",
+    "occurrencesHighlight": "匹配词高亮",
+    "occurrencesHighlightOptions": {
+      "off": "关闭",
+      "singleFile": "当前文件",
+      "multiFile": "跨文件"
+    },
+    "selectionHighlight": "选中高亮",
+    "selectionHighlightDesc": "高亮显示与选中内容相同的文本"
+  },
+  "guides": {
+    "indentation": "缩进参考线",
+    "indentationDesc": "显示垂直的缩进参考线",
+    "bracketPairs": "括号配对参考线",
+    "bracketPairsDesc": "显示配对的括号之间的参考线",
+    "bracketPairsHorizontal": "水平括号参考线",
+    "bracketPairsHorizontalOptions": {
+      "active": "活动时",
+      "always": "总是",
+      "never": "从不"
+    },
+    "highlightActiveBracketPair": "高亮活动括号对",
+    "highlightActiveBracketPairDesc": "高亮显示光标所在的括号对"
+  },
+  "scrollbar": {
+    "vertical": "垂直滚动条",
+    "horizontal": "水平滚动条",
+    "visibilityOptions": {
+      "auto": "自动",
+      "visible": "始终显示",
+      "hidden": "隐藏"
+    },
+    "verticalScrollbarSize": "垂直滚动条宽度",
+    "horizontalScrollbarSize": "水平滚动条高度",
+    "useShadows": "滚动阴影",
+    "useShadowsDesc": "在可滚动区域显示阴影效果"
+  },
+  "hover": {
+    "enabled": "启用悬停提示",
+    "enabledDesc": "鼠标悬停时显示代码提示",
+    "delay": "悬停延迟",
+    "sticky": "粘性悬停",
+    "stickyDesc": "鼠标移开后保持提示显示",
+    "above": "在上方显示",
+    "aboveDesc": "在光标上方显示悬停提示"
+  },
+  "suggest": {
+    "showKeywords": "显示关键字",
+    "showKeywordsDesc": "在建议中显示语言关键字",
+    "showSnippets": "显示代码片段",
+    "showSnippetsDesc": "在建议中显示代码片段",
+    "preview": "预览建议",
+    "previewDesc": "在编辑器中预览选中的建议",
+    "showInlineDetails": "显示内联详情",
+    "showInlineDetailsDesc": "在建议项中显示额外详情"
+  },
+  "inlayHints": {
+    "enabled": "内联提示",
+    "enabledOptions": {
+      "on": "开启",
+      "off": "关闭",
+      "onUnlessPressed": "按住Alt时隐藏",
+      "offUnlessPressed": "按住Alt时显示"
+    },
+    "fontSize": "提示字体大小"
   },
   "actions": {
     "reset": "重置为默认",

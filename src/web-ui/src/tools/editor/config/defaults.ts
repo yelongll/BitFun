@@ -58,12 +58,14 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   fontSize: 14,
   fontFamily: "'Fira Code', 'Noto Sans SC', Consolas, 'Courier New', monospace",
   fontWeight: 'normal',
+  fontLigatures: true,
   lineHeight: 1.5,
   theme: 'bitfun-dark',
   cursorStyle: 'line',
   cursorBlinking: 'smooth',
   renderWhitespace: 'selection',
   renderLineHighlight: 'line',
+  rulers: [],
 
   // Behavior
   tabSize: 2,
@@ -73,6 +75,9 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   autoSaveDelay: 1000,
   scrollBeyondLastLine: false,
   smoothScrolling: true,
+  mouseWheelZoom: false,
+  folding: true,
+  links: true,
 
   // Features
   lineNumbers: 'on',
@@ -90,6 +95,8 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   suggest: { ...DEFAULT_SUGGEST_CONFIG },
   quickSuggestions: { ...DEFAULT_QUICK_SUGGESTIONS_CONFIG },
   inlayHints: { ...DEFAULT_INLAY_HINTS_CONFIG },
+  occurrencesHighlight: 'singleFile',
+  selectionHighlight: true,
 };
 
 /** Deep merge configuration (source overrides target) */

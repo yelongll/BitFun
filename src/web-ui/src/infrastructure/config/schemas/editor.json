@@ -136,6 +136,442 @@
           "title": "启用字体连字",
           "description": "显示字体连字效果（如 => 显示为箭头）",
           "default": true
+        },
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "fontWeight",
+          "title": "字体粗细",
+          "description": "编辑器文字的粗细程度",
+          "default": "normal",
+          "ui": {
+            "options": [
+              {
+                "value": "normal",
+                "label": "正常",
+                "description": "标准字体粗细"
+              },
+              {
+                "value": "bold",
+                "label": "粗体",
+                "description": "较粗的字体"
+              },
+              {
+                "value": "lighter",
+                "label": "细体",
+                "description": "较细的字体"
+              }
+            ]
+          }
+        },
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "renderLineHighlight",
+          "title": "当前行高亮",
+          "description": "当前光标所在行的显示方式",
+          "default": "line",
+          "ui": {
+            "options": [
+              {
+                "value": "line",
+                "label": "整行",
+                "description": "高亮整行背景"
+              },
+              {
+                "value": "gutter",
+                "label": "仅行号",
+                "description": "只高亮行号区域"
+              },
+              {
+                "value": "all",
+                "label": "全部",
+                "description": "高亮整行和行号"
+              },
+              {
+                "value": "none",
+                "label": "关闭",
+                "description": "不高亮当前行"
+              }
+            ]
+          }
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "scrollBeyondLastLine",
+          "title": "滚动到最后一行之后",
+          "description": "允许编辑器滚动到最后一行内容之后",
+          "default": true
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "semanticHighlighting",
+          "title": "语义高亮",
+          "description": "根据代码语义进行语法高亮",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "guides",
+      "title": "参考线",
+      "description": "编辑器参考线设置",
+      "collapsible": true,
+      "collapsed": false,
+      "fields": [
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "guides.indentation",
+          "title": "缩进参考线",
+          "description": "显示垂直的缩进参考线",
+          "default": true
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "guides.bracketPairs",
+          "title": "括号配对参考线",
+          "description": "显示配对的括号之间的参考线",
+          "default": true
+        },
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "guides.bracketPairsHorizontal",
+          "title": "水平括号参考线",
+          "description": "水平括号配对参考线的显示方式",
+          "default": "active",
+          "ui": {
+            "options": [
+              {
+                "value": "active",
+                "label": "活动时",
+                "description": "只在光标位于括号内时显示"
+              },
+              {
+                "value": "true",
+                "label": "总是",
+                "description": "始终显示水平参考线"
+              },
+              {
+                "value": "false",
+                "label": "关闭",
+                "description": "不显示水平参考线"
+              }
+            ]
+          }
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "guides.highlightActiveBracketPair",
+          "title": "高亮活动括号对",
+          "description": "高亮显示光标所在的括号对",
+          "default": true
+        },
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "guides.highlightActiveIndentation",
+          "title": "高亮活动缩进",
+          "description": "高亮显示当前光标所在的缩进级别",
+          "default": "always",
+          "ui": {
+            "options": [
+              {
+                "value": "always",
+                "label": "总是",
+                "description": "始终高亮活动缩进"
+              },
+              {
+                "value": "true",
+                "label": "默认",
+                "description": "默认高亮行为"
+              },
+              {
+                "value": "false",
+                "label": "关闭",
+                "description": "不高亮活动缩进"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "scrollbar",
+      "title": "滚动条",
+      "description": "编辑器滚动条设置",
+      "collapsible": true,
+      "collapsed": true,
+      "fields": [
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "scrollbar.vertical",
+          "title": "垂直滚动条",
+          "description": "垂直滚动条的显示方式",
+          "default": "auto",
+          "ui": {
+            "options": [
+              {
+                "value": "auto",
+                "label": "自动",
+                "description": "需要时自动显示"
+              },
+              {
+                "value": "visible",
+                "label": "始终显示",
+                "description": "始终显示滚动条"
+              },
+              {
+                "value": "hidden",
+                "label": "隐藏",
+                "description": "不显示滚动条"
+              }
+            ]
+          }
+        },
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "scrollbar.horizontal",
+          "title": "水平滚动条",
+          "description": "水平滚动条的显示方式",
+          "default": "auto",
+          "ui": {
+            "options": [
+              {
+                "value": "auto",
+                "label": "自动",
+                "description": "需要时自动显示"
+              },
+              {
+                "value": "visible",
+                "label": "始终显示",
+                "description": "始终显示滚动条"
+              },
+              {
+                "value": "hidden",
+                "label": "隐藏",
+                "description": "不显示滚动条"
+              }
+            ]
+          }
+        },
+        {
+          "type": "range",
+          "dataType": "number",
+          "key": "scrollbar.verticalScrollbarSize",
+          "title": "垂直滚动条宽度",
+          "description": "垂直滚动条的宽度",
+          "default": 10,
+          "ui": {
+            "min": 5,
+            "max": 20,
+            "step": 1,
+            "showValue": true,
+            "suffix": "px"
+          }
+        },
+        {
+          "type": "range",
+          "dataType": "number",
+          "key": "scrollbar.horizontalScrollbarSize",
+          "title": "水平滚动条高度",
+          "description": "水平滚动条的高度",
+          "default": 10,
+          "ui": {
+            "min": 5,
+            "max": 20,
+            "step": 1,
+            "showValue": true,
+            "suffix": "px"
+          }
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "scrollbar.useShadows",
+          "title": "滚动阴影",
+          "description": "在可滚动区域显示阴影效果",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "hover",
+      "title": "悬停提示",
+      "description": "鼠标悬停时的提示设置",
+      "collapsible": true,
+      "collapsed": true,
+      "fields": [
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "hover.enabled",
+          "title": "启用悬停提示",
+          "description": "鼠标悬停时显示代码提示",
+          "default": true
+        },
+        {
+          "type": "number",
+          "dataType": "number",
+          "key": "hover.delay",
+          "title": "悬停延迟",
+          "description": "显示悬停提示前的延迟时间",
+          "default": 300,
+          "ui": {
+            "min": 0,
+            "max": 2000,
+            "step": 100,
+            "suffix": "ms"
+          }
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "hover.sticky",
+          "title": "粘性悬停",
+          "description": "鼠标移开后保持提示显示",
+          "default": false
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "hover.above",
+          "title": "在上方显示",
+          "description": "在光标上方显示悬停提示",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "suggest",
+      "title": "代码建议",
+      "description": "代码自动建议的详细设置",
+      "collapsible": true,
+      "collapsed": true,
+      "fields": [
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "suggest.showKeywords",
+          "title": "显示关键字",
+          "description": "在建议中显示语言关键字",
+          "default": true
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "suggest.showSnippets",
+          "title": "显示代码片段",
+          "description": "在建议中显示代码片段",
+          "default": true
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "suggest.preview",
+          "title": "预览建议",
+          "description": "在编辑器中预览选中的建议",
+          "default": true
+        },
+        {
+          "type": "switch",
+          "dataType": "boolean",
+          "key": "suggest.showInlineDetails",
+          "title": "显示内联详情",
+          "description": "在建议项中显示额外详情",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "inlayHints",
+      "title": "内联提示",
+      "description": "代码内联提示设置",
+      "collapsible": true,
+      "collapsed": true,
+      "fields": [
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "inlayHints.enabled",
+          "title": "内联提示",
+          "description": "在代码中显示内联提示",
+          "default": "on",
+          "ui": {
+            "options": [
+              {
+                "value": "on",
+                "label": "开启",
+                "description": "始终显示内联提示"
+              },
+              {
+                "value": "off",
+                "label": "关闭",
+                "description": "不显示内联提示"
+              },
+              {
+                "value": "onUnlessPressed",
+                "label": "按住Alt时隐藏",
+                "description": "按住Alt键时隐藏提示"
+              },
+              {
+                "value": "offUnlessPressed",
+                "label": "按住Alt时显示",
+                "description": "按住Alt键时显示提示"
+              }
+            ]
+          }
+        },
+        {
+          "type": "range",
+          "dataType": "number",
+          "key": "inlayHints.fontSize",
+          "title": "提示字体大小",
+          "description": "内联提示的字体大小",
+          "default": 12,
+          "ui": {
+            "min": 8,
+            "max": 20,
+            "step": 1,
+            "showValue": true,
+            "suffix": "px"
+          }
+        },
+        {
+          "type": "select",
+          "dataType": "string",
+          "key": "inlayHints.fontFamily",
+          "title": "提示字体",
+          "description": "内联提示使用的字体",
+          "default": "",
+          "ui": {
+            "options": [
+              {
+                "value": "",
+                "label": "继承编辑器字体",
+                "description": "使用与编辑器相同的字体"
+              },
+              {
+                "value": "JetBrains Mono",
+                "label": "JetBrains Mono"
+              },
+              {
+                "value": "Fira Code",
+                "label": "Fira Code"
+              },
+              {
+                "value": "Cascadia Code",
+                "label": "Cascadia Code"
+              }
+            ]
+          }
         }
       ]
     },

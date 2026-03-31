@@ -17,6 +17,26 @@
     "advanced": {
       "title": "Advanced Features",
       "description": "Enhanced feature toggles"
+    },
+    "guides": {
+      "title": "Guides",
+      "description": "Editor guides configuration"
+    },
+    "scrollbar": {
+      "title": "Scrollbar",
+      "description": "Editor scrollbar settings"
+    },
+    "hover": {
+      "title": "Hover",
+      "description": "Mouse hover tooltip settings"
+    },
+    "suggest": {
+      "title": "Suggestions",
+      "description": "Code suggestion detailed settings"
+    },
+    "inlayHints": {
+      "title": "Inlay Hints",
+      "description": "Code inlay hints settings"
     }
   },
   "appearance": {
@@ -104,6 +124,62 @@
     "formatOnPasteDesc": "Auto format when pasting code",
     "trimAutoWhitespace": "Trim Trailing Whitespace",
     "trimAutoWhitespaceDesc": "Remove trailing whitespace on save"
+  },
+  "guides": {
+    "indentation": "Indentation Guides",
+    "indentationDesc": "Show vertical indentation guides",
+    "bracketPairs": "Bracket Pair Guides",
+    "bracketPairsDesc": "Show guides between matching brackets",
+    "bracketPairsHorizontal": "Horizontal Bracket Guides",
+    "bracketPairsHorizontalOptions": {
+      "active": "When Active",
+      "always": "Always",
+      "never": "Never"
+    },
+    "highlightActiveBracketPair": "Highlight Active Bracket Pair",
+    "highlightActiveBracketPairDesc": "Highlight the bracket pair at cursor position"
+  },
+  "scrollbar": {
+    "vertical": "Vertical Scrollbar",
+    "horizontal": "Horizontal Scrollbar",
+    "visibilityOptions": {
+      "auto": "Auto",
+      "visible": "Always Visible",
+      "hidden": "Hidden"
+    },
+    "verticalScrollbarSize": "Vertical Scrollbar Width",
+    "horizontalScrollbarSize": "Horizontal Scrollbar Height",
+    "useShadows": "Scroll Shadows",
+    "useShadowsDesc": "Show shadow effects in scrollable areas"
+  },
+  "hover": {
+    "enabled": "Enable Hover",
+    "enabledDesc": "Show code hints on mouse hover",
+    "delay": "Hover Delay",
+    "sticky": "Sticky Hover",
+    "stickyDesc": "Keep tooltip visible after mouse leaves",
+    "above": "Show Above",
+    "aboveDesc": "Show hover tooltip above cursor"
+  },
+  "suggest": {
+    "showKeywords": "Show Keywords",
+    "showKeywordsDesc": "Show language keywords in suggestions",
+    "showSnippets": "Show Snippets",
+    "showSnippetsDesc": "Show code snippets in suggestions",
+    "preview": "Preview Suggestion",
+    "previewDesc": "Preview selected suggestion in editor",
+    "showInlineDetails": "Show Inline Details",
+    "showInlineDetailsDesc": "Show additional details in suggestion items"
+  },
+  "inlayHints": {
+    "enabled": "Inlay Hints",
+    "enabledOptions": {
+      "on": "On",
+      "off": "Off",
+      "onUnlessPressed": "On Unless Alt Pressed",
+      "offUnlessPressed": "Off Unless Alt Pressed"
+    },
+    "fontSize": "Hint Font Size"
   },
   "actions": {
     "reset": "Reset to Default",

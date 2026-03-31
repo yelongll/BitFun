@@ -60,6 +60,7 @@ export interface EditorConfig {
   fontSize: number;
   fontFamily: string;
   fontWeight: 'normal' | 'bold';
+  fontLigatures: boolean;
   /** Line height multiplier */
   lineHeight: number;
   theme: string;
@@ -67,6 +68,7 @@ export interface EditorConfig {
   cursorBlinking: 'blink' | 'smooth' | 'phase' | 'expand' | 'solid';
   renderWhitespace: 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
   renderLineHighlight: 'none' | 'gutter' | 'line' | 'all';
+  rulers: number[];
 
   // Behavior
   tabSize: number;
@@ -76,6 +78,9 @@ export interface EditorConfig {
   autoSaveDelay: number;
   scrollBeyondLastLine: boolean;
   smoothScrolling: boolean;
+  mouseWheelZoom: boolean;
+  folding: boolean;
+  links: boolean;
 
   // Features
   lineNumbers: 'on' | 'off' | 'relative' | 'interval';
@@ -93,6 +98,8 @@ export interface EditorConfig {
   suggest: SuggestConfig;
   quickSuggestions: QuickSuggestionsConfig;
   inlayHints: InlayHintsConfig;
+  occurrencesHighlight: 'off' | 'singleFile' | 'multiFile';
+  selectionHighlight: boolean;
 }
 
 /** Partial editor config for overrides */

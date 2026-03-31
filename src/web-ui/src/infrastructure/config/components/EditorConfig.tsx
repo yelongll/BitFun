@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NumberInput, Select, Button, Switch, ConfigPageLoading, ConfigPageMessage } from '@/component-library';
+import { NumberInput, Select, Button, Switch, ConfigPageLoading, ConfigPageMessage, Input } from '@/component-library';
 import { configManager } from '../services/ConfigManager';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig as EditorConfigType, type EditorConfigPartial } from '@/tools/editor/config';
@@ -98,6 +98,38 @@ const renderLineHighlightOptions = [
   { label: 'all', value: 'all', labelKey: 'display.lineHighlightOptions.all' },
 ];
 
+const scrollbarVisibilityOptions = [
+  { label: 'auto', value: 'auto', labelKey: 'scrollbar.visibilityOptions.auto' },
+  { label: 'visible', value: 'visible', labelKey: 'scrollbar.visibilityOptions.visible' },
+  { label: 'hidden', value: 'hidden', labelKey: 'scrollbar.visibilityOptions.hidden' },
+];
+
+const bracketPairsHorizontalOptions = [
+  { label: 'active', value: 'active', labelKey: 'guides.bracketPairsHorizontalOptions.active' },
+  { label: 'always', value: 'true', labelKey: 'guides.bracketPairsHorizontalOptions.always' },
+  { label: 'never', value: 'false', labelKey: 'guides.bracketPairsHorizontalOptions.never' },
+];
+
+const inlayHintsEnabledOptions = [
+  { label: 'on', value: 'on', labelKey: 'inlayHints.enabledOptions.on' },
+  { label: 'off', value: 'off', labelKey: 'inlayHints.enabledOptions.off' },
+  { label: 'onUnlessPressed', value: 'onUnlessPressed', labelKey: 'inlayHints.enabledOptions.onUnlessPressed' },
+  { label: 'offUnlessPressed', value: 'offUnlessPressed', labelKey: 'inlayHints.enabledOptions.offUnlessPressed' },
+];
+
+const autoSaveOptions = [
+  { label: 'off', value: 'off', labelKey: 'behavior.autoSaveOptions.off' },
+  { label: 'afterDelay', value: 'afterDelay', labelKey: 'behavior.autoSaveOptions.afterDelay' },
+  { label: 'onFocusChange', value: 'onFocusChange', labelKey: 'behavior.autoSaveOptions.onFocusChange' },
+  { label: 'onWindowChange', value: 'onWindowChange', labelKey: 'behavior.autoSaveOptions.onWindowChange' },
+];
+
+const occurrencesHighlightOptions = [
+  { label: 'off', value: 'off', labelKey: 'advanced.occurrencesHighlightOptions.off' },
+  { label: 'singleFile', value: 'singleFile', labelKey: 'advanced.occurrencesHighlightOptions.singleFile' },
+  { label: 'multiFile', value: 'multiFile', labelKey: 'advanced.occurrencesHighlightOptions.multiFile' },
+];
+
  
 function getPrimaryFont(fontFamily: string): string {
   
@@ -122,6 +154,7 @@ function convertToSnakeCase(config: EditorConfigPartial): Record<string, any> {
   if (config.fontSize !== undefined) result.font_size = config.fontSize;
   if (config.fontFamily !== undefined) result.font_family = config.fontFamily;
   if (config.fontWeight !== undefined) result.font_weight = config.fontWeight;
+  if (config.fontLigatures !== undefined) result.font_ligatures = config.fontLigatures;
   if (config.lineHeight !== undefined) result.line_height = config.lineHeight;
   if (config.tabSize !== undefined) result.tab_size = config.tabSize;
   if (config.insertSpaces !== undefined) result.insert_spaces = config.insertSpaces;
@@ -141,6 +174,12 @@ function convertToSnakeCase(config: EditorConfigPartial): Record<string, any> {
   if (config.smoothScrolling !== undefined) result.smooth_scrolling = config.smoothScrolling;
   if (config.semanticHighlighting !== undefined) result.semantic_highlighting = config.semanticHighlighting;
   if (config.bracketPairColorization !== undefined) result.bracket_pair_colorization = config.bracketPairColorization;
+  if (config.mouseWheelZoom !== undefined) result.mouse_wheel_zoom = config.mouseWheelZoom;
+  if (config.folding !== undefined) result.folding = config.folding;
+  if (config.links !== undefined) result.links = config.links;
+  if (config.occurrencesHighlight !== undefined) result.occurrences_highlight = config.occurrencesHighlight;
+  if (config.selectionHighlight !== undefined) result.selection_highlight = config.selectionHighlight;
+  if (config.rulers !== undefined) result.rulers = config.rulers;
   
   if (config.minimap) {
     result.minimap = {
@@ -149,17 +188,73 @@ function convertToSnakeCase(config: EditorConfigPartial): Record<string, any> {
       size: config.minimap.size,
     };
   }
-  
+
+  if (config.guides) {
+    result.guides = {
+      indentation: config.guides.indentation,
+      bracket_pairs: config.guides.bracketPairs,
+      bracket_pairs_horizontal: config.guides.bracketPairsHorizontal,
+      highlight_active_bracket_pair: config.guides.highlightActiveBracketPair,
+      highlight_active_indentation: config.guides.highlightActiveIndentation,
+    };
+  }
+
+  if (config.scrollbar) {
+    result.scrollbar = {
+      vertical: config.scrollbar.vertical,
+      horizontal: config.scrollbar.horizontal,
+      vertical_scrollbar_size: config.scrollbar.verticalScrollbarSize,
+      horizontal_scrollbar_size: config.scrollbar.horizontalScrollbarSize,
+      use_shadows: config.scrollbar.useShadows,
+    };
+  }
+
+  if (config.hover) {
+    result.hover = {
+      enabled: config.hover.enabled,
+      delay: config.hover.delay,
+      sticky: config.hover.sticky,
+      above: config.hover.above,
+    };
+  }
+
+  if (config.suggest) {
+    result.suggest = {
+      show_keywords: config.suggest.showKeywords,
+      show_snippets: config.suggest.showSnippets,
+      preview: config.suggest.preview,
+      show_inline_details: config.suggest.showInlineDetails,
+    };
+  }
+
+  if (config.quick_suggestions) {
+    result.quick_suggestions = {
+      other: config.quickSuggestions.other,
+      comments: config.quickSuggestions.comments,
+      strings: config.quickSuggestions.strings,
+    };
+  }
+
+  if (config.inlay_hints) {
+    result.inlay_hints = {
+      enabled: config.inlayHints.enabled,
+      font_size: config.inlayHints.fontSize,
+      font_family: config.inlayHints.fontFamily,
+      padding: config.inlayHints.padding,
+    };
+  }
+
   return result;
 }
 
- 
+
 function convertToCamelCase(config: Record<string, any>): EditorConfigPartial {
   const result: EditorConfigPartial = {};
-  
+
   if (config.font_size !== undefined) result.fontSize = config.font_size;
   if (config.font_family !== undefined) result.fontFamily = config.font_family;
   if (config.font_weight !== undefined) result.fontWeight = config.font_weight;
+  if (config.font_ligatures !== undefined) result.fontLigatures = config.font_ligatures;
   if (config.line_height !== undefined) result.lineHeight = config.line_height;
   if (config.tab_size !== undefined) result.tabSize = config.tab_size;
   if (config.insert_spaces !== undefined) result.insertSpaces = config.insert_spaces;
@@ -179,7 +274,13 @@ function convertToCamelCase(config: Record<string, any>): EditorConfigPartial {
   if (config.smooth_scrolling !== undefined) result.smoothScrolling = config.smooth_scrolling;
   if (config.semantic_highlighting !== undefined) result.semanticHighlighting = config.semantic_highlighting;
   if (config.bracket_pair_colorization !== undefined) result.bracketPairColorization = config.bracket_pair_colorization;
-  
+  if (config.mouse_wheel_zoom !== undefined) result.mouseWheelZoom = config.mouse_wheel_zoom;
+  if (config.folding !== undefined) result.folding = config.folding;
+  if (config.links !== undefined) result.links = config.links;
+  if (config.occurrences_highlight !== undefined) result.occurrencesHighlight = config.occurrences_highlight;
+  if (config.selection_highlight !== undefined) result.selectionHighlight = config.selection_highlight;
+  if (config.rulers !== undefined) result.rulers = config.rulers;
+
   if (config.minimap) {
     result.minimap = {
       enabled: config.minimap.enabled,
@@ -187,7 +288,62 @@ function convertToCamelCase(config: Record<string, any>): EditorConfigPartial {
       size: config.minimap.size,
     };
   }
-  
+
+  if (config.guides) {
+    result.guides = {
+      indentation: config.guides.indentation,
+      bracketPairs: config.guides.bracket_pairs,
+      bracketPairsHorizontal: config.guides.bracket_pairs_horizontal,
+      highlightActiveBracketPair: config.guides.highlight_active_bracket_pair,
+      highlightActiveIndentation: config.guides.highlight_active_indentation,
+    };
+  }
+
+  if (config.scrollbar) {
+    result.scrollbar = {
+      vertical: config.scrollbar.vertical,
+      horizontal: config.scrollbar.horizontal,
+      verticalScrollbarSize: config.scrollbar.vertical_scrollbar_size,
+      horizontalScrollbarSize: config.scrollbar.horizontal_scrollbar_size,
+      useShadows: config.scrollbar.use_shadows,
+    };
+  }
+
+  if (config.hover) {
+    result.hover = {
+      enabled: config.hover.enabled,
+      delay: config.hover.delay,
+      sticky: config.hover.sticky,
+      above: config.hover.above,
+    };
+  }
+
+  if (config.suggest) {
+    result.suggest = {
+      showKeywords: config.suggest.show_keywords,
+      showSnippets: config.suggest.show_snippets,
+      preview: config.suggest.preview,
+      showInlineDetails: config.suggest.show_inline_details,
+    };
+  }
+
+  if (config.quick_suggestions) {
+    result.quickSuggestions = {
+      other: config.quick_suggestions.other,
+      comments: config.quick_suggestions.comments,
+      strings: config.quick_suggestions.strings,
+    };
+  }
+
+  if (config.inlay_hints) {
+    result.inlayHints = {
+      enabled: config.inlay_hints.enabled,
+      fontSize: config.inlay_hints.font_size,
+      fontFamily: config.inlay_hints.font_family,
+      padding: config.inlay_hints.padding,
+    };
+  }
+
   return result;
 }
 
@@ -209,6 +365,11 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
   const minimapSizeOptionsTranslated = minimapSizeOptions.map(o => ({ ...o, label: t(o.labelKey) }));
   const renderWhitespaceOptionsTranslated = renderWhitespaceOptions.map(o => ({ ...o, label: t(o.labelKey) }));
   const renderLineHighlightOptionsTranslated = renderLineHighlightOptions.map(o => ({ ...o, label: t(o.labelKey) }));
+  const scrollbarVisibilityOptionsTranslated = scrollbarVisibilityOptions.map(o => ({ ...o, label: t(o.labelKey) }));
+  const bracketPairsHorizontalOptionsTranslated = bracketPairsHorizontalOptions.map(o => ({ ...o, label: t(o.labelKey) }));
+  const inlayHintsEnabledOptionsTranslated = inlayHintsEnabledOptions.map(o => ({ ...o, label: t(o.labelKey) }));
+  const autoSaveOptionsTranslated = autoSaveOptions.map(o => ({ ...o, label: t(o.labelKey) }));
+  const occurrencesHighlightOptionsTranslated = occurrencesHighlightOptions.map(o => ({ ...o, label: t(o.labelKey) }));
   
   
   const [config, setConfig] = useState<EditorConfigType>({ ...DEFAULT_EDITOR_CONFIG });
@@ -341,6 +502,66 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
     }));
   }, []);
 
+  const updateGuidesConfig = useCallback((key: keyof EditorConfigType['guides'], value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      guides: {
+        ...prev.guides,
+        [key]: value
+      }
+    }));
+  }, []);
+
+  const updateScrollbarConfig = useCallback((key: keyof EditorConfigType['scrollbar'], value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      scrollbar: {
+        ...prev.scrollbar,
+        [key]: value
+      }
+    }));
+  }, []);
+
+  const updateHoverConfig = useCallback((key: keyof EditorConfigType['hover'], value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      hover: {
+        ...prev.hover,
+        [key]: value
+      }
+    }));
+  }, []);
+
+  const updateSuggestConfig = useCallback((key: keyof EditorConfigType['suggest'], value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      suggest: {
+        ...prev.suggest,
+        [key]: value
+      }
+    }));
+  }, []);
+
+  const updateQuickSuggestionsConfig = useCallback((key: keyof EditorConfigType['quickSuggestions'], value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      quickSuggestions: {
+        ...prev.quickSuggestions,
+        [key]: value
+      }
+    }));
+  }, []);
+
+  const updateInlayHintsConfig = useCallback((key: keyof EditorConfigType['inlayHints'], value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      inlayHints: {
+        ...prev.inlayHints,
+        [key]: value
+      }
+    }));
+  }, []);
+
   if (isLoading) {
     return (
       <ConfigPageLayout className="bitfun-editor-config">
@@ -423,6 +644,31 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
               size="small"
             />
           </ConfigPageRow>
+          <ConfigPageRow label={t('appearance.fontLigatures')} description={t('appearance.fontLigaturesDesc')} align="center">
+            <Switch
+              checked={config.fontLigatures}
+              onChange={(e) => updateConfig('fontLigatures', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('appearance.rulers')} description={t('appearance.rulersDesc')} align="center">
+            <Input
+              value={config.rulers?.join(', ') || ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                const rulers = value
+                  .split(/[,，]/) // 支持中英文逗号
+                  .map(s => s.trim())
+                  .filter(s => s !== '')
+                  .map(s => parseInt(s, 10))
+                  .filter(n => !isNaN(n) && n > 0);
+                updateConfig('rulers', rulers);
+              }}
+              placeholder={t('appearance.rulersPlaceholder')}
+              size="small"
+              style={{ width: '200px' }}
+            />
+          </ConfigPageRow>
         </ConfigPageSection>
 
         <ConfigPageSection
@@ -472,6 +718,48 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
             <Switch
               checked={config.scrollBeyondLastLine}
               onChange={(e) => updateConfig('scrollBeyondLastLine', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('behavior.autoSave')} align="center">
+            <Select
+              options={autoSaveOptionsTranslated}
+              value={config.autoSave}
+              onChange={(v) => updateConfig('autoSave', v as typeof config.autoSave)}
+              size="small"
+            />
+          </ConfigPageRow>
+          {config.autoSave === 'afterDelay' && (
+            <ConfigPageRow label={t('behavior.autoSaveDelay')} align="center">
+              <NumberInput
+                value={config.autoSaveDelay}
+                onChange={(v) => updateConfig('autoSaveDelay', v)}
+                min={100}
+                max={10000}
+                step={100}
+                unit="ms"
+                size="small"
+              />
+            </ConfigPageRow>
+          )}
+          <ConfigPageRow label={t('behavior.mouseWheelZoom')} description={t('behavior.mouseWheelZoomDesc')} align="center">
+            <Switch
+              checked={config.mouseWheelZoom}
+              onChange={(e) => updateConfig('mouseWheelZoom', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('behavior.folding')} description={t('behavior.foldingDesc')} align="center">
+            <Switch
+              checked={config.folding}
+              onChange={(e) => updateConfig('folding', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('behavior.links')} description={t('behavior.linksDesc')} align="center">
+            <Switch
+              checked={config.links}
+              onChange={(e) => updateConfig('links', e.target.checked)}
               size="small"
             />
           </ConfigPageRow>
@@ -562,6 +850,208 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
             <Switch
               checked={config.trimAutoWhitespace}
               onChange={(e) => updateConfig('trimAutoWhitespace', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('advanced.occurrencesHighlight')} align="center">
+            <Select
+              options={occurrencesHighlightOptionsTranslated}
+              value={config.occurrencesHighlight}
+              onChange={(v) => updateConfig('occurrencesHighlight', v as typeof config.occurrencesHighlight)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('advanced.selectionHighlight')} description={t('advanced.selectionHighlightDesc')} align="center">
+            <Switch
+              checked={config.selectionHighlight}
+              onChange={(e) => updateConfig('selectionHighlight', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+        </ConfigPageSection>
+
+        <ConfigPageSection
+          title={t('sections.guides.title')}
+          description={t('sections.guides.description')}
+        >
+          <ConfigPageRow label={t('guides.indentation')} description={t('guides.indentationDesc')} align="center">
+            <Switch
+              checked={config.guides.indentation}
+              onChange={(e) => updateGuidesConfig('indentation', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('guides.bracketPairs')} description={t('guides.bracketPairsDesc')} align="center">
+            <Switch
+              checked={config.guides.bracketPairs}
+              onChange={(e) => updateGuidesConfig('bracketPairs', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('guides.bracketPairsHorizontal')} align="center">
+            <Select
+              options={bracketPairsHorizontalOptionsTranslated}
+              value={config.guides.bracketPairsHorizontal}
+              onChange={(v) => updateGuidesConfig('bracketPairsHorizontal', v as typeof config.guides.bracketPairsHorizontal)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('guides.highlightActiveBracketPair')} description={t('guides.highlightActiveBracketPairDesc')} align="center">
+            <Switch
+              checked={config.guides.highlightActiveBracketPair}
+              onChange={(e) => updateGuidesConfig('highlightActiveBracketPair', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+        </ConfigPageSection>
+
+        <ConfigPageSection
+          title={t('sections.scrollbar.title')}
+          description={t('sections.scrollbar.description')}
+        >
+          <ConfigPageRow label={t('scrollbar.vertical')} align="center">
+            <Select
+              options={scrollbarVisibilityOptionsTranslated}
+              value={config.scrollbar.vertical}
+              onChange={(v) => updateScrollbarConfig('vertical', v as typeof config.scrollbar.vertical)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('scrollbar.horizontal')} align="center">
+            <Select
+              options={scrollbarVisibilityOptionsTranslated}
+              value={config.scrollbar.horizontal}
+              onChange={(v) => updateScrollbarConfig('horizontal', v as typeof config.scrollbar.horizontal)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('scrollbar.verticalScrollbarSize')} align="center">
+            <NumberInput
+              value={config.scrollbar.verticalScrollbarSize}
+              onChange={(v) => updateScrollbarConfig('verticalScrollbarSize', v)}
+              min={5}
+              max={20}
+              step={1}
+              unit="px"
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('scrollbar.horizontalScrollbarSize')} align="center">
+            <NumberInput
+              value={config.scrollbar.horizontalScrollbarSize}
+              onChange={(v) => updateScrollbarConfig('horizontalScrollbarSize', v)}
+              min={5}
+              max={20}
+              step={1}
+              unit="px"
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('scrollbar.useShadows')} description={t('scrollbar.useShadowsDesc')} align="center">
+            <Switch
+              checked={config.scrollbar.useShadows}
+              onChange={(e) => updateScrollbarConfig('useShadows', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+        </ConfigPageSection>
+
+        <ConfigPageSection
+          title={t('sections.hover.title')}
+          description={t('sections.hover.description')}
+        >
+          <ConfigPageRow label={t('hover.enabled')} description={t('hover.enabledDesc')} align="center">
+            <Switch
+              checked={config.hover.enabled}
+              onChange={(e) => updateHoverConfig('enabled', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          {config.hover.enabled && (
+            <>
+              <ConfigPageRow label={t('hover.delay')} align="center">
+                <NumberInput
+                  value={config.hover.delay}
+                  onChange={(v) => updateHoverConfig('delay', v)}
+                  min={0}
+                  max={2000}
+                  step={100}
+                  unit="ms"
+                  size="small"
+                />
+              </ConfigPageRow>
+              <ConfigPageRow label={t('hover.sticky')} description={t('hover.stickyDesc')} align="center">
+                <Switch
+                  checked={config.hover.sticky}
+                  onChange={(e) => updateHoverConfig('sticky', e.target.checked)}
+                  size="small"
+                />
+              </ConfigPageRow>
+              <ConfigPageRow label={t('hover.above')} description={t('hover.aboveDesc')} align="center">
+                <Switch
+                  checked={config.hover.above}
+                  onChange={(e) => updateHoverConfig('above', e.target.checked)}
+                  size="small"
+                />
+              </ConfigPageRow>
+            </>
+          )}
+        </ConfigPageSection>
+
+        <ConfigPageSection
+          title={t('sections.suggest.title')}
+          description={t('sections.suggest.description')}
+        >
+          <ConfigPageRow label={t('suggest.showKeywords')} description={t('suggest.showKeywordsDesc')} align="center">
+            <Switch
+              checked={config.suggest.showKeywords}
+              onChange={(e) => updateSuggestConfig('showKeywords', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('suggest.showSnippets')} description={t('suggest.showSnippetsDesc')} align="center">
+            <Switch
+              checked={config.suggest.showSnippets}
+              onChange={(e) => updateSuggestConfig('showSnippets', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('suggest.preview')} description={t('suggest.previewDesc')} align="center">
+            <Switch
+              checked={config.suggest.preview}
+              onChange={(e) => updateSuggestConfig('preview', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('suggest.showInlineDetails')} description={t('suggest.showInlineDetailsDesc')} align="center">
+            <Switch
+              checked={config.suggest.showInlineDetails}
+              onChange={(e) => updateSuggestConfig('showInlineDetails', e.target.checked)}
+              size="small"
+            />
+          </ConfigPageRow>
+        </ConfigPageSection>
+
+        <ConfigPageSection
+          title={t('sections.inlayHints.title')}
+          description={t('sections.inlayHints.description')}
+        >
+          <ConfigPageRow label={t('inlayHints.enabled')} align="center">
+            <Select
+              options={inlayHintsEnabledOptionsTranslated}
+              value={config.inlayHints.enabled}
+              onChange={(v) => updateInlayHintsConfig('enabled', v as typeof config.inlayHints.enabled)}
+              size="small"
+            />
+          </ConfigPageRow>
+          <ConfigPageRow label={t('inlayHints.fontSize')} align="center">
+            <NumberInput
+              value={config.inlayHints.fontSize}
+              onChange={(v) => updateInlayHintsConfig('fontSize', v)}
+              min={8}
+              max={20}
+              step={1}
+              unit="px"
               size="small"
             />
           </ConfigPageRow>
