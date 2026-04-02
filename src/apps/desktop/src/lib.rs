@@ -141,6 +141,7 @@ pub async fn run() {
                 .level_for("tracing", log::LevelFilter::Off)
                 .level_for("opentelemetry_sdk", log::LevelFilter::Off)
                 .level_for("opentelemetry-otlp", log::LevelFilter::Off)
+                .level_for("notify", log::LevelFilter::Off)
                 .level_for("hyper_util", log::LevelFilter::Info)
                 .level_for("h2", log::LevelFilter::Info)
                 .level_for("portable_pty", log::LevelFilter::Info)
@@ -403,8 +404,10 @@ pub async fn run() {
             get_subagent_configs,
             set_subagent_config,
             list_subagents,
+            get_subagent_detail,
             delete_subagent,
             create_subagent,
+            update_subagent,
             reload_subagents,
             list_agent_tool_names,
             update_subagent_config,
@@ -597,7 +600,7 @@ pub async fn run() {
             create_cron_job,
             update_cron_job,
             delete_cron_job,
-            api::config_api::sync_tool_configs,
+            api::config_api::canonicalize_mode_configs,
             api::terminal_api::terminal_get_shells,
             api::terminal_api::terminal_create,
             api::terminal_api::terminal_get,

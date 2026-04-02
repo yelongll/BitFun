@@ -1,15 +1,17 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Bot,
   Cpu,
+  Pencil,
   Plus,
   Puzzle,
   RefreshCw,
   Search as SearchIcon,
+  Trash2,
   Wrench,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Badge, Button, IconButton, Search } from '@/component-library';
+import { Badge, Button, IconButton, Search, confirmDanger } from '@/component-library';
 import {
   GalleryDetailModal,
   GalleryEmpty,
@@ -34,9 +36,13 @@ import './AgentsView.scss';
 import './AgentsScene.scss';
 import { useGallerySceneAutoRefresh } from '@/app/hooks/useGallerySceneAutoRefresh';
 import { CORE_AGENT_IDS, isAgentInOverviewZone } from './agentVisibility';
+import { SubagentAPI } from '@/infrastructure/api/service-api/SubagentAPI';
+import { useNotification } from '@/shared/notification-system';
 
 const AgentsHomeView: React.FC = () => {
   const { t } = useTranslation('scenes/agents');
+  const notification = useNotification();
+  const [deletingAgent, setDeletingAgent] = useState(false);
   const {
     agentSoloEnabled,
     searchQuery,
@@ -47,6 +53,7 @@ const AgentsHomeView: React.FC = () => {
     setAgentFilterType,
     setAgentSoloEnabled,
     openCreateAgent,
+    openEditAgent,
   } = useAgentsStore();
   const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
   const [toolsEditing, setToolsEditing] = React.useState(false);
@@ -65,9 +72,9 @@ const AgentsHomeView: React.FC = () => {
     counts,
     loadAgents,
     getModeConfig,
-    handleToggleTool,
+    handleSetTools,
     handleResetTools,
-    handleToggleSkill,
+    handleSetSkills,
   } = useAgentsList({
     searchQuery,
     filterLevel: agentFilterLevel,
@@ -128,10 +135,20 @@ const AgentsHomeView: React.FC = () => {
     [getModeConfig, selectedAgent],
   );
   const selectedAgentTools = selectedAgent?.agentKind === 'mode'
-    ? (selectedAgentModeConfig?.available_tools ?? selectedAgent.defaultTools ?? [])
+    ? (selectedAgentModeConfig?.enabled_tools ?? selectedAgent.defaultTools ?? [])
     : (selectedAgent?.defaultTools ?? []);
   const selectedAgentSkills = selectedAgentModeConfig?.available_skills ?? [];
   const selectedAgentSkillItems = availableSkills.filter((skill) => selectedAgentSkills.includes(skill.name));
+  const getDisplayedToolCount = useCallback((agent: AgentWithCapabilities): number => {
+    if (agent.agentKind === 'mode') {
+      return getModeConfig(agent.id)?.enabled_tools?.length
+        ?? agent.defaultTools?.length
+        ?? agent.toolCount
+        ?? 0;
+    }
+    return agent.toolCount ?? agent.defaultTools?.length ?? 0;
+  }, [getModeConfig]);
+  const selectedAgentToolCount = selectedAgent ? getDisplayedToolCount(selectedAgent) : 0;
   const resetEditState = useCallback(() => {
     setToolsEditing(false);
     setSkillsEditing(false);
@@ -150,6 +167,42 @@ const AgentsHomeView: React.FC = () => {
     setSelectedAgentId(null);
     resetEditState();
   }, [resetEditState]);
+
+  const handleDeleteCustomAgent = useCallback(async () => {
+    if (!selectedAgent) return;
+    if (
+      selectedAgent.agentKind !== 'subagent'
+      || (selectedAgent.subagentSource !== 'user' && selectedAgent.subagentSource !== 'project')
+    ) {
+      return;
+    }
+    const id = selectedAgent.id;
+    const name = selectedAgent.name;
+    const ok = await confirmDanger(
+      t('agentsOverview.deleteAgent'),
+      t('agentsOverview.deleteConfirm', { name }),
+    );
+    if (!ok) return;
+    setDeletingAgent(true);
+    try {
+      await SubagentAPI.deleteSubagent(id);
+      notification.success(t('agentsOverview.deleteSuccess', { name }));
+      closeAgentDetails();
+      await loadAgents();
+    } catch (e) {
+      notification.error(
+        `${t('agentsOverview.deleteFailed')}${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setDeletingAgent(false);
+    }
+  }, [selectedAgent, closeAgentDetails, loadAgents, notification, t]);
+
+  const canManageCustomSubagent = Boolean(
+    selectedAgent
+    && selectedAgent.agentKind === 'subagent'
+    && (selectedAgent.subagentSource === 'user' || selectedAgent.subagentSource === 'project'),
+  );
 
   return (
     <GalleryLayout className="bitfun-agents-scene">
@@ -221,6 +274,7 @@ const AgentsHomeView: React.FC = () => {
                   agent={agent}
                   index={index}
                   meta={coreAgentMeta[agent.id] ?? { role: agent.name, accentColor: '#6366f1', accentBg: 'rgba(99,102,241,0.10)' }}
+                  toolCount={getDisplayedToolCount(agent)}
                   skillCount={agent.agentKind === 'mode' ? (getModeConfig(agent.id)?.available_skills?.length ?? 0) : 0}
                   onOpenDetails={openAgentDetails}
                 />
@@ -304,6 +358,7 @@ const AgentsHomeView: React.FC = () => {
                   agent={agent}
                   index={index}
                   soloEnabled={agentSoloEnabled[agent.id] ?? agent.enabled}
+                  toolCount={getDisplayedToolCount(agent)}
                   skillCount={agent.agentKind === 'mode' ? (getModeConfig(agent.id)?.available_skills?.length ?? 0) : 0}
                   onToggleSolo={setAgentSoloEnabled}
                   onOpenDetails={openAgentDetails}
@@ -336,7 +391,7 @@ const AgentsHomeView: React.FC = () => {
         description={selectedAgent?.description}
         meta={selectedAgent ? (
           <>
-            <span>{t('agentCard.meta.tools', { count: selectedAgent.toolCount ?? selectedAgentTools.length })}</span>
+            <span>{t('agentCard.meta.tools', { count: selectedAgentToolCount })}</span>
             {selectedAgent.agentKind === 'mode' ? (
               <span>{t('agentCard.meta.skills', { count: selectedAgentSkills.length })}</span>
             ) : null}
@@ -417,15 +472,7 @@ const AgentsHomeView: React.FC = () => {
                               }
                               setSavingTools(true);
                               try {
-                                await Promise.all(
-                                  availableTools
-                                    .filter((tool) => {
-                                      const wasOn = selectedAgentTools.includes(tool.name);
-                                      const isOn = pendingTools.includes(tool.name);
-                                      return wasOn !== isOn;
-                                    })
-                                    .map((tool) => handleToggleTool(selectedAgent.id, tool.name)),
-                                );
+                                await handleSetTools(selectedAgent.id, pendingTools);
                               } finally {
                                 setSavingTools(false);
                                 setToolsEditing(false);
@@ -532,15 +579,7 @@ const AgentsHomeView: React.FC = () => {
                             }
                             setSavingSkills(true);
                             try {
-                              await Promise.all(
-                                availableSkills
-                                  .filter((skill) => {
-                                    const wasOn = selectedAgentSkills.includes(skill.name);
-                                    const isOn = pendingSkills.includes(skill.name);
-                                    return wasOn !== isOn;
-                                  })
-                                  .map((skill) => handleToggleSkill(selectedAgent.id, skill.name)),
-                              );
+                              await handleSetSkills(selectedAgent.id, pendingSkills);
                             } finally {
                               setSavingSkills(false);
                               setSkillsEditing(false);
@@ -615,6 +654,39 @@ const AgentsHomeView: React.FC = () => {
                     )}
                   </div>
                 )}
+              </div>
+            ) : null}
+
+            {canManageCustomSubagent ? (
+              <div className="agent-card__section">
+                <div className="agent-card__section-head">
+                  <div className="agent-card__section-title">
+                    <span>{t('agentsOverview.customActions')}</span>
+                  </div>
+                </div>
+                <div className="agent-card__section-actions" style={{ gap: 8 }}>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={() => {
+                      const id = selectedAgent?.id;
+                      closeAgentDetails();
+                      if (id) openEditAgent(id);
+                    }}
+                  >
+                    <Pencil size={12} style={{ marginRight: 6 }} />
+                    {t('agentsOverview.editAgent')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    isLoading={deletingAgent}
+                    onClick={() => void handleDeleteCustomAgent()}
+                  >
+                    <Trash2 size={12} style={{ marginRight: 6 }} />
+                    {t('agentsOverview.deleteAgent')}
+                  </Button>
+                </div>
               </div>
             ) : null}
           </>
