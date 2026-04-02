@@ -14,7 +14,7 @@
   },
   "computerUse": {
     "sectionTitle": "Computer use (Claw)",
-    "sectionDescription": "In the BitFun desktop app, the assistant can capture the screen and control the mouse and keyboard; requires a multimodal model for vision.",
+    "sectionDescription": "In the 空灵语言 desktop app, the assistant can capture the screen and control the mouse and keyboard; requires a multimodal model for vision.",
     "enable": "Enable Computer use",
     "enableDesc": "When off, the ComputerUse tool stays disabled even in Claw mode.",
     "accessibility": "Accessibility",
@@ -26,7 +26,7 @@
     "request": "Request",
     "openSettings": "Setting",
     "refreshStatus": "Refresh status",
-    "desktopOnly": "Computer use settings are only available in the BitFun desktop app.",
+    "desktopOnly": "Computer use settings are only available in the 空灵语言 desktop app.",
     "platformNote": "Note"
   },
   "model": {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BitFun Relay Server — stop script.
+# 空灵语言 Relay Server — stop script.
 # Run this script on the target server itself after SSH login.
 
 set -euo pipefail
@@ -9,7 +9,7 @@ CONTAINER_NAME="bitfun-relay"
 
 usage() {
   cat <<'EOF'
-BitFun Relay Server stop script
+空灵语言 Relay Server stop script
 
 Usage:
   bash stop.sh
@@ -53,7 +53,7 @@ for arg in "$@"; do
   esac
 done
 
-echo "=== BitFun Relay Server Stop ==="
+echo "=== 空灵语言 Relay Server Stop ==="
 check_command docker
 check_docker_compose
 

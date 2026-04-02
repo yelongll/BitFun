@@ -14,6 +14,8 @@ import {
   BarChart3,
   LineChart,
   ChevronUp,
+  LogIn,
+  User,
 } from 'lucide-react';
 import { Tooltip, Modal } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
@@ -39,6 +41,8 @@ import { MERMAID_INTERACTIVE_EXAMPLE } from '@/flow_chat/constants/mermaidExampl
 const PersistentFooterActions: React.FC = () => {
   const { t } = useI18n('common');
   const { openScene } = useSceneManager();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState('');
   const activeTabId = useSceneStore((s) => s.activeTabId);
   const showSceneNav = useNavSceneStore((s) => s.showSceneNav);
   const navSceneId = useNavSceneStore((s) => s.navSceneId);
@@ -185,10 +189,51 @@ const PersistentFooterActions: React.FC = () => {
     setShowRemoteConnect(true);
   }, []);
 
+  const handleLogin = useCallback(() => {
+    setIsLoggedIn(true);
+    setUserName('用户');
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setIsLoggedIn(false);
+    setUserName('');
+  }, []);
+
   return (
     <>
       <div className="bitfun-nav-panel__footer">
         <div className="bitfun-nav-panel__footer-left">
+          {/* Login Button */}
+          {isLoggedIn ? (
+            <Tooltip content={`${t('header.loggedInAs')}: ${userName}`} placement="right">
+              <button
+                type="button"
+                className="bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon"
+                aria-label={t('header.logout')}
+                onClick={handleLogout}
+              >
+                <span className="bitfun-nav-panel__footer-btn-icon-swap" aria-hidden="true">
+                  <LogIn size={15} className="bitfun-nav-panel__footer-btn-icon-swap-default" />
+                  <User size={15} className="bitfun-nav-panel__footer-btn-icon-swap-hover" />
+                </span>
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip content={t('header.login')} placement="right">
+              <button
+                type="button"
+                className="bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon"
+                aria-label={t('header.login')}
+                onClick={handleLogin}
+              >
+                <span className="bitfun-nav-panel__footer-btn-icon-swap" aria-hidden="true">
+                  <User size={15} className="bitfun-nav-panel__footer-btn-icon-swap-default" />
+                  <LogIn size={15} className="bitfun-nav-panel__footer-btn-icon-swap-hover" />
+                </span>
+              </button>
+            </Tooltip>
+          )}
+
           <div className="bitfun-nav-panel__footer-more-wrap">
             <Tooltip content={t('nav.moreOptions')} placement="right" followCursor disabled={menuOpen}>
               <button

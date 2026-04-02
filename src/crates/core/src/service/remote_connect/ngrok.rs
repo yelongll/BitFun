@@ -123,7 +123,7 @@ pub async fn start_ngrok_tunnel(local_port: u16) -> Result<NgrokTunnel> {
         anyhow!(
             "ngrok is not installed.\n\
              Please install ngrok and configure your auth token, then retry.\n\
-             No need to start ngrok manually — BitFun will start it automatically.\n\
+             No need to start ngrok manually — 空灵语言 will start it automatically.\n\
              Setup guide: https://dashboard.ngrok.com/get-started/setup"
         )
     })?;
@@ -159,7 +159,7 @@ pub async fn start_ngrok_tunnel(local_port: u16) -> Result<NgrokTunnel> {
                 "Failed to start ngrok process: {e}\n\
                  Please ensure ngrok is installed and your auth token is configured \
                  (run: ngrok config add-authtoken <YOUR_TOKEN>).\n\
-                 No need to start ngrok manually — BitFun will start it automatically."
+                 No need to start ngrok manually — 空灵语言 will start it automatically."
             )
         })?;
 

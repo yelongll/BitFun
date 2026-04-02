@@ -63,7 +63,10 @@
     "switchWorkspace": "切换工作区",
     "recentWorkspaces": "最近工作区",
     "noRecentWorkspaces": "暂无最近工作区",
-    "noWorkspaceOpen": "选择工作区"
+    "noWorkspaceOpen": "选择工作区",
+    "login": "登录",
+    "logout": "登出",
+    "loggedInAs": "已登录"
   },
   "nav": {
     "aria": {

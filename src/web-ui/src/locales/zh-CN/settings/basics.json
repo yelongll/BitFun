@@ -63,7 +63,7 @@
       "customPxPlaceholder": "14",
       "customPxOutOfRange": "请输入 12–20 之间的整数",
       "resetButton": "恢复默认",
-      "previewText": "BitFun 是一个由 AI 驱动的编程环境。The quick brown fox jumps over the lazy dog.",
+      "previewText": "空灵语言 是一个由 AI 驱动的编程环境。The quick brown fox jumps over the lazy dog.",
       "flowChatLabel": "对话区域",
       "flowChatHint": "关闭时对话区域比界面大 1 px，并随界面档位变化。开启后在下方展开面板，从列表中选择基准字号（12–20 px）。",
       "flowChatCustomToggle": "自定义对话字号",
@@ -77,7 +77,7 @@
   "launchAtLogin": {
     "sections": {
       "title": "登录时启动",
-      "hint": "登录本用户后是否自动运行 BitFun"
+      "hint": "登录本用户后是否自动运行 空灵语言"
     },
     "toggleLabel": "开机自动启动",
     "toggleDescription": "登录系统后自动启动 BitFun；具体表现因操作系统而异。",

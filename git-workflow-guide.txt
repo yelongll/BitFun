@@ -59,6 +59,9 @@ git log --oneline -10
 git fetch upstream
 git reset --hard upstream/main
 
+推送你的修改到自己的仓库
+git push origin main
+
 
 配置命令（已完成，仅供参考）
 ============================

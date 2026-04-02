@@ -958,7 +958,7 @@ impl Tool for ComputerUseTool {
             ));
         }
         let host = context.computer_use_host.as_ref().ok_or_else(|| {
-            BitFunError::tool("Computer use is only available in the BitFun desktop app.".to_string())
+            BitFunError::tool("Computer use is only available in the 空灵语言 desktop app.".to_string())
         })?;
 
         let host_ref = host.as_ref();

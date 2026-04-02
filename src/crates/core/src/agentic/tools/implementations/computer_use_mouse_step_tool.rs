@@ -84,7 +84,7 @@ impl Tool for ComputerUseMouseStepTool {
             ));
         }
         let host = context.computer_use_host.as_ref().ok_or_else(|| {
-            BitFunError::tool("Computer use is only available in the BitFun desktop app.".to_string())
+            BitFunError::tool("Computer use is only available in the 空灵语言 desktop app.".to_string())
         })?;
 
         computer_use_execute_mouse_step(host.as_ref(), input).await
