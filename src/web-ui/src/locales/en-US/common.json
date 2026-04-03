@@ -110,6 +110,7 @@
       "groupAssistants": "Assistants",
       "groupSessions": "All Sessions",
       "empty": "No results found",
+      "sessionSearchHintDefault": "Type a keyword to search sessions in open workspaces",
       "sessionWorkspaceHint": "in {{workspace}}"
     },
     "displayModes": {

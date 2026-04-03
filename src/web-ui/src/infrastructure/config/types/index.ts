@@ -60,6 +60,9 @@ export interface AIExperienceConfig {
 
   /** Whether to enable visual mode (use Mermaid diagrams to illustrate complex logic and flows). */
   enable_visual_mode: boolean;
+
+  /** Whether to show the pixel Agent companion in the collapsed chat input. */
+  enable_agent_companion: boolean;
 }
 
 
@@ -185,7 +188,7 @@ export interface StoredModeConfigItem {
   added_tools: string[];
   removed_tools: string[];
   enabled: boolean;
-  available_skills?: string[];
+  disabled_user_skills?: string[];
 }
 
 export interface ModeConfigItem {
@@ -193,7 +196,7 @@ export interface ModeConfigItem {
   enabled_tools: string[];  
   enabled: boolean;  
   default_tools: string[];  
-  available_skills?: string[];  
+  disabled_user_skills?: string[];
 }
 
 
@@ -207,11 +210,20 @@ export type SkillLevel = 'user' | 'project';
 
 
 export interface SkillInfo {
+  key: string;
   name: string;         
   description: string;  
   path: string;         
   level: SkillLevel;
-  enabled: boolean;
+  sourceSlot: string;
+  dirName: string;
+}
+
+export interface ModeSkillInfo extends SkillInfo {
+  /** True when this skill key is explicitly disabled in the current mode config. */
+  disabledByMode: boolean;
+  /** True when this skill is the one actually selected at runtime after disable + priority resolution. */
+  selectedForRuntime: boolean;
 }
 
 export interface SkillMarketItem {

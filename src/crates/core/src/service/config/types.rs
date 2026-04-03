@@ -104,6 +104,8 @@ pub struct AIExperienceConfig {
     pub enable_welcome_panel_ai_analysis: bool,
     /// Whether to enable visual mode.
     pub enable_visual_mode: bool,
+    /// Whether to show the pixel Agent companion in the collapsed chat input.
+    pub enable_agent_companion: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -505,10 +507,9 @@ pub struct ModeConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    /// Skill overrides for this mode.
-    /// `None` means follow the global skill enablement state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub available_skills: Option<Vec<String>>,
+    /// User-level skills disabled for this mode.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_user_skills: Vec<String>,
 }
 
 /// API view of a mode configuration.
@@ -519,8 +520,8 @@ pub struct ModeConfigView {
     pub enabled_tools: Vec<String>,
     pub default_tools: Vec<String>,
     pub enabled: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub available_skills: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_user_skills: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -548,7 +549,7 @@ impl Default for ModeConfig {
             added_tools: Vec::new(),
             removed_tools: Vec::new(),
             enabled: true,
-            available_skills: None,
+            disabled_user_skills: Vec::new(),
         }
     }
 }
@@ -560,7 +561,7 @@ impl Default for ModeConfigView {
             enabled_tools: Vec::new(),
             default_tools: Vec::new(),
             enabled: true,
-            available_skills: None,
+            disabled_user_skills: Vec::new(),
         }
     }
 }
@@ -1026,6 +1027,7 @@ impl Default for AIExperienceConfig {
             enable_session_title_generation: true,
             enable_welcome_panel_ai_analysis: false,
             enable_visual_mode: false,
+            enable_agent_companion: false,
         }
     }
 }
