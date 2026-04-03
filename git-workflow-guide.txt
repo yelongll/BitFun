@@ -63,6 +63,7 @@ git reset --hard upstream/main
 git push origin main
 
 
+拉取一下上游仓库合并推送
 配置命令（已完成，仅供参考）
 ============================
 git remote rename BitFun upstream
