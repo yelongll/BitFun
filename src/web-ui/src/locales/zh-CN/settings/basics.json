@@ -80,7 +80,7 @@
       "hint": "登录本用户后是否自动运行 空灵语言"
     },
     "toggleLabel": "开机自动启动",
-    "toggleDescription": "登录系统后自动启动 BitFun；具体表现因操作系统而异。",
+    "toggleDescription": "登录系统后自动启动 空灵语言；具体表现因操作系统而异。",
     "messages": {
       "loading": "加载中…",
       "loadFailed": "无法读取开机启动设置",
