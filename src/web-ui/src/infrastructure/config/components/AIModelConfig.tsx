@@ -29,7 +29,6 @@ interface SelectedModelDraft {
   key: string;
   configId?: string;
   modelName: string;
-  displayName?: string;
   category: ModelCategory;
   contextWindow: number;
   maxTokens: number;
@@ -57,7 +56,6 @@ function createModelDraft(
     key: overrides?.key ?? overrides?.configId ?? baseConfig?.id ?? trimmedModelName,
     configId: overrides?.configId ?? baseConfig?.id,
     modelName: trimmedModelName,
-    displayName: overrides?.displayName ?? baseConfig?.display_name,
     category: overrides?.category ?? baseConfig?.category ?? 'general_chat',
     contextWindow: overrides?.contextWindow ?? baseConfig?.context_window ?? 128000,
     maxTokens: overrides?.maxTokens ?? baseConfig?.max_tokens ?? 8192,
@@ -833,7 +831,6 @@ const AIModelConfig: React.FC = () => {
           ),
           api_key: editingConfig.api_key || '',
           model_name: draft.modelName,
-          display_name: draft.displayName || undefined,
           provider: editingConfig.provider || 'openai',
           enabled: editingConfig.enabled ?? true,
           description: editingConfig.description,
@@ -1404,78 +1401,8 @@ const AIModelConfig: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="bitfun-ai-model-config__selected-model-grid">
-                <div className="bitfun-ai-model-config__selected-model-field">
-                  <span>{t('form.displayName')}</span>
-                  <Input
-                    value={draft.displayName || ''}
-                    onChange={(e) => updateModelDraft(draft.modelName, { displayName: e.target.value || undefined })}
-                    placeholder={draft.modelName}
-                    inputSize="small"
-                  />
-                </div>
-                <div className="bitfun-ai-model-config__selected-model-field">
-                  <span>{t('category.label')}</span>
-                  <Select
-                    value={draft.category}
-                    onChange={(value) => updateModelDraft(draft.modelName, { category: value as ModelCategory })}
-                    options={categoryOptions}
-                    size="small"
-                    className="bitfun-ai-model-config__selected-model-category-select"
-                    renderValue={(option) => {
-                      if (!option || Array.isArray(option)) {
-                        return null;
-                      }
-
-                      const compactLabel = categoryCompactLabels[option.value as ModelCategory] ?? option.label;
-
-                      return (
-                        <span className="select__value">
-                          <span className="select__value-label">{compactLabel}</span>
-                        </span>
-                      );
-                    }}
-                  />
-                </div>
-                <div className="bitfun-ai-model-config__selected-model-field">
-                  <span>{t('form.contextWindow')}</span>
-                  <NumberInput
-                    value={draft.contextWindow}
-                    onChange={(value) => updateModelDraft(draft.modelName, { contextWindow: value })}
-                    min={1000}
-                    max={2000000}
-                    step={1000}
-                    size="small"
-                    disableWheel
-                  />
-                </div>
-                <div className="bitfun-ai-model-config__selected-model-field">
-                  <span>{t('form.maxTokens')}</span>
-                  <NumberInput
-                    value={draft.maxTokens}
-                    onChange={(value) => updateModelDraft(draft.modelName, { maxTokens: value })}
-                    min={1000}
-                    max={1000000}
-                    step={1000}
-                    size="small"
-                    disableWheel
-                  />
-                </div>
-                <div className="bitfun-ai-model-config__selected-model-field">
-                  <span>{t('thinking.enable')}</span>
-                  <Select
-                    value={draft.enableThinking ? 'enabled' : 'disabled'}
-                    onChange={(value) => updateModelDraft(draft.modelName, { enableThinking: value === 'enabled' })}
-                    options={thinkingModeOptions}
-                    size="small"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    };
+            );
+          })}
         </div>
       );
     };
