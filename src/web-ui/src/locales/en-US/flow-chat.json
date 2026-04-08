@@ -333,7 +333,12 @@
     "clickToViewDiff": "Click to view diff",
     "review": {
       "displayMessage": "Review modified files:\n{{files}}",
-      "prompt": "Please review the following files modified in this session:\n\n{{files}}"
+      "displayMessageFiltered": "Review filtered files:\n{{files}}\n\nSkipped {{skipped}} excluded files.",
+      "filteredNotice": "Review will analyze {{included}} files and skip {{skipped}} excluded files such as lock, generated, or binary assets.",
+      "noEligibleFiles": "No reviewable files remain after excluded files were filtered out.",
+      "prompt": "Please review the following files modified in this session:\n\n{{files}}",
+      "promptFiltered": "Please review the following modified files in this session:\n\n{{files}}\n\nDo not review the {{skipped}} skipped files because they matched the excluded lock, generated, or binary file rules.",
+      "threadTitle": "Code review"
     }
   },
   "sessionFileModificationsBar": {
@@ -456,6 +461,20 @@
       "init": "Init",
       "blame": "Blame",
       "cherryPick": "Cherry-pick"
+    },
+    "initMiniApp": {
+      "title": "Mini App",
+      "operationInit": "Init",
+      "skeletonReady": "Ready",
+      "creatingShort": "…",
+      "untitled": "(unnamed)",
+      "failed": "Failed",
+      "createFailed": "Could not create Mini App",
+      "openInMiniApp": "Open in Mini App",
+      "openInMiniAppTitle": "Open in Mini App",
+      "labelAppId": "app_id",
+      "labelPath": "path",
+      "nameLabel": "App: {{name}}"
     },
     "terminal": {
       "executeCommand": "Execute command:",
