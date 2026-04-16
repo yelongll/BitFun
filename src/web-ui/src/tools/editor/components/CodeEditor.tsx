@@ -1311,6 +1311,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     });
   }, []);
 
+  const fetchFileMetadata = useCallback(async () => {
+    const { workspaceAPI } = await import('@/infrastructure/api');
+    return workspaceAPI.getFileMetadata(filePath);
+  }, [filePath]);
+
   const handleEncodingConfirm = useCallback(async (newEncoding: string) => {
     setEncoding(newEncoding);
     if (!filePath) return;
@@ -1324,8 +1329,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       hasChangesRef.current = false;
       applyExternalContentToModel(content);
       try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const fileInfo: any = await invoke('get_file_metadata', { request: { path: filePath } });
+        const fileInfo = await fetchFileMetadata();
         if (isFileMissingFromMetadata(fileInfo)) {
           reportFileMissingFromDisk(true);
         } else {
@@ -1353,7 +1357,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       }
       log.warn('Failed to reload file with new encoding', err);
     }
-  }, [applyExternalContentToModel, filePath, reportFileMissingFromDisk, updateLargeFileMode]);
+  }, [applyExternalContentToModel, fetchFileMetadata, filePath, reportFileMissingFromDisk, updateLargeFileMode]);
 
   const handleLanguageConfirm = useCallback((languageId: string) => {
     userLanguageOverrideRef.current = true;
@@ -1375,10 +1379,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       setLoading(false);
       void (async () => {
         try {
-          const { invoke } = await import('@tauri-apps/api/core');
-          const fileInfo: any = await invoke('get_file_metadata', {
-            request: { path: filePath }
-          });
+          const fileInfo = await fetchFileMetadata();
           if (isFileMissingFromMetadata(fileInfo)) {
             reportFileMissingFromDisk(true);
             return;
@@ -1404,15 +1405,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
     try {
       const { workspaceAPI } = await import('@/infrastructure/api');
-      const { invoke } = await import('@tauri-apps/api/core');
 
       const fileContent = await workspaceAPI.readFileContent(filePath);
       reportFileMissingFromDisk(false);
       let fileSizeBytes: number | undefined;
       try {
-        const fileInfoAfter: any = await invoke('get_file_metadata', {
-          request: { path: filePath }
-        });
+        const fileInfoAfter = await fetchFileMetadata();
         if (isFileMissingFromMetadata(fileInfoAfter)) {
           reportFileMissingFromDisk(true);
         } else {
@@ -1475,7 +1473,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         isLoadingContentRef.current = false;
       });
     }
-  }, [applyExternalContentToModel, filePath, reportFileMissingFromDisk, t, updateLargeFileMode]);
+  }, [applyExternalContentToModel, fetchFileMetadata, filePath, reportFileMissingFromDisk, t, updateLargeFileMode]);
 
   // Save file content
   const saveFileContent = useCallback(async () => {
@@ -1495,11 +1493,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
     try {
       const { workspaceAPI } = await import('@/infrastructure/api');
-      const { invoke } = await import('@tauri-apps/api/core');
 
-      const fileInfoPre: any = await invoke('get_file_metadata', {
-        request: { path: filePath }
-      });
+      const fileInfoPre = await fetchFileMetadata();
       if (isFileMissingFromMetadata(fileInfoPre)) {
         reportFileMissingFromDisk(true);
       } else {
@@ -1519,9 +1514,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         });
         if (!overwrite) {
           const diskContent = await workspaceAPI.readFileContent(filePath);
-          const fileInfoAfter: any = await invoke('get_file_metadata', {
-            request: { path: filePath }
-          });
+          const fileInfoAfter = await fetchFileMetadata();
           const vAfter = diskVersionFromMetadata(fileInfoAfter);
           applyDiskSnapshotToEditor(diskContent, vAfter);
           return;
@@ -1543,9 +1536,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       onSave?.(currentContent);
 
       try {
-        const fileInfo: any = await invoke('get_file_metadata', {
-          request: { path: filePath }
-        });
+        const fileInfo = await fetchFileMetadata();
         if (!isFileMissingFromMetadata(fileInfo)) {
           reportFileMissingFromDisk(false);
           const v = diskVersionFromMetadata(fileInfo);
@@ -1565,7 +1556,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [filePath, workspacePath, onSave, reportFileMissingFromDisk, t, applyDiskSnapshotToEditor]);
+  }, [applyDiskSnapshotToEditor, fetchFileMetadata, filePath, onSave, reportFileMissingFromDisk, t, workspacePath]);
   
   useEffect(() => {
     saveFileContentRef.current = saveFileContent;
@@ -1629,9 +1620,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       }
 
       const { invoke } = await import('@tauri-apps/api/core');
-      const fileInfo: any = await invoke('get_file_metadata', {
-        request: { path: filePath }
-      });
+      const fileInfo = await fetchFileMetadata();
       if (isFileMissingFromMetadata(fileInfo)) {
         outcome = 'missing-on-disk';
         reportFileMissingFromDisk(true);
@@ -1757,7 +1746,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       }
       isCheckingFileRef.current = false;
     }
-  }, [applyDiskSnapshotToEditor, filePath, isActiveTab, reportFileMissingFromDisk, t]);
+  }, [applyDiskSnapshotToEditor, fetchFileMetadata, filePath, isActiveTab, reportFileMissingFromDisk, t]);
 
   // Initial file load - only run once when filePath changes
   const loadFileContentCalledRef = useRef(false);
@@ -1991,9 +1980,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             const editorHash = await editorSyncContentSha256Hex(editorMid);
             if (editorHash === diskHash) {
               try {
-                const fileInfo: any = await invoke('get_file_metadata', {
-                  request: { path: filePath },
-                });
+                const fileInfo = await fetchFileMetadata();
                 const v = diskVersionFromMetadata(fileInfo);
                 if (v) {
                   diskVersionRef.current = v;
@@ -2025,9 +2012,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           diskContentMatchesEditorForExternalSync(diskContent, editorBuffer)
         ) {
           try {
-            const fileInfo: any = await invoke('get_file_metadata', {
-              request: { path: filePath },
-            });
+            const fileInfo = await fetchFileMetadata();
             const v = diskVersionFromMetadata(fileInfo);
             if (v) {
               diskVersionRef.current = v;
@@ -2049,9 +2034,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           });
           if (!shouldReload) {
             try {
-              const fileInfo: any = await invoke('get_file_metadata', {
-                request: { path: filePath }
-              });
+              const fileInfo = await fetchFileMetadata();
               const v = diskVersionFromMetadata(fileInfo);
               if (v) {
                 diskVersionRef.current = v;
@@ -2063,9 +2046,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           }
         }
 
-        const fileInfo: any = await invoke('get_file_metadata', {
-          request: { path: filePath }
-        });
+        const fileInfo = await fetchFileMetadata();
         const ver = diskVersionFromMetadata(fileInfo);
         const currentPosition = editor?.getPosition() ?? null;
         applyDiskSnapshotToEditor(diskContent, ver, { restoreCursor: currentPosition });
@@ -2085,7 +2066,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [applyDiskSnapshotToEditor, monacoReady, filePath, t, workspacePath]);
+  }, [applyDiskSnapshotToEditor, fetchFileMetadata, monacoReady, filePath, t, workspacePath]);
 
   useEffect(() => {
     userLanguageOverrideRef.current = false;

@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
+import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { ChatProvider, useAIInitialization } from '../infrastructure';
 import { ViewModeProvider } from '../infrastructure/contexts/ViewModeProvider';
 import { SSHRemoteProvider } from '../features/ssh-remote';
@@ -6,10 +7,12 @@ import AppLayout from './layout/AppLayout';
 import { useCurrentModelConfig } from '../hooks/useModelConfigs';
 import { ContextMenuRenderer } from '../shared/context-menu-system/components/ContextMenuRenderer';
 import { NotificationContainer, NotificationCenter } from '../shared/notification-system';
+import { AnnouncementProvider } from '../shared/announcement-system';
 import { ConfirmDialogRenderer } from '../component-library';
 import { createLogger } from '@/shared/utils/logger';
 import { useWorkspaceContext } from '../infrastructure/contexts/WorkspaceContext';
 import SplashScreen from './components/SplashScreen/SplashScreen';
+import { useGlobalSceneShortcuts } from './hooks/useGlobalSceneShortcuts';
 
 // Toolbar Mode
 import { ToolbarModeProvider } from '../flow_chat';
@@ -136,9 +139,21 @@ function App() {
         log.error('Failed to initialize MCP servers', error);
       }
     };
-    
+
+    // Initialize self-control event listener
+    const initSelfControl = async () => {
+      try {
+        const { startSelfControlEventListener } = await import('../infrastructure/self-control');
+        startSelfControlEventListener();
+        log.debug('Self-control event listener initialized');
+      } catch (error) {
+        log.error('Failed to initialize self-control event listener', error);
+      }
+    };
+
     initIdeControl();
     initMCPServers();
+    initSelfControl();
     
   }, []);
 
@@ -159,21 +174,32 @@ function App() {
     }
   }, [aiInitialized, aiInitializing, aiError, currentConfig]);
 
-  // Keyboard shortcuts
+  // Block browser-native Ctrl+F (find bar) and Ctrl+R (hard reload).
+  // On macOS the equivalent modifiers are Cmd+F / Cmd+R.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape closes modal
-      if (e.key === 'Escape') {
-        window.dispatchEvent(new CustomEvent('closePreview'));
+      const primary = e.ctrlKey || e.metaKey;
+      if (!primary) return;
+      const key = e.key.toLowerCase();
+      if (key === 'f' || key === 'r') {
+        e.preventDefault();
+        e.stopPropagation();
       }
     };
-
-    window.addEventListener('keydown', handleKeyDown);
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, []);
+
+  // Escape closes preview overlay (registered via ShortcutManager)
+  useShortcut(
+    'app.closePreview',
+    { key: 'Escape', scope: 'app', allowInInput: true },
+    () => window.dispatchEvent(new CustomEvent('closePreview')),
+    { priority: 1, description: 'keyboard.shortcuts.app.closePreview' }
+  );
+
+  // Top SceneBar: Mod+Alt+1..9 / Mod+Alt+PageUp/PageDown
+  useGlobalSceneShortcuts();
 
   // Unified layout via a single AppLayout
   return (
@@ -193,6 +219,9 @@ function App() {
 
             {/* Confirm dialog */}
             <ConfirmDialogRenderer />
+
+            {/* Announcement / feature-demo / tips system */}
+            <AnnouncementProvider />
 
             {/* Startup splash — sits above everything, exits once workspace is ready */}
             {splashVisible && (

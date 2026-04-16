@@ -27,7 +27,7 @@
     "noPresetModels": "No models available. Fetch the model list or enter a model name manually",
     "backToSelection": "Back to provider selection",
     "selectModel": "Select model",
-    "multiSelectHint": "Supports multi-select. After selection, configure context window, max output tokens, and thinking per model.",
+    "multiSelectHint": "Supports multi-select. After selection, configure context window, max output tokens, and reasoning per model.",
     "searchOrInputModel": "Search or enter model name...",
     "inputModelName": "Enter model name...",
     "useCustomModel": "Press Enter to use",
@@ -187,17 +187,23 @@
   },
   "thinking": {
     "enable": "Enable Thinking",
+    "mode": "Reasoning Mode",
     "enableHint": "Requires model to support thinking mode",
     "summaryOn": "thinking on",
     "summaryOff": "thinking off",
+    "summaryDefault": "API default",
+    "summaryEnabled": "explicit enable",
+    "summaryDisabled": "explicit disable",
+    "summaryAdaptive": "adaptive",
+    "budgetTokens": "Claude Thinking Budget",
+    "optionDefault": "API Default",
     "optionEnabled": "Enabled",
     "optionDisabled": "Disabled",
-    "preserve": "Preserve Historical Thinking",
-    "preserveHint": "When enabled, preserves thinking content from past conversations"
+    "optionAdaptive": "Adaptive"
   },
   "reasoningEffort": {
     "label": "Reasoning Effort",
-    "hint": "Controls model reasoning depth, only for Responses API (e.g. GPT-5)",
+    "hint": "Controls provider-specific reasoning depth for Responses API and supported Claude adaptive reasoning models",
     "placeholder": "Use API default"
   },
   "details": {
@@ -289,8 +295,8 @@
       "label": "Custom Headers",
       "hint": "Add or modify HTTP request headers",
       "modeLabel": "Apply Mode",
-      "modeReplace": "Replace All",
-      "modeMerge": "Merge Override",
+      "modeReplace": "Replace",
+      "modeMerge": "Merge",
       "modeReplaceHint": "Custom headers will completely replace default headers (you need to add Content-Type, Authorization, etc.)",
       "modeMergeHint": "Apply default headers first, then apply custom headers (can override existing values, add new values)",
       "addHeader": "Add Field",
@@ -300,7 +306,14 @@
     "customRequestBody": {
       "label": "Custom Request Body",
       "hint": "Enter request body fields in JSON format to override default request parameters",
-      "placeholder": "{\n  \"temperature\": 0.8,\n  \"top_p\": 0.9\n}",
+      "modeMerge": "Merge",
+      "modeTrim": "Trim",
+      "modeMergeHint": "Merge custom fields into the default request body and allow overriding existing fields.",
+      "trimHintOpenAI": "Keep only model, messages, max_tokens, and runtime-critical stream / tool fields before applying the custom request body.",
+      "trimHintResponses": "Keep only model, input, instructions, max_output_tokens, and runtime-critical stream / tool fields before applying the custom request body.",
+      "trimHintAnthropic": "Keep only model, messages, system, max_tokens, and runtime-critical stream / tool fields before applying the custom request body.",
+      "trimHintGemini": "Keep only contents, systemInstruction, generationConfig.maxOutputTokens, and tools / toolConfig before applying the custom request body. Gemini model selection comes from the request URL.",
+      "placeholder": "Example:\n{\n  \"temperature\": 0.8,\n  \"top_p\": 0.9\n}",
       "invalidJson": "Invalid JSON format, please check syntax",
       "validJson": "JSON format is valid",
       "mergeHint": "Custom fields will override corresponding fields in the default request body"

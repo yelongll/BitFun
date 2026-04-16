@@ -7,8 +7,8 @@ use super::computer_use_input::{
 use super::computer_use_locate::execute_computer_use_locate;
 use crate::agentic::tools::computer_use_capability::computer_use_desktop_available;
 use crate::agentic::tools::computer_use_host::{
-    ComputerScreenshot, ComputerUseHost, ComputerUseNavigateQuadrant, ComputerUseScreenshotRefinement,
-    OcrRegionNative, ScreenshotCropCenter, UiElementLocateQuery,
+    ComputerScreenshot, ComputerUseHost, ComputerUseNavigateQuadrant,
+    ComputerUseScreenshotRefinement, OcrRegionNative, ScreenshotCropCenter, UiElementLocateQuery,
     COMPUTER_USE_POINT_CROP_HALF_MAX, COMPUTER_USE_POINT_CROP_HALF_MIN,
     COMPUTER_USE_QUADRANT_CLICK_READY_MAX_LONG_EDGE, COMPUTER_USE_QUADRANT_EDGE_EXPAND_PX,
 };
@@ -61,10 +61,7 @@ pub(crate) async fn computer_use_augment_result_json(
                 "input_coordinates": input_coordinates,
             }),
         );
-        map.insert(
-            "interaction_state".to_string(),
-            json!(interaction),
-        );
+        map.insert("interaction_state".to_string(), json!(interaction));
 
         // Add loop detection warning if a loop is detected
         if loop_result.is_loop {
@@ -125,8 +122,8 @@ The **primary model cannot consume images** in tool results — **do not** use *
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["click_element", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait"],
-                    "description": "The action to perform. **Primary model is text-only — no `screenshot` or `click_label`.** **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands first. 2) Prefer `key_chord` for shortcuts/navigation. 3) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, use `move_to_text_match_index` when multiple hits listed) → `mouse_move` (**`use_screen_coordinates`: true** with globals) + `click`. Never guess coordinates."
+                    "enum": ["click_element", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait", "open_app", "run_apple_script"],
+                    "description": "The action to perform. **Primary model is text-only — no `screenshot` or `click_label`.** **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands first. 2) **`open_app`** to launch apps. **`run_apple_script`** for AppleScript (macOS). 3) Prefer `key_chord` for shortcuts/navigation. 4) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, use `move_to_text_match_index` when multiple hits listed) → `mouse_move` (**`use_screen_coordinates`: true** with globals) + `click`. Never guess coordinates."
                 },
                 "x": { "type": "integer", "description": "For `mouse_move` and `drag`: X in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
                 "y": { "type": "integer", "description": "For `mouse_move` and `drag`: Y in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
@@ -159,7 +156,11 @@ The **primary model cannot consume images** in tool results — **do not** use *
                 "role_substring": { "type": "string", "description": "For `locate`, `click_element`: case-insensitive substring on AXRole." },
                 "identifier_contains": { "type": "string", "description": "For `locate`, `click_element`: case-insensitive substring on AXIdentifier." },
                 "max_depth": { "type": "integer", "minimum": 1, "maximum": 200, "description": "For `locate`, `click_element`: max BFS depth (default 48)." },
-                "filter_combine": { "type": "string", "enum": ["all", "any"], "description": "For `locate`, `click_element`: `all` (default, AND) or `any` (OR) for filter combination." }
+                "filter_combine": { "type": "string", "enum": ["all", "any"], "description": "For `locate`, `click_element`: `all` (default, AND) or `any` (OR) for filter combination." },
+                "app_name": { "type": "string", "description": "For `open_app`: the application name to launch." },
+                "script": { "type": "string", "description": "For `run_apple_script`: the AppleScript code to execute. macOS only." },
+                "scroll_x": { "type": "integer", "description": "For `scroll`: optional global X coordinate to scroll at. Use with `scroll_y`." },
+                "scroll_y": { "type": "integer", "description": "For `scroll`: optional global Y coordinate to scroll at. Use with `scroll_x`." }
             },
             "required": ["action"],
             "additionalProperties": false
@@ -247,7 +248,11 @@ The **primary model cannot consume images** in tool results — **do not** use *
             matches.len(),
             take
         );
-        Ok(vec![ToolResult::ok_with_images(body, Some(hint), attachments)])
+        Ok(vec![ToolResult::ok_with_images(
+            body,
+            Some(hint),
+            attachments,
+        )])
     }
 
     /// Same as [`Self::move_to_text_disambiguation_response`] but **no image attachments** (primary model is text-only).
@@ -315,10 +320,8 @@ The **primary model cannot consume images** in tool results — **do not** use *
     }
 
     fn primary_api_format(ctx: &ToolUseContext) -> String {
-        ctx.options
-            .as_ref()
-            .and_then(|o| o.custom_data.as_ref())
-            .and_then(|m| m.get("primary_model_provider"))
+        ctx.custom_data
+            .get("primary_model_provider")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_lowercase()
@@ -517,6 +520,7 @@ The **primary model cannot consume images** in tool results — **do not** use *
             "implicit_confirmation_crop_applied": shot.implicit_confirmation_crop_applied,
             "debug_screenshot_path": debug_rel,
             "som_label_note": som_note,
+            "ui_tree_text": shot.ui_tree_text,
         });
         let shortcut_policy = format!(
             "**Verify step:** after **`click`**, **`key_chord`**, **`type_text`**, **`scroll`**, or **`drag`**, check **`interaction_state.recommend_screenshot_to_verify_last_action`** — when true, call **`screenshot`** next to confirm UI state (Cowork-style). \
@@ -583,19 +587,22 @@ The **primary model cannot consume images** in tool results — **do not** use *
                 let som_labels = shot
                     .som_labels
                     .iter()
-                    .map(|e| json!({
-                        "label": e.label,
-                        "role": e.role,
-                        "title": e.title,
-                        "identifier": e.identifier,
-                    }))
+                    .map(|e| {
+                        json!({
+                            "label": e.label,
+                            "role": e.role,
+                            "title": e.title,
+                            "identifier": e.identifier,
+                        })
+                    })
                     .collect::<Vec<_>>();
                 obj.insert("som_labels".to_string(), Value::Array(som_labels));
                 obj.insert(
                     "recommended_next_for_click_targeting".to_string(),
                     Value::String("click_label".to_string()),
                 );
-            } else if shot.screenshot_crop_center.is_none() && !shot.quadrant_navigation_click_ready {
+            } else if shot.screenshot_crop_center.is_none() && !shot.quadrant_navigation_click_ready
+            {
                 if Self::shot_covers_full_display(shot) {
                     obj.insert(
                         "recommended_next_for_click_targeting".to_string(),
@@ -696,7 +703,6 @@ The **primary model cannot consume images** in tool results — **do not** use *
             }
         }
     }
-
 }
 
 /// JSON for `snapshot_coordinate_basis` in mouse tool results (last screenshot refinement).
@@ -707,10 +713,7 @@ fn computer_use_snapshot_coordinate_basis(
     match last_ref {
         None => serde_json::Value::Null,
         Some(ComputerUseScreenshotRefinement::FullDisplay) => json!("full_display"),
-        Some(ComputerUseScreenshotRefinement::RegionAroundPoint {
-            center_x,
-            center_y,
-        }) => {
+        Some(ComputerUseScreenshotRefinement::RegionAroundPoint { center_x, center_y }) => {
             json!({
                 "region_crop_center_full_display_native": { "x": center_x, "y": center_y }
             })
@@ -873,7 +876,10 @@ pub(crate) async fn computer_use_execute_mouse_click_tool(
                 Some(input_coords),
             )
             .await;
-            let summary = format!("{} {} click at current pointer (does not move).", button, click_label);
+            let summary = format!(
+                "{} {} click at current pointer (does not move).",
+                button, click_label
+            );
             Ok(vec![ToolResult::ok(body, Some(summary))])
         }
         "wheel" => {
@@ -915,18 +921,35 @@ pub(crate) async fn computer_use_execute_mouse_click_tool(
 /// Helper: build `UiElementLocateQuery` from tool input JSON.
 fn parse_locate_query(input: &Value) -> UiElementLocateQuery {
     UiElementLocateQuery {
-        title_contains: input.get("title_contains").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        role_substring: input.get("role_substring").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        identifier_contains: input.get("identifier_contains").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        max_depth: input.get("max_depth").and_then(|v| v.as_u64()).map(|v| v as u32),
-        filter_combine: input.get("filter_combine").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        title_contains: input
+            .get("title_contains")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        role_substring: input
+            .get("role_substring")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        identifier_contains: input
+            .get("identifier_contains")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        max_depth: input
+            .get("max_depth")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32),
+        filter_combine: input
+            .get("filter_combine")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
     }
 }
 
 fn parse_ocr_region_native(
     input: &Value,
 ) -> BitFunResult<Option<crate::agentic::tools::computer_use_host::OcrRegionNative>> {
-    let v = input.get("ocr_region_native").or_else(|| input.get("ocr_region"));
+    let v = input
+        .get("ocr_region_native")
+        .or_else(|| input.get("ocr_region"));
     let Some(val) = v else {
         return Ok(None);
     };
@@ -939,28 +962,18 @@ fn parse_ocr_region_native(
                 .to_string(),
         )
     })?;
-    let x0 = o
-        .get("x0")
-        .and_then(|x| x.as_i64())
-        .ok_or_else(|| BitFunError::tool("ocr_region_native.x0 (integer) is required.".to_string()))?
-        as i32;
-    let y0 = o
-        .get("y0")
-        .and_then(|x| x.as_i64())
-        .ok_or_else(|| BitFunError::tool("ocr_region_native.y0 (integer) is required.".to_string()))?
-        as i32;
-    let width = o
-        .get("width")
-        .and_then(|x| x.as_u64())
-        .ok_or_else(|| {
-            BitFunError::tool("ocr_region_native.width (positive integer) is required.".to_string())
-        })? as u32;
-    let height = o
-        .get("height")
-        .and_then(|x| x.as_u64())
-        .ok_or_else(|| {
-            BitFunError::tool("ocr_region_native.height (positive integer) is required.".to_string())
-        })? as u32;
+    let x0 = o.get("x0").and_then(|x| x.as_i64()).ok_or_else(|| {
+        BitFunError::tool("ocr_region_native.x0 (integer) is required.".to_string())
+    })? as i32;
+    let y0 = o.get("y0").and_then(|x| x.as_i64()).ok_or_else(|| {
+        BitFunError::tool("ocr_region_native.y0 (integer) is required.".to_string())
+    })? as i32;
+    let width = o.get("width").and_then(|x| x.as_u64()).ok_or_else(|| {
+        BitFunError::tool("ocr_region_native.width (positive integer) is required.".to_string())
+    })? as u32;
+    let height = o.get("height").and_then(|x| x.as_u64()).ok_or_else(|| {
+        BitFunError::tool("ocr_region_native.height (positive integer) is required.".to_string())
+    })? as u32;
     if width == 0 || height == 0 {
         return Err(BitFunError::tool(
             "ocr_region_native width and height must be greater than zero.".to_string(),
@@ -1026,8 +1039,8 @@ impl Tool for ComputerUseTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["screenshot", "click_element", "click_label", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait"],
-                    "description": "The action to perform. **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands (most efficient). 2) Prefer **`key_chord`** for shortcuts/navigation keys over mouse. 3) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, move pointer only) → `click_label` (SoM) → `mouse_move` (globals only, **`use_screen_coordinates`: true**) + `click` (last resort). **`screenshot`** is for observation/confirmation ONLY — never derive mouse coordinates from screenshots. `click` = press at **current pointer only** (no x/y params). `scroll`, `type_text`, `drag`, `pointer_move_rel`, `wait`, `locate` = standard actions."
+                    "enum": ["screenshot", "click_element", "click_label", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait", "open_app", "run_apple_script"],
+                    "description": "The action to perform. **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands (most efficient). 2) **`open_app`** to launch apps by name. **`run_apple_script`** to run AppleScript (macOS). 3) Prefer **`key_chord`** for shortcuts/navigation keys over mouse. 4) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, move pointer only) → `click_label` (SoM) → `mouse_move` (globals only, **`use_screen_coordinates`: true**) + `click` (last resort). **`screenshot`** is for observation/confirmation ONLY — never derive mouse coordinates from screenshots. `click` = press at **current pointer only** (no x/y params). `scroll` supports optional position (`scroll_x`/`scroll_y`). `type_text`, `drag`, `pointer_move_rel`, `wait`, `locate` = standard actions."
                 },
                 "x": { "type": "integer", "description": "For `mouse_move` and `drag`: X in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
                 "y": { "type": "integer", "description": "For `mouse_move` and `drag`: Y in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
@@ -1067,17 +1080,18 @@ impl Tool for ComputerUseTool {
                 "screenshot_crop_half_extent_native": { "type": "integer", "minimum": 0, "description": "For `screenshot`: half-size of point crop in native pixels (default 250)." },
                 "screenshot_navigate_quadrant": { "type": "string", "enum": ["top_left", "top_right", "bottom_left", "bottom_right"], "description": "For `screenshot`: zoom into quadrant. Repeat until `quadrant_navigation_click_ready` is true." },
                 "screenshot_reset_navigation": { "type": "boolean", "description": "For `screenshot`: reset to full display before this capture." },
-                "screenshot_implicit_center": { "type": "string", "enum": ["mouse", "text_caret"], "description": "For `screenshot` when `requires_fresh_screenshot_before_click` / `requires_fresh_screenshot_before_enter` is true: center the implicit ~500×500 on the mouse (`mouse`, default) or on the focused text control (`text_caret`, macOS AX; falls back to mouse). Applies to the **first** confirmation capture too. Ignored when you set `screenshot_crop_center_*` / `screenshot_navigate_quadrant` / `screenshot_reset_navigation`." }
+                "screenshot_implicit_center": { "type": "string", "enum": ["mouse", "text_caret"], "description": "For `screenshot` when `requires_fresh_screenshot_before_click` / `requires_fresh_screenshot_before_enter` is true: center the implicit ~500×500 on the mouse (`mouse`, default) or on the focused text control (`text_caret`, macOS AX; falls back to mouse). Applies to the **first** confirmation capture too. Ignored when you set `screenshot_crop_center_*` / `screenshot_navigate_quadrant` / `screenshot_reset_navigation`." },
+                "app_name": { "type": "string", "description": "For `open_app`: the application name to launch (e.g. \"Safari\", \"WeChat\", \"Visual Studio Code\")." },
+                "script": { "type": "string", "description": "For `run_apple_script`: the AppleScript code to execute via `osascript`. macOS only." },
+                "scroll_x": { "type": "integer", "description": "For `scroll`: optional global X coordinate to move pointer before scrolling. Use with `scroll_y`. Requires `use_screen_coordinates`: true." },
+                "scroll_y": { "type": "integer", "description": "For `scroll`: optional global Y coordinate to move pointer before scrolling. Use with `scroll_x`. Requires `use_screen_coordinates`: true." }
             },
             "required": ["action"],
             "additionalProperties": false
         })
     }
 
-    async fn input_schema_for_model_with_context(
-        &self,
-        context: Option<&ToolUseContext>,
-    ) -> Value {
+    async fn input_schema_for_model_with_context(&self, context: Option<&ToolUseContext>) -> Value {
         let vision = context
             .map(|c| c.primary_model_supports_image_understanding())
             .unwrap_or(true);
@@ -1112,14 +1126,20 @@ impl Tool for ComputerUseTool {
         ai.computer_use_enabled
     }
 
-    async fn call_impl(&self, input: &Value, context: &ToolUseContext) -> BitFunResult<Vec<ToolResult>> {
+    async fn call_impl(
+        &self,
+        input: &Value,
+        context: &ToolUseContext,
+    ) -> BitFunResult<Vec<ToolResult>> {
         if context.is_remote() {
             return Err(BitFunError::tool(
                 "ComputerUse cannot run while the session workspace is remote (SSH).".to_string(),
             ));
         }
         let host = context.computer_use_host.as_ref().ok_or_else(|| {
-            BitFunError::tool("Computer use is only available in the 空灵语言 desktop app.".to_string())
+            BitFunError::tool(
+                "Computer use is only available in the BitFun desktop app.".to_string(),
+            )
         })?;
 
         let host_ref = host.as_ref();
@@ -1135,18 +1155,32 @@ impl Tool for ComputerUseTool {
             // ---- NEW: click_element (locate + move + click in one call) ----
             "click_element" => {
                 let query = parse_locate_query(input);
-                if query.title_contains.is_none() && query.role_substring.is_none() && query.identifier_contains.is_none() {
+                if query.title_contains.is_none()
+                    && query.role_substring.is_none()
+                    && query.identifier_contains.is_none()
+                {
                     return Err(BitFunError::tool(
                         "click_element requires at least one of title_contains, role_substring, or identifier_contains.".to_string(),
                     ));
                 }
-                let button = input.get("button").and_then(|v| v.as_str()).unwrap_or("left");
-                let num_clicks = input.get("num_clicks").and_then(|v| v.as_u64()).unwrap_or(1).clamp(1, 3) as u32;
+                let button = input
+                    .get("button")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("left");
+                let num_clicks = input
+                    .get("num_clicks")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1)
+                    .clamp(1, 3) as u32;
 
-                let res = host_ref.locate_ui_element_screen_center(query.clone()).await?;
+                let res = host_ref
+                    .locate_ui_element_screen_center(query.clone())
+                    .await?;
 
                 // Move pointer to AX center using global screen coordinates (authoritative).
-                host_ref.mouse_move_global_f64(res.global_center_x, res.global_center_y).await?;
+                host_ref
+                    .mouse_move_global_f64(res.global_center_x, res.global_center_y)
+                    .await?;
 
                 // Relaxed guard: AX coordinates are authoritative, no fine-screenshot needed.
                 host_ref.computer_use_guard_click_allowed_relaxed()?;
@@ -1155,7 +1189,11 @@ impl Tool for ComputerUseTool {
                     host_ref.mouse_click_authoritative(button).await?;
                 }
 
-                let click_label = match num_clicks { 2 => "double", 3 => "triple", _ => "single" };
+                let click_label = match num_clicks {
+                    2 => "double",
+                    3 => "triple",
+                    _ => "single",
+                };
                 let input_coords = json!({
                     "kind": "click_element",
                     "query": {
@@ -1191,12 +1229,9 @@ impl Tool for ComputerUseTool {
                 if !res.other_matches.is_empty() {
                     result_json["other_matches"] = json!(res.other_matches);
                 }
-                let body = computer_use_augment_result_json(
-                    host_ref,
-                    result_json,
-                    Some(input_coords),
-                )
-                .await;
+                let body =
+                    computer_use_augment_result_json(host_ref, result_json, Some(input_coords))
+                        .await;
                 let match_info = if res.total_matches > 1 {
                     format!(" ({} matches)", res.total_matches)
                 } else {
@@ -1204,7 +1239,11 @@ impl Tool for ComputerUseTool {
                 };
                 let summary = format!(
                     "AX click_element: {} {} click on role={} at ({:.0}, {:.0}).{}",
-                    button, click_label, res.matched_role, res.global_center_x, res.global_center_y,
+                    button,
+                    click_label,
+                    res.matched_role,
+                    res.global_center_x,
+                    res.global_center_y,
                     match_info,
                 );
                 Ok(vec![ToolResult::ok(body, Some(summary))])
@@ -1216,16 +1255,23 @@ impl Tool for ComputerUseTool {
                         "click_label requires Set-of-Mark labels from a screenshot; the primary model is text-only. Use `click_element`, `move_to_text`, `locate`, or `mouse_move` with globals from tool JSON, then `click`.".to_string(),
                     ));
                 }
-                let label = input
-                    .get("label")
-                    .and_then(|v| v.as_u64())
-                    .ok_or_else(|| BitFunError::tool("click_label requires integer field `label`.".to_string()))?
-                    as u32;
+                let label = input.get("label").and_then(|v| v.as_u64()).ok_or_else(|| {
+                    BitFunError::tool("click_label requires integer field `label`.".to_string())
+                })? as u32;
                 if label == 0 {
-                    return Err(BitFunError::tool("click_label label must be >= 1.".to_string()));
+                    return Err(BitFunError::tool(
+                        "click_label label must be >= 1.".to_string(),
+                    ));
                 }
-                let button = input.get("button").and_then(|v| v.as_str()).unwrap_or("left");
-                let num_clicks = input.get("num_clicks").and_then(|v| v.as_u64()).unwrap_or(1).clamp(1, 3) as u32;
+                let button = input
+                    .get("button")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("left");
+                let num_clicks = input
+                    .get("num_clicks")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1)
+                    .clamp(1, 3) as u32;
 
                 let latest_shot = host_ref.screenshot_peek_full_display().await?;
                 let matched = latest_shot
@@ -1238,7 +1284,9 @@ impl Tool for ComputerUseTool {
                         label
                     )))?;
 
-                host_ref.mouse_move_global_f64(matched.global_center_x, matched.global_center_y).await?;
+                host_ref
+                    .mouse_move_global_f64(matched.global_center_x, matched.global_center_y)
+                    .await?;
                 host_ref.computer_use_guard_click_allowed_relaxed()?;
                 for _ in 0..num_clicks {
                     host_ref.mouse_click_authoritative(button).await?;
@@ -1282,7 +1330,8 @@ impl Tool for ComputerUseTool {
                     .filter(|s| !s.is_empty())
                     .ok_or_else(|| {
                         BitFunError::tool(
-                            "move_to_text requires non-empty string field `text_query`.".to_string(),
+                            "move_to_text requires non-empty string field `text_query`."
+                                .to_string(),
                         )
                     })?;
                 let ocr_region_native = parse_ocr_region_native(input)?;
@@ -1292,12 +1341,9 @@ impl Tool for ComputerUseTool {
                     .map(|u| u as u32);
 
                 {
-                    let matches = Self::find_text_on_screen(
-                        host_ref,
-                        text_query,
-                        ocr_region_native.clone(),
-                    )
-                    .await?;
+                    let matches =
+                        Self::find_text_on_screen(host_ref, text_query, ocr_region_native.clone())
+                            .await?;
                     if matches.is_empty() {
                         return Err(BitFunError::tool(format!(
                             "move_to_text found no visible OCR match for {:?}. Take a fresh screenshot and try a shorter or more distinctive substring, or use click_label / click_element.",
@@ -1405,8 +1451,15 @@ impl Tool for ComputerUseTool {
             "click" => {
                 Self::ensure_click_has_no_coordinate_fields(input)?;
 
-                let button = input.get("button").and_then(|v| v.as_str()).unwrap_or("left");
-                let num_clicks = input.get("num_clicks").and_then(|v| v.as_u64()).unwrap_or(1).clamp(1, 3) as u32;
+                let button = input
+                    .get("button")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("left");
+                let num_clicks = input
+                    .get("num_clicks")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1)
+                    .clamp(1, 3) as u32;
 
                 host_ref.computer_use_guard_click_allowed()?;
 
@@ -1414,7 +1467,11 @@ impl Tool for ComputerUseTool {
                     host_ref.mouse_click_authoritative(button).await?;
                 }
 
-                let click_label = match num_clicks { 2 => "double", 3 => "triple", _ => "single" };
+                let click_label = match num_clicks {
+                    2 => "double",
+                    3 => "triple",
+                    _ => "single",
+                };
                 let input_coords = json!({
                     "kind": "click",
                     "button": button,
@@ -1469,7 +1526,8 @@ impl Tool for ComputerUseTool {
                 .await;
                 let summary = format!(
                     "Moved pointer to (~{}, ~{}).",
-                    sx64.round() as i32, sy64.round() as i32
+                    sx64.round() as i32,
+                    sy64.round() as i32
                 );
                 Ok(vec![ToolResult::ok(body, Some(summary))])
             }
@@ -1482,6 +1540,13 @@ impl Tool for ComputerUseTool {
                     return Err(BitFunError::tool(
                         "scroll requires non-zero delta_x and/or delta_y".to_string(),
                     ));
+                }
+                // Positional scroll: move pointer to target before scrolling.
+                let scroll_pos_x = input.get("scroll_x").and_then(|v| v.as_i64());
+                let scroll_pos_y = input.get("scroll_y").and_then(|v| v.as_i64());
+                if let (Some(sx), Some(sy)) = (scroll_pos_x, scroll_pos_y) {
+                    host_ref.mouse_move_global_f64(sx as f64, sy as f64).await?;
+                    host_ref.wait_ms(30).await?;
                 }
                 host_ref.scroll(dx, dy).await?;
                 let input_coords = json!({ "kind": "scroll", "delta_x": dx, "delta_y": dy });
@@ -1502,7 +1567,10 @@ impl Tool for ComputerUseTool {
                 let start_y = req_i32(input, "start_y")?;
                 let end_x = req_i32(input, "end_x")?;
                 let end_y = req_i32(input, "end_y")?;
-                let button = input.get("button").and_then(|v| v.as_str()).unwrap_or("left");
+                let button = input
+                    .get("button")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("left");
 
                 let (sx0, sy0) = Self::resolve_xy_f64(host_ref, input, start_x, start_y)?;
                 let (sx1, sy1) = Self::resolve_xy_f64(host_ref, input, end_x, end_y)?;
@@ -1537,8 +1605,10 @@ impl Tool for ComputerUseTool {
                 .await;
                 let summary = format!(
                     "Dragged from (~{}, ~{}) to (~{}, ~{}).",
-                    sx0.round() as i32, sy0.round() as i32,
-                    sx1.round() as i32, sy1.round() as i32,
+                    sx0.round() as i32,
+                    sy0.round() as i32,
+                    sx1.round() as i32,
+                    sy1.round() as i32,
                 );
                 Ok(vec![ToolResult::ok(body, Some(summary))])
             }
@@ -1582,7 +1652,10 @@ impl Tool for ComputerUseTool {
                 let (mut data, attach, mut hint) =
                     Self::pack_screenshot_tool_output(&shot, debug_rel).await?;
                 if let Some(obj) = data.as_object_mut() {
-                    obj.insert("action".to_string(), Value::String("screenshot".to_string()));
+                    obj.insert(
+                        "action".to_string(),
+                        Value::String("screenshot".to_string()),
+                    );
                     if ignored_crop_for_quadrant {
                         obj.insert(
                             "screenshot_crop_center_ignored".to_string(),
@@ -1601,8 +1674,13 @@ impl Tool for ComputerUseTool {
                         );
                     }
                 }
-                let data = computer_use_augment_result_json(host_ref, data, Some(input_coords)).await;
-                Ok(vec![ToolResult::ok_with_images(data, Some(hint), vec![attach])])
+                let data =
+                    computer_use_augment_result_json(host_ref, data, Some(input_coords)).await;
+                Ok(vec![ToolResult::ok_with_images(
+                    data,
+                    Some(hint),
+                    vec![attach],
+                )])
             }
 
             "pointer_move_rel" => {
@@ -1665,14 +1743,18 @@ impl Tool for ComputerUseTool {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| BitFunError::tool("text is required".to_string()))?;
                 host_ref.type_text(text).await?;
-                let input_coords = json!({ "kind": "type_text", "char_count": text.chars().count() });
+                let input_coords =
+                    json!({ "kind": "type_text", "char_count": text.chars().count() });
                 let body = computer_use_augment_result_json(
                     host_ref,
                     json!({ "success": true, "action": "type_text", "chars": text.chars().count() }),
                     Some(input_coords),
                 )
                 .await;
-                let summary = format!("Typed {} character(s) into the focused target.", text.chars().count());
+                let summary = format!(
+                    "Typed {} character(s) into the focused target.",
+                    text.chars().count()
+                );
                 Ok(vec![ToolResult::ok(body, Some(summary))])
             }
             "wait" => {
@@ -1692,6 +1774,104 @@ impl Tool for ComputerUseTool {
                     Some(format!("Waited {} ms.", ms)),
                 )])
             }
+            "open_app" => {
+                let app_name = input
+                    .get("app_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool("open_app requires `app_name` parameter.".to_string())
+                    })?;
+                let result = host_ref.open_app(app_name).await?;
+                let body = computer_use_augment_result_json(
+                    host_ref,
+                    json!({
+                        "success": result.success,
+                        "action": "open_app",
+                        "app_name": result.app_name,
+                        "process_id": result.process_id,
+                        "error_message": result.error_message,
+                    }),
+                    None,
+                )
+                .await;
+                let summary = if result.success {
+                    format!(
+                        "Opened app '{}'{}.",
+                        result.app_name,
+                        result
+                            .process_id
+                            .map(|p| format!(" (PID {})", p))
+                            .unwrap_or_default()
+                    )
+                } else {
+                    format!(
+                        "Failed to open '{}': {}",
+                        result.app_name,
+                        result.error_message.as_deref().unwrap_or("unknown error")
+                    )
+                };
+                Ok(vec![ToolResult::ok(body, Some(summary))])
+            }
+
+            "run_apple_script" => {
+                let script = input
+                    .get("script")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool(
+                            "run_apple_script requires `script` parameter.".to_string(),
+                        )
+                    })?;
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = script;
+                    return Err(BitFunError::tool(
+                        "run_apple_script is only available on macOS.".to_string(),
+                    ));
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let script_owned = script.to_string();
+                    let output = tokio::task::spawn_blocking(move || {
+                        std::process::Command::new("/usr/bin/osascript")
+                            .args(["-e", &script_owned])
+                            .output()
+                    })
+                    .await
+                    .map_err(|e| BitFunError::tool(format!("spawn: {}", e)))?
+                    .map_err(|e| BitFunError::tool(format!("osascript: {}", e)))?;
+
+                    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                    let success = output.status.success();
+
+                    let body = computer_use_augment_result_json(
+                        host_ref,
+                        json!({
+                            "success": success,
+                            "action": "run_apple_script",
+                            "stdout": stdout,
+                            "stderr": stderr,
+                        }),
+                        None,
+                    )
+                    .await;
+                    let summary = if success {
+                        format!(
+                            "AppleScript executed.{}",
+                            if stdout.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" Output: {}", &stdout[..stdout.len().min(200)])
+                            }
+                        )
+                    } else {
+                        format!("AppleScript error: {}", &stderr[..stderr.len().min(200)])
+                    };
+                    Ok(vec![ToolResult::ok(body, Some(summary))])
+                }
+            }
+
             _ => Err(BitFunError::tool(format!("Unknown action: {}", action))),
         }
     }

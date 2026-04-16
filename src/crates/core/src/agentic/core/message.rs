@@ -56,8 +56,6 @@ pub struct MessageMetadata {
     pub turn_id: Option<String>,
     pub round_id: Option<String>,
     pub tokens: Option<usize>,
-    #[serde(skip)] // Not serialized, auxiliary field for runtime use only
-    pub keep_thinking: bool,
     /// Anthropic extended thinking signature (for passing back in multi-turn conversations)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_signature: Option<String>,
@@ -168,7 +166,6 @@ impl From<Message> for AIMessage {
             MessageRole::Tool => "tool",
             MessageRole::System => "system",
         };
-        let keep_thinking = msg.metadata.keep_thinking;
         let thinking_signature = msg.metadata.thinking_signature.clone();
 
         match msg.content {
@@ -196,6 +193,7 @@ impl From<Message> for AIMessage {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    is_error: None,
                     tool_image_attachments: None,
                 }
             }
@@ -229,6 +227,7 @@ impl From<Message> for AIMessage {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    is_error: None,
                     tool_image_attachments: None,
                 }
             }
@@ -271,20 +270,15 @@ impl From<Message> for AIMessage {
                 };
 
                 // Reasoning content (interleaved thinking mode)
-                let reasoning = if keep_thinking {
-                    reasoning_content.filter(|r| !r.is_empty())
-                } else {
-                    None
-                };
-
                 Self {
                     role: "assistant".to_string(),
                     content,
-                    reasoning_content: reasoning,
+                    reasoning_content: reasoning_content.filter(|r| !r.is_empty()),
                     thinking_signature: thinking_signature.clone(),
                     tool_calls: converted_tool_calls,
                     tool_call_id: None,
                     name: None,
+                    is_error: None,
                     tool_image_attachments: None,
                 }
             }
@@ -293,8 +287,8 @@ impl From<Message> for AIMessage {
                 tool_name,
                 result,
                 result_for_assistant,
+                is_error,
                 image_attachments,
-                ..
             } => {
                 // Tool messages must include tool_call_id
                 // Prefer result_for_assistant (text specifically for AI), if None or empty then use result (data field)
@@ -321,6 +315,7 @@ impl From<Message> for AIMessage {
                     tool_calls: None,
                     tool_call_id: Some(tool_id),
                     name: Some(tool_name),
+                    is_error: Some(is_error),
                     tool_image_attachments: image_attachments.clone(),
                 }
             }
@@ -502,7 +497,7 @@ impl Message {
         50 + tiles * 200
     }
 
-    fn estimate_tokens(&self) -> usize {
+    pub fn estimate_tokens_with_reasoning(&self, include_reasoning: bool) -> usize {
         let mut total = 0usize;
         total += 4;
 
@@ -521,7 +516,7 @@ impl Message {
                 text,
                 tool_calls,
             } => {
-                if self.metadata.keep_thinking {
+                if include_reasoning {
                     if let Some(reasoning) = reasoning_content.as_ref() {
                         total += TokenCounter::estimate_tokens(reasoning);
                     }
@@ -559,6 +554,10 @@ impl Message {
         }
 
         total
+    }
+
+    fn estimate_tokens(&self) -> usize {
+        self.estimate_tokens_with_reasoning(true)
     }
 }
 

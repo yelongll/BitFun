@@ -324,6 +324,66 @@
     flex-shrink: 0;
   }
 
+  &__skill-groups {
+    display: flex;
+    flex-direction: column;
+    gap: $size-gap-2;
+  }
+
+  &__skill-group {
+    display: flex;
+    flex-direction: column;
+    gap: $size-gap-1;
+    padding: $size-gap-2;
+    border: 1px solid var(--border-subtle);
+    border-radius: $size-radius-base;
+    background: var(--element-bg-subtle);
+  }
+
+  &__skill-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $size-gap-2;
+    min-height: 26px;
+  }
+
+  &__skill-group-title-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: $size-gap-2;
+    min-width: 0;
+  }
+
+  &__skill-group-title {
+    font-size: 11px;
+    font-weight: $font-weight-semibold;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  &__skill-group-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    padding: 1px 6px;
+    border-radius: $size-radius-full;
+    background: var(--element-bg-medium);
+    font-size: 10px;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__skill-group-actions {
+    display: flex;
+    align-items: center;
+    gap: $size-gap-1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   // ── Read-only chip grid ──────────────────────────────────────────────────
   &__chip-grid {
     display: flex;
@@ -358,8 +418,8 @@
     align-items: center;
     padding: 3px 9px;
     border-radius: $size-radius-full;
-    border: 1px solid var(--border-subtle);
-    background: var(--element-bg-subtle);
+    border: 1px solid transparent;
+    background: transparent;
     font-size: 11px;
     font-family: $font-family-mono;
     color: var(--color-text-muted);
@@ -369,14 +429,13 @@
       background $motion-fast $easing-standard,
       color $motion-fast $easing-standard;
 
-    &:hover {
+    &:hover:not(.is-on) {
       border-color: var(--border-medium);
-      background: var(--element-bg-base);
       color: var(--color-text-secondary);
     }
 
     &.is-on {
-      border-color: rgba(96, 165, 250, 0.4);
+      border: 1px solid rgba(96, 165, 250, 0.4);
       background: rgba(96, 165, 250, 0.08);
       color: var(--color-accent-500);
 

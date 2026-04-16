@@ -2,10 +2,13 @@
 //!
 //! Manages skill discovery, mode-specific filtering, and loading.
 
-use super::builtin::ensure_builtin_skills_installed;
+use super::builtin::{
+    builtin_skill_group_key, ensure_builtin_skills_installed, is_builtin_skill_dir_name,
+};
+use super::default_profiles::is_skill_enabled_for_mode;
 use super::mode_overrides::{
     load_disabled_mode_skills_local, load_disabled_mode_skills_remote,
-    load_disabled_user_mode_skills,
+    load_user_mode_skill_overrides, UserModeSkillOverrides,
 };
 use super::types::{SkillData, SkillInfo, SkillLocation};
 use crate::agentic::workspace::WorkspaceFileSystem;
@@ -70,14 +73,17 @@ struct SkillCandidate {
 }
 
 impl SkillCandidate {
-    fn from_data(
-        mut data: SkillData,
-        slot: &str,
-        key_prefix: &str,
-        priority: usize,
-    ) -> Self {
+    fn from_data(mut data: SkillData, slot: &str, key_prefix: &str, priority: usize) -> Self {
         data.source_slot = slot.to_string();
         data.key = build_skill_key(key_prefix, slot, &data.dir_name);
+        let is_builtin = data.location == SkillLocation::User
+            && slot == "bitfun"
+            && is_builtin_skill_dir_name(&data.dir_name);
+        let group_key = if is_builtin {
+            builtin_skill_group_key(&data.dir_name).map(str::to_string)
+        } else {
+            None
+        };
 
         Self {
             info: SkillInfo {
@@ -88,6 +94,8 @@ impl SkillCandidate {
                 level: data.location,
                 source_slot: data.source_slot,
                 dir_name: data.dir_name,
+                is_builtin,
+                group_key,
             },
             priority,
         }
@@ -168,7 +176,10 @@ fn resolve_visible_skills(candidates: Vec<SkillCandidate>) -> Vec<SkillInfo> {
             .cmp(&b.priority)
             .then_with(|| a.info.name.to_lowercase().cmp(&b.info.name.to_lowercase()))
     });
-    resolved.into_iter().map(|candidate| candidate.info).collect()
+    resolved
+        .into_iter()
+        .map(|candidate| candidate.info)
+        .collect()
 }
 
 /// Skill registry
@@ -413,9 +424,9 @@ impl SkillRegistry {
             return candidates;
         };
 
-        let disabled_user = load_disabled_user_mode_skills(mode_id)
+        let user_overrides = load_user_mode_skill_overrides(mode_id)
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|_| UserModeSkillOverrides::default());
         let disabled_project = match workspace_root {
             Some(root) => load_disabled_mode_skills_local(root, mode_id)
                 .await
@@ -423,15 +434,19 @@ impl SkillRegistry {
             None => Vec::new(),
         };
 
-        let disabled_user: HashSet<String> = dedupe_preserving_order(disabled_user).into_iter().collect();
-        let disabled_project: HashSet<String> =
-            dedupe_preserving_order(disabled_project).into_iter().collect();
+        let disabled_project: HashSet<String> = dedupe_preserving_order(disabled_project)
+            .into_iter()
+            .collect();
 
         candidates
             .into_iter()
-            .filter(|candidate| match candidate.info.level {
-                SkillLocation::User => !disabled_user.contains(&candidate.info.key),
-                SkillLocation::Project => !disabled_project.contains(&candidate.info.key),
+            .filter(|candidate| {
+                is_skill_enabled_for_mode(
+                    &candidate.info,
+                    mode_id,
+                    &user_overrides,
+                    &disabled_project,
+                )
             })
             .collect()
     }
@@ -447,22 +462,26 @@ impl SkillRegistry {
             return candidates;
         };
 
-        let disabled_user = load_disabled_user_mode_skills(mode_id)
+        let user_overrides = load_user_mode_skill_overrides(mode_id)
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|_| UserModeSkillOverrides::default());
         let disabled_project = load_disabled_mode_skills_remote(fs, remote_root, mode_id)
             .await
             .unwrap_or_default();
 
-        let disabled_user: HashSet<String> = dedupe_preserving_order(disabled_user).into_iter().collect();
-        let disabled_project: HashSet<String> =
-            dedupe_preserving_order(disabled_project).into_iter().collect();
+        let disabled_project: HashSet<String> = dedupe_preserving_order(disabled_project)
+            .into_iter()
+            .collect();
 
         candidates
             .into_iter()
-            .filter(|candidate| match candidate.info.level {
-                SkillLocation::User => !disabled_user.contains(&candidate.info.key),
-                SkillLocation::Project => !disabled_project.contains(&candidate.info.key),
+            .filter(|candidate| {
+                is_skill_enabled_for_mode(
+                    &candidate.info,
+                    mode_id,
+                    &user_overrides,
+                    &disabled_project,
+                )
             })
             .collect()
     }
@@ -529,7 +548,9 @@ impl SkillRegistry {
         workspace_root: Option<&Path>,
         agent_type: Option<&str>,
     ) -> Vec<SkillInfo> {
-        let candidates = self.scan_skill_candidates_for_workspace(workspace_root).await;
+        let candidates = self
+            .scan_skill_candidates_for_workspace(workspace_root)
+            .await;
         let filtered = self
             .apply_mode_filters_for_workspace(candidates, workspace_root, agent_type)
             .await;
@@ -662,7 +683,9 @@ impl SkillRegistry {
                 remote_fs
                     .read_file_text(&skill_md_path)
                     .await
-                    .map_err(|error| BitFunError::tool(format!("Failed to read skill file: {}", error)))
+                    .map_err(|error| {
+                        BitFunError::tool(format!("Failed to read skill file: {}", error))
+                    })
             }
         }
     }

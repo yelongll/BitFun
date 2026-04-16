@@ -29,6 +29,7 @@ export interface FileExplorerProps {
   showLastModified?: boolean;
   
   expandedFolders?: Set<string>;
+  loadingPaths?: Set<string>;
   onNodeExpand?: (path: string, expanded: boolean) => void;
   
   onFileDoubleClick?: (filePath: string) => void;
@@ -63,6 +64,7 @@ export interface FileTreeProps {
   nodes: FileSystemNode[];
   selectedFile?: string;
   expandedFolders?: Set<string>;
+  loadingPaths?: Set<string>;
   onNodeSelect?: (node: FileSystemNode) => void;
   onNodeExpand?: (path: string, expanded: boolean) => void;
   className?: string;
@@ -84,6 +86,7 @@ export interface FileTreeNodeProps {
   level: number;
   isSelected?: boolean;
   isExpanded?: boolean;
+  loadingPaths?: Set<string>;
   onSelect?: (node: FileSystemNode) => void;
   onToggleExpand?: (path: string) => void;
   className?: string;
@@ -114,7 +117,6 @@ export interface FileSystemState {
   selectedFile?: string;
   expandedFolders: Set<string>;
   loading: boolean;
-  silentRefreshing?: boolean;
   error?: string;
   searchQuery?: string;
   options: FileSystemOptions;
@@ -203,6 +205,8 @@ export interface VirtualFileTreeProps {
   renamingPath?: string | null;
   onRename?: (oldPath: string, newName: string) => void;
   onCancelRename?: () => void;
+  renderNodeContent?: (node: FileSystemNode, level: number) => React.ReactNode;
+  renderNodeActions?: (node: FileSystemNode) => React.ReactNode;
 }
 
 

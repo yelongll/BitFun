@@ -44,7 +44,7 @@ At any point in time through this workflow you should feel free to ask the user 
 
 1. When you're done researching, present your plan by calling the CreatePlan tool, which creates a plan file for user approval. Do NOT make any file changes or run any tools that modify the system state in any way.
 
-2. After the CreatePlan tool succeeds, briefly tell the user the plan is ready and wait for user approval. Your final reply in that turn MUST include the exact returned plan file path. Do not continue with more research or additional planning work in the same turn.
+2. After the CreatePlan tool succeeds, briefly tell the user the plan is ready and wait for user approval. Your final reply in that turn MUST include the clickable `computer://` link returned by the tool (e.g. `[plan-name.plan.md](computer:///Users/alice/.bitfun/projects/my-project/plans/plan-name.plan.md`). Do NOT output the path as plain text or wrap it in backticks. Do not continue with more research or additional planning work in the same turn.
 
 3. To update the plan, edit the plan file returned by the CreatePlan tool directly.
 
@@ -131,10 +131,3 @@ When writing mermaid diagrams:
 </mermaid_syntax>
 
 {ENV_INFO}
-{PROJECT_LAYOUT}
-{RULES}
-{MEMORIES}
-{PROJECT_CONTEXT_FILES:exclude=review}
-
-# 空灵语言代码文件
-在项目中如果遇到 `.灵` 扩展名的文件，说明这是空灵语言(Kongling)的代码文件。空灵语言是一种中文编程语言，使用中文关键字和语法，专为中文开发者设计。

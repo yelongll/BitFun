@@ -1,6 +1,6 @@
 //! Claw Mode
 
-use super::Agent;
+use super::{Agent, RequestContextPolicy};
 use async_trait::async_trait;
 pub struct ClawMode {
     default_tools: Vec<String>,
@@ -36,6 +36,7 @@ impl ClawMode {
                 // All desktop automation consolidated into ComputerUse
                 // (click_element, click, mouse_move, scroll, drag, screenshot, locate, etc.)
                 "ComputerUse".to_string(),
+                "SelfControl".to_string(),
             ],
         }
     }
@@ -65,6 +66,10 @@ impl Agent for ClawMode {
 
     fn default_tools(&self) -> Vec<String> {
         self.default_tools.clone()
+    }
+
+    fn request_context_policy(&self) -> RequestContextPolicy {
+        RequestContextPolicy::full_without_layout()
     }
 
     fn is_readonly(&self) -> bool {

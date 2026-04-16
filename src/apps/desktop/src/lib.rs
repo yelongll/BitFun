@@ -21,7 +21,6 @@ use std::sync::{
 #[cfg(target_os = "macos")]
 use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 
 // Re-export API
 pub use api::*;
@@ -88,6 +87,22 @@ pub async fn run() {
         return;
     }
 
+    // Initialize global I18nService so bot/remote-connect language is always in sync.
+    {
+        use bitfun_core::service::config::get_global_config_service;
+        use bitfun_core::service::i18n::initialize_global_i18n_service;
+        match get_global_config_service().await {
+            Ok(config_service) => {
+                if let Err(e) = initialize_global_i18n_service(Some(config_service)).await {
+                    log::error!("Failed to initialize global I18nService: {}", e);
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to get config service for I18nService init: {}", e);
+            }
+        }
+    }
+
     let startup_log_level = resolve_runtime_log_level(log_config.level).await;
 
     if let Err(e) = AIClientFactory::initialize_global().await {
@@ -132,27 +147,7 @@ pub async fn run() {
     setup_panic_hook();
 
     let run_result = tauri::Builder::default()
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Trace)
-                .level_for("ignore", log::LevelFilter::Off)
-                .level_for("ignore::walk", log::LevelFilter::Off)
-                .level_for("globset", log::LevelFilter::Off)
-                .level_for("tracing", log::LevelFilter::Off)
-                .level_for("opentelemetry_sdk", log::LevelFilter::Off)
-                .level_for("opentelemetry-otlp", log::LevelFilter::Off)
-                .level_for("notify", log::LevelFilter::Off)
-                .level_for("hyper_util", log::LevelFilter::Info)
-                .level_for("h2", log::LevelFilter::Info)
-                .level_for("portable_pty", log::LevelFilter::Info)
-                .level_for("russh", log::LevelFilter::Info)
-                .targets(log_targets)
-                .rotation_strategy(RotationStrategy::KeepSome(3))
-                .max_file_size(10 * 1024 * 1024)
-                .timezone_strategy(TimezoneStrategy::UseLocal)
-                .clear_format()
-                .build(),
-        )
+        .plugin(logging::build_log_plugin(log_targets))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -370,9 +365,17 @@ pub async fn run() {
             export_local_file_to_path,
             reveal_in_explorer,
             get_file_tree,
+            explorer_get_file_tree,
             get_directory_children,
+            explorer_get_children,
             get_directory_children_paginated,
+            explorer_get_children_paginated,
             search_files,
+            search_filenames,
+            search_file_contents,
+            start_search_filenames_stream,
+            start_search_file_contents_stream,
+            cancel_search,
             delete_file,
             delete_directory,
             create_file,
@@ -417,6 +420,7 @@ pub async fn run() {
             search_skill_market,
             download_skill_market,
             set_mode_skill_disabled,
+            replace_mode_skill_selection,
             validate_skill_path,
             add_skill,
             delete_skill,
@@ -475,7 +479,6 @@ pub async fn run() {
             get_session_stats,
             get_snapshot_system_stats,
             get_snapshot_sessions,
-            cleanup_snapshot_data,
             check_git_isolation,
             get_file_change_history,
             get_all_modified_files,
@@ -676,9 +679,18 @@ pub async fn run() {
             api::miniapp_api::miniapp_dialog_message,
             api::miniapp_api::miniapp_import_from_path,
             api::miniapp_api::miniapp_sync_from_fs,
-            // Browser API
+            api::miniapp_api::miniapp_ai_complete,
+            api::miniapp_api::miniapp_ai_chat,
+            api::miniapp_api::miniapp_ai_cancel,
+            api::miniapp_api::miniapp_ai_list_models,
+            // Browser API (embedded webview)
             api::browser_api::browser_webview_eval,
             api::browser_api::browser_get_url,
+            // Browser Control API (CDP-based user browser control)
+            api::browser_control_api::browser_control_get_status,
+            api::browser_control_api::browser_control_launch,
+            api::browser_control_api::browser_control_create_launcher,
+            api::self_control_api::submit_self_control_response,
             // Insights API
             api::insights_api::generate_insights,
             api::insights_api::get_latest_insights,
@@ -711,6 +723,13 @@ pub async fn run() {
             api::ssh_api::remote_open_workspace,
             api::ssh_api::remote_close_workspace,
             api::ssh_api::remote_get_workspace_info,
+            // Announcement / feature-demo / tips API
+            api::announcement_api::get_pending_announcements,
+            api::announcement_api::mark_announcement_seen,
+            api::announcement_api::dismiss_announcement,
+            api::announcement_api::never_show_announcement,
+            api::announcement_api::trigger_announcement,
+            api::announcement_api::get_announcement_tips,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = run_result {
@@ -747,7 +766,6 @@ async fn init_agentic_system() -> anyhow::Result<(
 
     let tool_registry = tools::registry::get_global_tool_registry();
     let tool_state_manager = Arc::new(tools::pipeline::ToolStateManager::new(event_queue.clone()));
-    let image_context_provider = Arc::new(api::context_upload_api::create_image_context_provider());
 
     let computer_use_host: ComputerUseHostRef =
         Arc::new(computer_use::DesktopComputerUseHost::new());
@@ -756,7 +774,6 @@ async fn init_agentic_system() -> anyhow::Result<(
     let tool_pipeline = Arc::new(tools::pipeline::ToolPipeline::new(
         tool_registry,
         tool_state_manager,
-        Some(image_context_provider),
         Some(computer_use_host),
     ));
 
@@ -934,7 +951,7 @@ fn init_services(app_handle: tauri::AppHandle, default_log_level: log::LevelFilt
 
         service::snapshot::initialize_snapshot_event_emitter(emitter.clone());
 
-        infrastructure::initialize_file_watcher(emitter.clone());
+        bitfun_core::service::initialize_file_watch_service(emitter.clone());
 
         if let Err(e) = workspace_identity_watch_service
             .set_event_emitter(emitter.clone())

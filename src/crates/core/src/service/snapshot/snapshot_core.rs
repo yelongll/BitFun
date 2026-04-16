@@ -2,6 +2,7 @@ use crate::service::snapshot::snapshot_system::FileSnapshotSystem;
 use crate::service::snapshot::types::{
     DiffSummary, FileOperation, OperationType, SnapshotError, SnapshotResult, ToolContext,
 };
+use crate::service::workspace_runtime::WorkspaceRuntimeContext;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -86,8 +87,11 @@ pub struct SnapshotCore {
 }
 
 impl SnapshotCore {
-    pub fn new(bitfun_dir: &Path, snapshot_system: FileSnapshotSystem) -> Self {
-        let sessions_dir = bitfun_dir.join("snapshots").join("operations");
+    pub fn new(
+        runtime_context: WorkspaceRuntimeContext,
+        snapshot_system: FileSnapshotSystem,
+    ) -> Self {
+        let sessions_dir = runtime_context.snapshot_operations_dir.clone();
         Self {
             sessions: HashMap::new(),
             operation_index: HashMap::new(),
@@ -98,11 +102,6 @@ impl SnapshotCore {
 
     pub async fn initialize(&mut self) -> SnapshotResult<()> {
         info!("Initializing operation history system");
-        if !self.sessions_dir.exists() {
-            tokio::fs::create_dir_all(&self.sessions_dir)
-                .await
-                .map_err(SnapshotError::Io)?;
-        }
 
         self.snapshot_system.initialize().await?;
         self.load_all_sessions().await?;
@@ -452,7 +451,8 @@ impl SnapshotCore {
         let first_op_for_file = session
             .all_operations_iter()
             .find(|op| op.file_path == file_path);
-        let file_created_in_session = matches!(first_op_for_file, Some(op) if op.before_snapshot_id.is_none());
+        let file_created_in_session =
+            matches!(first_op_for_file, Some(op) if op.before_snapshot_id.is_none());
 
         let load_first_before = || async {
             let first_before = session
@@ -856,8 +856,7 @@ impl SnapshotCore {
             return Ok(());
         };
         let path = self.session_file_path(session_id);
-        let data =
-            serde_json::to_string_pretty(session).map_err(SnapshotError::Serialization)?;
+        let data = serde_json::to_string_pretty(session).map_err(SnapshotError::Serialization)?;
         tokio::fs::write(path, data)
             .await
             .map_err(SnapshotError::Io)?;

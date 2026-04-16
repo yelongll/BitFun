@@ -89,6 +89,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const { isLight } = useTheme();
   const [content, setContent] = useState<string>(initialContent);
   const [hasChanges, setHasChanges] = useState(false);
+  const [viewMode, setViewMode] = useState<'preview' | 'markdown'>('preview');
   const [unsafeViewMode, setUnsafeViewMode] = useState<'source' | 'preview'>('source');
   const [loading, setLoading] = useState(!!filePath);
   const [error, setError] = useState<string | null>(null);
@@ -162,8 +163,17 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   }, []);
 
   useEffect(() => {
+    setViewMode('preview');
     setUnsafeViewMode('source');
   }, [filePath, initialContent]);
+
+  const fetchFileMetadata = useCallback(async () => {
+    if (!filePath) {
+      throw new Error('Missing file path');
+    }
+    const { workspaceAPI } = await import('@/infrastructure/api');
+    return workspaceAPI.getFileMetadata(filePath);
+  }, [filePath]);
 
   const loadFileContent = useCallback(async () => {
     if (!filePath || isUnmountedRef.current) return;
@@ -173,15 +183,12 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
     try {
       const { workspaceAPI } = await import('@/infrastructure/api');
-      const { invoke } = await import('@tauri-apps/api/core');
 
       const fileContent = await workspaceAPI.readFileContent(filePath);
       reportFileMissingFromDisk(false);
 
       try {
-        const fileInfo: any = await invoke('get_file_metadata', {
-          request: { path: filePath },
-        });
+        const fileInfo = await fetchFileMetadata();
         if (isFileMissingFromMetadata(fileInfo)) {
           reportFileMissingFromDisk(true);
         } else {
@@ -232,7 +239,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         setLoading(false);
       }
     }
-  }, [filePath, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
+  }, [fetchFileMetadata, filePath, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
 
   // Initial file load - only run once when filePath changes
   const loadFileContentCalledRef = useRef(false);
@@ -281,10 +288,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     let probeError: string | null = null;
     try {
       const { workspaceAPI } = await import('@/infrastructure/api');
-      const { invoke } = await import('@tauri-apps/api/core');
-      const fileInfo: any = await invoke('get_file_metadata', {
-        request: { path: filePath },
-      });
+      const fileInfo = await fetchFileMetadata();
       if (isFileMissingFromMetadata(fileInfo)) {
         outcome = 'missing-on-disk';
         reportFileMissingFromDisk(true);
@@ -350,9 +354,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         reportFileMissingFromDisk(false);
       }
 
-      const fileInfoAfter: any = await invoke('get_file_metadata', {
-        request: { path: filePath },
-      });
+      const fileInfoAfter = await fetchFileMetadata();
       if (!isFileMissingFromMetadata(fileInfoAfter)) {
         const vAfter = diskVersionFromMetadata(fileInfoAfter);
         if (vAfter) {
@@ -386,7 +388,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }
       isCheckingDiskRef.current = false;
     }
-  }, [filePath, isActiveTab, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
+  }, [fetchFileMetadata, filePath, isActiveTab, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
 
   const isUnsafeSplitUi =
     !!filePath &&
@@ -424,11 +426,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     try {
       if (filePath && workspacePath) {
         const { workspaceAPI } = await import('@/infrastructure/api');
-        const { invoke } = await import('@tauri-apps/api/core');
 
-        const fileInfoPre: any = await invoke('get_file_metadata', {
-          request: { path: filePath },
-        });
+        const fileInfoPre = await fetchFileMetadata();
         if (isFileMissingFromMetadata(fileInfoPre)) {
           reportFileMissingFromDisk(true);
         } else {
@@ -463,9 +462,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               reportFileMissingFromDisk(false);
             }
             try {
-              const fileInfoAfter: any = await invoke('get_file_metadata', {
-                request: { path: filePath },
-              });
+              const fileInfoAfter = await fetchFileMetadata();
               if (!isFileMissingFromMetadata(fileInfoAfter)) {
                 const v = diskVersionFromMetadata(fileInfoAfter);
                 if (v) {
@@ -482,9 +479,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         await workspaceAPI.writeFileContent(workspacePath, filePath, content);
 
         try {
-          const fileInfo: any = await invoke('get_file_metadata', {
-            request: { path: filePath },
-          });
+          const fileInfo = await fetchFileMetadata();
           if (!isFileMissingFromMetadata(fileInfo)) {
             reportFileMissingFromDisk(false);
             const v = diskVersionFromMetadata(fileInfo);
@@ -518,7 +513,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         setError(t('editor.common.saveFailedWithMessage', { message: errorMessage }));
       }
     }
-  }, [content, filePath, workspacePath, hasChanges, onSave, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
+  }, [content, fetchFileMetadata, filePath, hasChanges, onSave, reportFileMissingFromDisk, t, toNormalizedMarkdown, workspacePath]);
 
   const handleContentChange = useCallback((newContent: string) => {
     contentRef.current = newContent;
@@ -630,8 +625,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             </div>
           </div>
         )}
-        <div className="bitfun-markdown-editor__unsafe-toolbar">
-          <div className="bitfun-markdown-editor__unsafe-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
+        <div className="bitfun-markdown-editor__mode-toolbar">
+          <div className="bitfun-markdown-editor__mode-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
             <Button
               type="button"
               size="small"
@@ -639,7 +634,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               onClick={() => setUnsafeViewMode('source')}
               aria-pressed={unsafeViewMode === 'source'}
             >
-              {t('editor.markdownEditor.source')}
+              {t('editor.markdownEditor.markdown')}
             </Button>
             <Button
               type="button"
@@ -718,13 +713,35 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           </div>
         </div>
       )}
+      <div className="bitfun-markdown-editor__mode-toolbar">
+        <div className="bitfun-markdown-editor__mode-toggle" role="tablist" aria-label={t('editor.markdownEditor.viewModeLabel')}>
+          <Button
+            type="button"
+            size="small"
+            variant={viewMode === 'preview' ? 'primary' : 'secondary'}
+            onClick={() => setViewMode('preview')}
+            aria-pressed={viewMode === 'preview'}
+          >
+            {t('editor.markdownEditor.preview')}
+          </Button>
+          <Button
+            type="button"
+            size="small"
+            variant={viewMode === 'markdown' ? 'primary' : 'secondary'}
+            onClick={() => setViewMode('markdown')}
+            aria-pressed={viewMode === 'markdown'}
+          >
+            {t('editor.markdownEditor.markdown')}
+          </Button>
+        </div>
+      </div>
       <MEditor
         ref={editorRef}
         value={content}
         onChange={handleContentChange}
         onSave={handleSave}
         onDirtyChange={handleDirtyChange}
-        mode="ir"
+        mode={viewMode === 'preview' ? 'ir' : 'edit'}
         theme={isLight ? 'light' : 'dark'}
         height="100%"
         width="100%"

@@ -5,6 +5,7 @@ use crate::service::snapshot::service::SnapshotService;
 use crate::service::snapshot::types::{
     OperationType, SnapshotConfig, SnapshotError, SnapshotResult,
 };
+use crate::service::workspace_runtime::get_workspace_runtime_service_arc;
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
 use serde_json::Value;
@@ -31,7 +32,14 @@ impl SnapshotManager {
             workspace_dir.display()
         );
 
-        let mut snapshot_service = SnapshotService::new(workspace_dir, config);
+        let runtime_service = get_workspace_runtime_service_arc();
+        let runtime_context = runtime_service
+            .ensure_local_workspace_runtime(&workspace_dir)
+            .await
+            .map_err(|e| SnapshotError::ConfigError(e.to_string()))?
+            .context;
+
+        let mut snapshot_service = SnapshotService::new(workspace_dir, runtime_context, config);
         snapshot_service.initialize().await?;
         let snapshot_service = Arc::new(RwLock::new(snapshot_service));
         Ok(Self { snapshot_service })
@@ -192,13 +200,6 @@ impl SnapshotManager {
     pub async fn list_sessions(&self) -> SnapshotResult<Vec<String>> {
         let snapshot_service = self.snapshot_service.read().await;
         snapshot_service.list_sessions().await
-    }
-
-    pub async fn cleanup_snapshot_data(&self, keep_recent_days: u64) -> SnapshotResult<()> {
-        let snapshot_service = self.snapshot_service.read().await;
-        snapshot_service
-            .cleanup_snapshot_data(keep_recent_days)
-            .await
     }
 
     /// Tries to acquire a file lock.
@@ -417,7 +418,9 @@ impl Tool for WrappedTool {
     }
 
     fn render_tool_use_rejected_message(&self) -> String {
-        self.original_tool.render_tool_use_rejected_message().to_string()
+        self.original_tool
+            .render_tool_use_rejected_message()
+            .to_string()
     }
 
     fn render_tool_result_message(&self, output: &Value) -> String {
@@ -565,10 +568,8 @@ impl WrappedTool {
     /// Extracts the turn index.
     fn extract_turn_index(&self, context: &ToolUseContext) -> usize {
         context
-            .options
-            .as_ref()
-            .and_then(|opts| opts.custom_data.as_ref())
-            .and_then(|data| data.get("turn_index"))
+            .custom_data
+            .get("turn_index")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or(0)

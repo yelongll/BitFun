@@ -4,15 +4,19 @@
 
 use super::round_executor::RoundExecutor;
 use super::types::{ExecutionContext, ExecutionResult, RoundContext};
-use crate::agentic::agents::{get_agent_registry, PromptBuilderContext, RemoteExecutionHints};
-use crate::agentic::core::{Message, MessageContent, MessageHelper, MessageSemanticKind, Session};
+use crate::agentic::agents::{
+    get_agent_registry, PromptBuilder, PromptBuilderContext, RemoteExecutionHints,
+};
+use crate::agentic::core::{
+    render_system_reminder, Message, MessageContent, MessageHelper, MessageSemanticKind,
+    RequestReasoningTokenPolicy, Session,
+};
 use crate::agentic::events::{AgenticEvent, EventPriority, EventQueue};
 use crate::agentic::image_analysis::{
     build_multimodal_message_with_images, process_image_contexts_for_provider, ImageContextData,
     ImageLimits,
 };
 use crate::agentic::session::{CompressionTailPolicy, ContextCompressor, SessionManager};
-use crate::agentic::tools::framework::ToolOptions;
 use crate::agentic::tools::{get_all_registered_tools, SubagentParentInfo};
 use crate::agentic::util::build_remote_workspace_layout_preview;
 use crate::agentic::{WorkspaceBackend, WorkspaceBinding};
@@ -82,17 +86,110 @@ impl ExecutionEngine {
     }
 
     fn estimate_request_tokens_internal(
-        messages: &mut [Message],
+        messages: &[Message],
         tools: Option<&[ToolDefinition]>,
     ) -> usize {
-        let mut total: usize = messages.iter_mut().map(|m| m.get_tokens()).sum();
-        total += 3;
+        MessageHelper::estimate_request_tokens(
+            messages,
+            tools,
+            RequestReasoningTokenPolicy::LatestTurnOnly,
+        )
+    }
 
-        if let Some(tool_defs) = tools {
-            total += TokenCounter::estimate_tool_definitions_tokens(tool_defs);
+    /// Emergency truncation: drop oldest API rounds (assistant+tool pairs)
+    /// from the front of the message list until estimated tokens fit within
+    /// `context_window`.  System messages and the first user message are
+    /// always preserved.
+    fn emergency_truncate_messages(
+        messages: Vec<Message>,
+        context_window: usize,
+        tools: Option<&[ToolDefinition]>,
+    ) -> Vec<Message> {
+        use crate::agentic::core::MessageRole;
+
+        // Separate preserved head (system + first user) from droppable body.
+        let mut preserved: Vec<Message> = Vec::new();
+        let mut droppable: Vec<Message> = Vec::new();
+        let mut seen_first_user = false;
+
+        for msg in messages {
+            if !seen_first_user {
+                let is_user = msg.role == MessageRole::User;
+                preserved.push(msg);
+                if is_user {
+                    seen_first_user = true;
+                }
+            } else {
+                droppable.push(msg);
+            }
         }
 
-        total
+        if droppable.is_empty() {
+            return preserved;
+        }
+
+        // Group droppable messages into API rounds.
+        // An API round starts with an Assistant message and includes all
+        // following Tool messages until the next Assistant or User message.
+        let mut rounds: Vec<Vec<Message>> = Vec::new();
+        for msg in droppable {
+            match msg.role {
+                MessageRole::Assistant => {
+                    rounds.push(vec![msg]);
+                }
+                MessageRole::Tool => {
+                    if let Some(last_round) = rounds.last_mut() {
+                        last_round.push(msg);
+                    } else {
+                        rounds.push(vec![msg]);
+                    }
+                }
+                _ => {
+                    rounds.push(vec![msg]);
+                }
+            }
+        }
+
+        // Drop rounds from the front until we fit.
+        let tool_tokens = tools
+            .map(TokenCounter::estimate_tool_definitions_tokens)
+            .unwrap_or(0);
+        let preserved_tokens: usize = preserved
+            .iter()
+            .map(|m| m.estimate_tokens_with_reasoning(true))
+            .sum::<usize>()
+            + tool_tokens
+            + 3;
+
+        let mut kept_start = 0;
+        let mut total_tokens = preserved_tokens
+            + rounds
+                .iter()
+                .flat_map(|r| r.iter())
+                .map(|m| m.estimate_tokens_with_reasoning(true))
+                .sum::<usize>();
+
+        while total_tokens > context_window && kept_start < rounds.len() {
+            let round_tokens: usize = rounds[kept_start]
+                .iter()
+                .map(|m| m.estimate_tokens_with_reasoning(true))
+                .sum();
+            total_tokens -= round_tokens;
+            kept_start += 1;
+        }
+
+        if kept_start > 0 {
+            warn!(
+                "Emergency truncation dropped {} API round(s) from context head",
+                kept_start
+            );
+        }
+
+        let mut result = preserved;
+        for round in rounds.into_iter().skip(kept_start) {
+            result.extend(round);
+        }
+        result
     }
 
     fn is_redacted_image_context(image: &ImageContextData) -> bool {
@@ -166,6 +263,81 @@ impl ExecutionEngine {
 
     fn should_use_fast_auto_model(turn_index: usize, original_user_input: &str) -> bool {
         turn_index == 0 && original_user_input.chars().count() <= 10
+    }
+
+    async fn build_prompt_context(
+        context: &ExecutionContext,
+        model_name: &str,
+        supports_image_understanding: bool,
+    ) -> Option<PromptBuilderContext> {
+        let workspace_path = context
+            .workspace
+            .as_ref()
+            .map(|workspace| workspace.root_path_string())?;
+
+        let base = PromptBuilderContext::new(
+            workspace_path.clone(),
+            Some(context.session_id.clone()),
+            Some(model_name.to_string()),
+        )
+        .with_supports_image_understanding(supports_image_understanding);
+
+        let Some(workspace) = context.workspace.as_ref() else {
+            return Some(base);
+        };
+        if !workspace.is_remote() {
+            return Some(base);
+        }
+
+        let Some(connection_id) = workspace.connection_id() else {
+            return Some(base);
+        };
+        let Some(manager) = get_remote_workspace_manager() else {
+            warn!(
+                "Remote workspace active but RemoteWorkspaceStateManager is missing; using client OS hints only"
+            );
+            return Some(base);
+        };
+
+        let ssh_manager = manager.get_ssh_manager().await;
+        let file_service = manager.get_file_service().await;
+        let (kernel_name, hostname) = if let Some(ref ssh) = ssh_manager {
+            if let Some(info) = ssh.get_server_info(connection_id).await {
+                (info.os_type, info.hostname)
+            } else {
+                ("Linux".to_string(), "remote".to_string())
+            }
+        } else {
+            ("Linux".to_string(), "remote".to_string())
+        };
+        let connection_display_name = match &workspace.backend {
+            WorkspaceBackend::Remote {
+                connection_name, ..
+            } => connection_name.clone(),
+            _ => connection_id.to_string(),
+        };
+        let remote_layout = if let Some(ref fs) = file_service {
+            match build_remote_workspace_layout_preview(fs, connection_id, &workspace_path, 200)
+                .await
+            {
+                Ok((_, preview)) => Some(preview),
+                Err(e) => {
+                    warn!("Remote workspace layout for prompt failed: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Some(base.with_remote_prompt_overlay(
+            RemoteExecutionHints {
+                connection_display_name,
+                kernel_name,
+                hostname,
+            },
+            remote_layout,
+        ))
     }
 
     pub(crate) async fn resolve_model_id_for_turn(
@@ -276,14 +448,29 @@ impl ExecutionEngine {
         workspace_path: Option<&Path>,
         current_turn_id: &str,
         attach_images: bool,
+        prepended_user_context: Option<&str>,
     ) -> BitFunResult<Vec<AIMessage>> {
         /// Only the last this many **messages** that contain images keep their images for the API.
         const MAX_IMAGE_BEARING_MESSAGE_ROUNDS: usize = 2;
 
         let limits = ImageLimits::for_provider(provider);
 
-        let mut result = Vec::with_capacity(messages.len());
+        let trimmed_user_context = prepended_user_context.and_then(|text| {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        let mut result =
+            Vec::with_capacity(messages.len() + usize::from(trimmed_user_context.is_some()));
         let mut attached_image_count = 0usize;
+        let first_non_system_index = messages
+            .iter()
+            .position(|msg| msg.role != crate::agentic::core::MessageRole::System)
+            .unwrap_or(messages.len());
+        let mut user_context_injected = false;
 
         let keep_image_messages = if attach_images {
             Self::image_bearing_indices_to_keep(messages, MAX_IMAGE_BEARING_MESSAGE_ROUNDS)
@@ -292,6 +479,13 @@ impl ExecutionEngine {
         };
 
         for (msg_idx, msg) in messages.iter().enumerate() {
+            if !user_context_injected && msg_idx == first_non_system_index {
+                if let Some(user_context) = trimmed_user_context {
+                    result.push(AIMessage::user(render_system_reminder(user_context)));
+                }
+                user_context_injected = true;
+            }
+
             if Self::skip_message_for_model_send(msg) {
                 continue;
             }
@@ -409,6 +603,12 @@ impl ExecutionEngine {
                     result.push(ai);
                 }
                 _ => result.push(AIMessage::from(msg)),
+            }
+        }
+
+        if !user_context_injected {
+            if let Some(user_context) = trimmed_user_context {
+                result.push(AIMessage::user(render_system_reminder(user_context)));
             }
         }
 
@@ -914,10 +1114,15 @@ impl ExecutionEngine {
             }
         };
 
-        // Get configuration for whether to support preserving historical thinking content
-        let enable_thinking = ai_client.config.enable_thinking_process;
-        let support_preserved_thinking = ai_client.config.support_preserved_thinking;
-        let context_window = ai_client.config.context_window as usize;
+        let model_context_window = ai_client.config.context_window as usize;
+        let session_max_tokens = session.config.max_context_tokens;
+        let context_window = model_context_window.min(session_max_tokens);
+        if model_context_window != session_max_tokens {
+            debug!(
+                "Context window: model={}, session_config={}, effective={}",
+                model_context_window, session_max_tokens, context_window
+            );
+        }
 
         // 3. Get System Prompt from current Agent
         debug!(
@@ -925,92 +1130,30 @@ impl ExecutionEngine {
             current_agent.name(),
             ai_client.config.model
         );
-        let system_prompt = {
-            let workspace_str = context
-                .workspace
-                .as_ref()
-                .map(|workspace| workspace.root_path_string());
-            let prompt_context = if let Some(workspace_path) = workspace_str {
-                let base = PromptBuilderContext::new(
-                    workspace_path.clone(),
-                    Some(context.session_id.clone()),
-                    Some(ai_client.config.model.clone()),
-                )
-                .with_supports_image_understanding(primary_supports_image_understanding);
-                let overlayed = if let Some(ws) = context.workspace.as_ref() {
-                    if ws.is_remote() {
-                        if let Some(cid) = ws.connection_id() {
-                            if let Some(mgr) = get_remote_workspace_manager() {
-                                let ssh_opt = mgr.get_ssh_manager().await;
-                                let fs_opt = mgr.get_file_service().await;
-                                let (kernel_name, hostname) = if let Some(ref ssh) = ssh_opt {
-                                    if let Some(info) = ssh.get_server_info(cid).await {
-                                        (info.os_type, info.hostname)
-                                    } else {
-                                        ("Linux".to_string(), "remote".to_string())
-                                    }
-                                } else {
-                                    ("Linux".to_string(), "remote".to_string())
-                                };
-                                let connection_display_name = match &ws.backend {
-                                    WorkspaceBackend::Remote {
-                                        connection_name, ..
-                                    } => connection_name.clone(),
-                                    _ => cid.to_string(),
-                                };
-                                let remote_layout = if let Some(ref fs) = fs_opt {
-                                    match build_remote_workspace_layout_preview(
-                                        fs,
-                                        cid,
-                                        &workspace_path,
-                                        200,
-                                    )
-                                    .await
-                                    {
-                                        Ok((_, s)) => Some(s),
-                                        Err(e) => {
-                                            warn!(
-                                                "Remote workspace layout for prompt failed: {}",
-                                                e
-                                            );
-                                            None
-                                        }
-                                    }
-                                } else {
-                                    None
-                                };
-                                base.with_remote_prompt_overlay(
-                                    RemoteExecutionHints {
-                                        connection_display_name,
-                                        kernel_name,
-                                        hostname,
-                                    },
-                                    remote_layout,
-                                )
-                            } else {
-                                warn!(
-                                    "Remote workspace active but RemoteWorkspaceStateManager is missing; using client OS hints only"
-                                );
-                                base
-                            }
-                        } else {
-                            base
-                        }
-                    } else {
-                        base
-                    }
-                } else {
-                    base
-                };
-                Some(overlayed)
-            } else {
-                None
-            };
-            current_agent
-                .get_system_prompt(prompt_context.as_ref())
-                .await?
+        let prompt_context = Self::build_prompt_context(
+            &context,
+            &ai_client.config.model,
+            primary_supports_image_understanding,
+        )
+        .await;
+        let request_context_reminder = if let Some(prompt_context) = prompt_context.as_ref() {
+            PromptBuilder::new(prompt_context.clone())
+                .build_request_context_reminder(&current_agent.request_context_policy())
+                .await
+        } else {
+            None
         };
+        let system_prompt = current_agent
+            .get_system_prompt(prompt_context.as_ref())
+            .await?;
         debug!("System prompt built, length: {} bytes", system_prompt.len());
+        debug!(
+            "Request context reminder built, length: {} bytes",
+            request_context_reminder
+                .as_ref()
+                .map(|text| text.len())
+                .unwrap_or(0)
+        );
         let system_prompt_message = Message::system(system_prompt.clone());
 
         // Add System Prompt to the beginning of message list (only for this execution, not persisted)
@@ -1020,6 +1163,8 @@ impl ExecutionEngine {
         let mut round_index = 0;
         let mut total_tools = 0;
         let mut last_assistant_message = Message::assistant("".to_string());
+        let mut consecutive_compression_failures: u32 = 0;
+        const MAX_CONSECUTIVE_COMPRESSION_FAILURES: u32 = 3;
 
         // Save the last token usage statistics
         let mut last_usage: Option<crate::util::types::ai::GeminiUsage> = None;
@@ -1077,6 +1222,8 @@ impl ExecutionEngine {
 
         let enable_context_compression = session.config.enable_context_compression;
         let compression_threshold = session.config.compression_threshold;
+        let microcompact_config =
+            crate::agentic::session::compression::microcompact::MicrocompactConfig::default();
 
         let mut execution_context_vars = context.context.clone();
         execution_context_vars.insert(
@@ -1127,15 +1274,9 @@ impl ExecutionEngine {
                 break;
             }
 
-            MessageHelper::compute_keep_thinking_flags(
-                &mut messages,
-                enable_thinking,
-                support_preserved_thinking,
-            );
-
             // Check and compress before sending AI request
-            let current_tokens =
-                Self::estimate_request_tokens_internal(&mut messages, tool_definitions.as_deref());
+            let mut current_tokens =
+                Self::estimate_request_tokens_internal(&messages, tool_definitions.as_deref());
             debug!(
                 "Round {} token usage before send: {} / {} tokens ({:.1}%)",
                 round_index,
@@ -1144,9 +1285,41 @@ impl ExecutionEngine {
                 (current_tokens as f32 / context_window as f32) * 100.0
             );
 
+            // L0: Microcompact — clear old compactable tool results before
+            // considering full compression.  This is a cheap, local-only
+            // operation that can free significant tokens.
+            let token_usage_ratio = current_tokens as f32 / context_window as f32;
+            if enable_context_compression && token_usage_ratio >= microcompact_config.trigger_ratio
+            {
+                if let Some(mc_result) =
+                    crate::agentic::session::compression::microcompact::microcompact_messages(
+                        &mut messages,
+                        &microcompact_config,
+                    )
+                {
+                    current_tokens = Self::estimate_request_tokens_internal(
+                        &mut messages,
+                        tool_definitions.as_deref(),
+                    );
+                    debug!(
+                        "Round {} after microcompact: cleared={}, kept={}, tokens now {} ({:.1}%)",
+                        round_index,
+                        mc_result.tools_cleared,
+                        mc_result.tools_kept,
+                        current_tokens,
+                        (current_tokens as f32 / context_window as f32) * 100.0
+                    );
+                }
+            }
+
             let token_usage_ratio = current_tokens as f32 / context_window as f32;
             let should_compress =
                 enable_context_compression && token_usage_ratio >= compression_threshold;
+
+            // Circuit breaker: skip full compression if it has failed too many
+            // consecutive times.  Microcompact and emergency truncation still run.
+            let circuit_breaker_open =
+                consecutive_compression_failures >= MAX_CONSECUTIVE_COMPRESSION_FAILURES;
 
             if !should_compress {
                 debug!(
@@ -1154,6 +1327,11 @@ impl ExecutionEngine {
                     context.session_id,
                     token_usage_ratio * 100.0,
                     compression_threshold * 100.0
+                );
+            } else if circuit_breaker_open {
+                warn!(
+                    "Compression circuit breaker open ({} consecutive failures), skipping full compression for round {}",
+                    consecutive_compression_failures, round_index
                 );
             } else {
                 info!(
@@ -1188,17 +1366,45 @@ impl ExecutionEngine {
                         );
 
                         messages = compressed_messages;
+                        consecutive_compression_failures = 0;
                     }
                     Ok(None) => {
                         debug!("All turns need to be kept, no compression performed");
+                        consecutive_compression_failures = 0;
                     }
                     Err(e) => {
+                        consecutive_compression_failures += 1;
                         error!(
-                            "Round {} compression failed: {}, continuing with uncompressed context",
-                            round_index, e
+                            "Round {} compression failed ({}/{}): {}, continuing with uncompressed context",
+                            round_index,
+                            consecutive_compression_failures,
+                            MAX_CONSECUTIVE_COMPRESSION_FAILURES,
+                            e
                         );
                     }
                 }
+            }
+
+            // L2: Emergency truncation — if tokens still exceed context_window
+            // after all compression layers, drop oldest API rounds until we fit.
+            let post_compress_tokens =
+                Self::estimate_request_tokens_internal(&messages, tool_definitions.as_deref());
+            if post_compress_tokens > context_window {
+                warn!(
+                    "Round {} tokens ({}) still exceed context_window ({}) after compression, performing emergency truncation",
+                    round_index, post_compress_tokens, context_window
+                );
+                messages = Self::emergency_truncate_messages(
+                    messages,
+                    context_window,
+                    tool_definitions.as_deref(),
+                );
+                let after_truncate =
+                    Self::estimate_request_tokens_internal(&messages, tool_definitions.as_deref());
+                info!(
+                    "Emergency truncation complete: tokens {} -> {}",
+                    post_compress_tokens, after_truncate
+                );
             }
 
             // Create round context
@@ -1238,6 +1444,7 @@ impl ExecutionEngine {
                     .map(|workspace| workspace.root_path()),
                 &context.dialog_turn_id,
                 primary_supports_image_understanding,
+                request_context_reminder.as_deref(),
             )
             .await?;
 
@@ -1480,32 +1687,12 @@ impl ExecutionEngine {
         );
         let description_context = crate::agentic::tools::framework::ToolUseContext {
             tool_call_id: None,
-            message_id: None,
             agent_type: Some(agent_type.to_string()),
             session_id: None,
             dialog_turn_id: None,
             workspace: workspace.cloned(),
-            safe_mode: None,
-            abort_controller: None,
-            read_file_timestamps: Default::default(),
-            options: Some(ToolOptions {
-                commands: vec![],
-                tools: vec![],
-                verbose: None,
-                slow_and_capable_model: None,
-                safe_mode: None,
-                fork_number: None,
-                message_log_name: None,
-                max_thinking_tokens: None,
-                is_koding_request: None,
-                koding_context: None,
-                is_custom_command: None,
-                custom_data: Some(tool_opts_custom),
-            }),
-            response_state: None,
-            image_context_provider: None,
+            custom_data: tool_opts_custom,
             computer_use_host: None,
-            subagent_parent_info: None,
             cancellation_token: None,
             workspace_services: None,
         };

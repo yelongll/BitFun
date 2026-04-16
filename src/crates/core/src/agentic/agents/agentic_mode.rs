@@ -27,6 +27,7 @@ impl AgenticMode {
                 "WebSearch".to_string(),
                 "TodoWrite".to_string(),
                 "MermaidInteractive".to_string(),
+                "GenerativeUI".to_string(),
                 "Skill".to_string(),
                 "AskUserQuestion".to_string(),
                 "Git".to_string(),
@@ -75,10 +76,7 @@ mod tests {
     #[test]
     fn always_uses_default_prompt_template() {
         let agent = AgenticMode::new();
-        assert_eq!(
-            agent.prompt_template_name(Some("gpt-5.1")),
-            "agentic_mode"
-        );
+        assert_eq!(agent.prompt_template_name(Some("gpt-5.1")), "agentic_mode");
         assert_eq!(
             agent.prompt_template_name(Some("GPT-5-CODEX")),
             "agentic_mode"

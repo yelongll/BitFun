@@ -1,6 +1,6 @@
 use super::{
-    Agent, AgenticMode, ClawMode, CodeReviewAgent, CoworkMode, DebugMode, ExploreAgent,
-    FileFinderAgent, GenerateDocAgent, InitAgent, PlanMode,
+    Agent, AgenticMode, ClawMode, CodeReviewAgent, CoworkMode, DebugMode, DeepResearchAgent,
+    ExploreAgent, FileFinderAgent, GenerateDocAgent, InitAgent, PlanMode, TeamMode,
 };
 use crate::agentic::agents::custom_subagents::{
     CustomSubagent, CustomSubagentKind, CustomSubagentLoader,
@@ -128,7 +128,7 @@ pub struct CustomSubagentDetail {
 
 fn default_model_id_for_builtin_agent(agent_type: &str) -> &'static str {
     match agent_type {
-        "agentic" | "Cowork" | "Plan" | "debug" | "Claw" => "auto",
+        "agentic" | "Cowork" | "Plan" | "debug" | "Claw" | "DeepResearch" | "Team" => "auto",
         _ => "primary",
     }
 }
@@ -294,6 +294,8 @@ impl AgentRegistry {
             Arc::new(DebugMode::new()),
             Arc::new(PlanMode::new()),
             Arc::new(ClawMode::new()),
+            Arc::new(DeepResearchAgent::new()),
+            Arc::new(TeamMode::new()),
         ];
         for mode in modes {
             register(&mut agents, mode, AgentCategory::Mode, None);
@@ -415,8 +417,7 @@ impl AgentRegistry {
             AgentCategory::Mode => {
                 let mode_configs = get_mode_configs().await;
                 let registered_tool_names = get_all_registered_tool_names().await;
-                let valid_tools: HashSet<String> =
-                    registered_tool_names.iter().cloned().collect();
+                let valid_tools: HashSet<String> = registered_tool_names.iter().cloned().collect();
                 let resolved_tools = resolve_effective_tools(
                     &entry.agent.default_tools(),
                     mode_configs.get(agent_type),
@@ -458,6 +459,8 @@ impl AgentRegistry {
                     "Cowork" => 1,
                     "Plan" => 2,
                     "debug" => 3,
+                    "DeepResearch" => 4,
+                    "Team" => 5,
                     _ => 99,
                 }
             };
@@ -520,11 +523,7 @@ impl AgentRegistry {
         drop(map);
         if let Some(workspace_root) = workspace_root {
             if let Some(project_entries) = self.read_project_subagents().get(workspace_root) {
-                result.extend(
-                    project_entries
-                        .values()
-                        .map(AgentInfo::from_agent_entry),
-                );
+                result.extend(project_entries.values().map(AgentInfo::from_agent_entry));
             }
         }
         result
@@ -1073,7 +1072,15 @@ mod tests {
 
     #[test]
     fn top_level_modes_default_to_auto() {
-        for agent_type in ["agentic", "Cowork", "Plan", "debug", "Claw"] {
+        for agent_type in [
+            "agentic",
+            "Cowork",
+            "Plan",
+            "debug",
+            "Claw",
+            "DeepResearch",
+            "Team",
+        ] {
             assert_eq!(default_model_id_for_builtin_agent(agent_type), "auto");
         }
     }

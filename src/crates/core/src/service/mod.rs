@@ -5,10 +5,12 @@
 pub(crate) mod agent_memory; // Agent memory prompt helpers
 pub mod ai_memory; // AI memory point management
 pub mod ai_rules; // AI rules management
+pub mod announcement; // Announcement / feature-demo / tips system
 pub(crate) mod bootstrap; // Workspace persona bootstrap helpers
 pub mod config; // Config management
 pub mod cron; // Scheduled jobs
 pub mod diff;
+pub mod file_watch;
 pub mod filesystem; // FileSystem management
 pub mod git; // Git service
 pub mod i18n; // I18n service
@@ -23,6 +25,7 @@ pub mod snapshot; // Snapshot-based change tracking
 pub mod system; // System command detection and execution
 pub mod token_usage; // Token usage tracking
 pub mod workspace; // Workspace management // Diff calculation and merge service
+pub mod workspace_runtime; // Workspace runtime layout / migration / initialization
 
 // Terminal is a standalone crate; re-export it here.
 pub use terminal_core as terminal;
@@ -30,6 +33,7 @@ pub use terminal_core as terminal;
 // Re-export main components.
 pub use ai_memory::{AIMemory, AIMemoryManager, MemoryType};
 pub use ai_rules::AIRulesService;
+pub use announcement::{AnnouncementCard, AnnouncementScheduler, AnnouncementSchedulerRef};
 pub use bootstrap::reset_workspace_persona_files_to_default;
 pub use config::{ConfigManager, ConfigProvider, ConfigService};
 pub use cron::{
@@ -37,6 +41,11 @@ pub use cron::{
 };
 pub use diff::{
     DiffConfig, DiffHunk, DiffLine, DiffLineType, DiffOptions, DiffResult, DiffService,
+};
+pub use file_watch::{
+    get_global_file_watch_service, get_watched_paths, initialize_file_watch_service,
+    start_file_watch, stop_file_watch, FileWatchEvent, FileWatchEventKind, FileWatchService,
+    FileWatcherConfig,
 };
 pub use filesystem::{DirectoryStats, FileSystemService, FileSystemServiceFactory};
 pub use git::GitService;
@@ -55,3 +64,8 @@ pub use token_usage::{
     TokenUsageService, TokenUsageSummary,
 };
 pub use workspace::{WorkspaceManager, WorkspaceProvider, WorkspaceService};
+pub use workspace_runtime::{
+    get_workspace_runtime_service_arc, try_get_workspace_runtime_service_arc,
+    RuntimeMigrationRecord, WorkspaceRuntimeContext, WorkspaceRuntimeEnsureResult,
+    WorkspaceRuntimeService, WorkspaceRuntimeTarget,
+};

@@ -36,6 +36,7 @@ function enrichCapabilities(agent: AgentWithCapabilities): AgentWithCapabilities
     if (id === 'plan') return { ...agent, capabilities: [{ category: '分析', level: 5 }, { category: '文档', level: 3 }] };
     if (id === 'debug') return { ...agent, capabilities: [{ category: '编码', level: 5 }, { category: '分析', level: 3 }] };
     if (id === 'cowork') return { ...agent, capabilities: [{ category: '分析', level: 4 }, { category: '创意', level: 3 }] };
+    if (id === 'deepresearch') return { ...agent, capabilities: [{ category: '分析', level: 5 }, { category: '文档', level: 4 }] };
   }
 
   if (id === 'explore') return { ...agent, capabilities: [{ category: '分析', level: 4 }, { category: '编码', level: 3 }] };

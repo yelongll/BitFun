@@ -5,16 +5,16 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search as SearchIcon, CaseSensitive, Regex, WholeWord, List, Loader2 } from 'lucide-react';
+import { Search as SearchIcon, CaseSensitive, Regex, WholeWord, List } from 'lucide-react';
 import {
   FileExplorer,
   getNewItemParentPath,
   useFileSystem,
   type FileExplorerToolbarHandlers,
 } from '@/tools/file-system';
+import { useExplorerSearch } from '@/tools/file-explorer';
 import { Search, IconButton, Tooltip } from '@/component-library';
 import { FileSearchResults } from '@/tools/file-system/components/FileSearchResults';
-import { useFileSearch } from '@/hooks';
 import { workspaceAPI } from '@/infrastructure/api';
 import type { FileSystemNode } from '@/tools/file-system/types';
 import { globalEventBus } from '@/infrastructure/event-bus';
@@ -23,8 +23,15 @@ import { InputDialog, CubeLoading } from '@/component-library';
 import { openFileInBestTarget } from '@/shared/utils/tabUtils';
 import { PanelHeader } from './base';
 import { createLogger } from '@/shared/utils/logger';
-import { basenamePath, dirnameAbsolutePath, normalizeLocalPathForRename, replaceBasename } from '@/shared/utils/pathUtils';
+import {
+  basenamePath,
+  dirnameAbsolutePath,
+  normalizeLocalPathForRename,
+  pathsEquivalentFs,
+  replaceBasename,
+} from '@/shared/utils/pathUtils';
 import { workspaceManager } from '@/infrastructure/services/business/workspaceManager';
+import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
 import { isRemoteWorkspace } from '@/shared/types';
 import {
   downloadWorkspaceFileToDisk,
@@ -37,6 +44,8 @@ import '@/tools/file-system/styles/FileExplorer.scss';
 import './FilesPanel.scss';
 
 const log = createLogger('FilesPanel');
+const FOCUS_REFRESH_THROTTLE_MS = 1000;
+const REMOTE_REFRESH_POLL_MS = 15000;
 
 interface FilesPanelProps {
   workspacePath?: string;
@@ -61,26 +70,43 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
   onExplorerToolbarApi,
 }) => {
   const { t } = useTranslation('panels/files');
+  const { workspace: currentWorkspace } = useCurrentWorkspace();
   
   const panelRef = useRef<HTMLDivElement>(null);
+  const lastFocusRefreshAtRef = useRef<number>(0);
   const [internalViewMode, setInternalViewMode] = useState<'tree' | 'search'>('tree');
   const viewMode = externalViewMode !== undefined ? externalViewMode : internalViewMode;
+  const isRemoteCurrentWorkspace = Boolean(
+    workspacePath
+    && currentWorkspace
+    && pathsEquivalentFs(currentWorkspace.rootPath, workspacePath)
+    && isRemoteWorkspace(currentWorkspace)
+  );
   
   const {
     query: searchQuery,
     setQuery: setSearchQuery,
-    allResults: searchResults,
-    searchPhase,
+    searchMode,
+    setSearchMode,
+    allGroups: searchResults,
     isSearching,
     error: searchError,
+    filenameLimit,
+    contentLimit,
+    filenameTruncated,
+    contentTruncated,
     searchOptions,
     setSearchOptions,
     clearSearch,
-  } = useFileSearch({
+  } = useExplorerSearch({
     workspacePath,
-    enableContentSearch: true,
-    contentSearchDebounce: 150,
-    minSearchLength: 1,
+    initialMode: 'content',
+    filenameSearchDebounce: 300,
+    contentSearchDebounce: 300,
+    minFilenameLength: 1,
+    minContentLength: 2,
+    filenameMaxResults: 500,
+    contentMaxResults: 1000,
   });
 
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
@@ -97,11 +123,20 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
   });
 
   const notification = useNotification();
+  const searchLimitNotice =
+    searchMode === 'content'
+      ? contentTruncated
+        ? t('search.limitReachedContent', { count: contentLimit })
+        : null
+      : filenameTruncated
+        ? t('search.limitReachedFiles', { count: filenameLimit })
+        : null;
 
   const {
     fileTree,
     selectedFile,
     expandedFolders,
+    loadingPaths,
     loading,
     error,
     loadFileTree,
@@ -113,8 +148,8 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     autoLoad: true,
     enablePathCompression: true,
     showHiddenFiles: false,
-    enableAutoWatch: true,
-    enableLazyLoad: true
+    // Local filesystem watchers are unavailable for remote SSH workspaces.
+    enableAutoWatch: !isRemoteCurrentWorkspace,
   });
   const handleNodeExpandLazy = useCallback((path: string) => {
     expandFolderLazy(path);
@@ -292,6 +327,29 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
   const handleFileTreeRefresh = useCallback(() => {
     loadFileTree(undefined, true);
   }, [loadFileTree]);
+
+  const triggerFocusCompensatingRefresh = useCallback((reason: 'windowFocus' | 'visibilityVisible') => {
+    if (!workspacePath || viewMode !== 'tree') {
+      return;
+    }
+
+    const panelEl = panelRef.current;
+    if (!panelEl || panelEl.getClientRects().length === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastFocusRefreshAtRef.current < FOCUS_REFRESH_THROTTLE_MS) {
+      return;
+    }
+
+    lastFocusRefreshAtRef.current = now;
+    log.debug('Compensating file tree refresh after focus/visibility', {
+      reason,
+      workspacePath,
+    });
+    void loadFileTree(undefined, true);
+  }, [workspacePath, viewMode, loadFileTree]);
 
   const handleNavigateToPath = useCallback((data: { path: string; scrollIntoView?: boolean }) => {
     if (!data.path || !workspacePath) {
@@ -479,6 +537,58 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
   }, [handleOpenFile, handleNewFile, handleNewFolder, handleStartRename, handleDelete, handleReveal, handleFileDownload, handlePasteFromContextMenu, handleFileTreeRefresh, handleNavigateToPath]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleWindowFocus = () => {
+      triggerFocusCompensatingRefresh('windowFocus');
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerFocusCompensatingRefresh('visibilityVisible');
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [triggerFocusCompensatingRefresh]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!isRemoteCurrentWorkspace || !workspacePath || viewMode !== 'tree') {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      const panelEl = panelRef.current;
+      if (!panelEl || panelEl.getClientRects().length === 0) {
+        return;
+      }
+
+      log.debug('Polling remote file tree refresh', { workspacePath });
+      void loadFileTree(undefined, true);
+    }, REMOTE_REFRESH_POLL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isRemoteCurrentWorkspace, workspacePath, viewMode, loadFileTree]);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || !('__TAURI__' in window) || !workspacePath) {
       return;
     }
@@ -577,6 +687,11 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     onFileDoubleClick?.(filePath);
   }, [onFileDoubleClick]);
 
+  const handleSearchResultSelect = useCallback((filePath: string, fileName: string) => {
+    selectFile(filePath);
+    onFileSelect?.(filePath, fileName);
+  }, [selectFile, onFileSelect]);
+
   const handleClearSearch = useCallback(() => {
     clearSearch();
   }, [clearSearch]);
@@ -608,27 +723,37 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     loadFileTree(workspacePath || '', false);
   }, [loadFileTree, workspacePath]);
 
-  useEffect(() => {
-    if (!onExplorerToolbarApi) return;
-    if (!hideExplorerToolbar || !workspacePath || viewMode !== 'tree') {
-      onExplorerToolbarApi(null);
-      return;
+  const explorerToolbarApi = React.useMemo<FileExplorerToolbarHandlers | null>(() => {
+    if (!workspacePath || viewMode !== 'tree') {
+      return null;
     }
-    onExplorerToolbarApi({
+
+    return {
       onNewFile: handleExplorerToolbarNewFile,
       onNewFolder: handleExplorerToolbarNewFolder,
       onRefresh: handleExplorerToolbarRefresh,
-    });
-    return () => onExplorerToolbarApi(null);
+    };
   }, [
-    onExplorerToolbarApi,
-    hideExplorerToolbar,
     workspacePath,
     viewMode,
     handleExplorerToolbarNewFile,
     handleExplorerToolbarNewFolder,
     handleExplorerToolbarRefresh,
   ]);
+
+  useEffect(() => {
+    if (!onExplorerToolbarApi) return;
+    onExplorerToolbarApi(hideExplorerToolbar ? explorerToolbarApi : null);
+  }, [
+    onExplorerToolbarApi,
+    hideExplorerToolbar,
+    explorerToolbarApi,
+  ]);
+
+  useEffect(() => {
+    if (!onExplorerToolbarApi) return;
+    return () => onExplorerToolbarApi(null);
+  }, [onExplorerToolbarApi]);
 
   return (
     <div 
@@ -667,35 +792,54 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
               clearable
               size="small"
               loading={isSearching}
-              suffixContent={
-                <div className="bitfun-files-panel__search-options">
-                  <Tooltip content={t('options.caseSensitive')}>
-                    <button
-                      className={`bitfun-files-panel__search-option ${searchOptions.caseSensitive ? 'active' : ''}`}
-                      onClick={() => setSearchOptions(prev => ({ ...prev, caseSensitive: !prev.caseSensitive }))}
-                    >
-                      <CaseSensitive size={14} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content={t('options.wholeWord')}>
-                    <button
-                      className={`bitfun-files-panel__search-option ${searchOptions.wholeWord ? 'active' : ''}`}
-                      onClick={() => setSearchOptions(prev => ({ ...prev, wholeWord: !prev.wholeWord }))}
-                    >
-                      <WholeWord size={14} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content={t('options.useRegex')}>
-                    <button
-                      className={`bitfun-files-panel__search-option ${searchOptions.useRegex ? 'active' : ''}`}
-                      onClick={() => setSearchOptions(prev => ({ ...prev, useRegex: !prev.useRegex }))}
-                    >
-                      <Regex size={14} />
-                    </button>
-                  </Tooltip>
-                </div>
-              }
             />
+            <div className="bitfun-files-panel__search-toolbar">
+              <div className="bitfun-files-panel__search-modes">
+                <button
+                  type="button"
+                  className={`bitfun-files-panel__search-mode ${searchMode === 'content' ? 'active' : ''}`}
+                  onClick={() => setSearchMode('content')}
+                >
+                  {t('search.modeContent')}
+                </button>
+                <button
+                  type="button"
+                  className={`bitfun-files-panel__search-mode ${searchMode === 'filenames' ? 'active' : ''}`}
+                  onClick={() => setSearchMode('filenames')}
+                >
+                  {t('search.modeFiles')}
+                </button>
+              </div>
+              <div className="bitfun-files-panel__search-options">
+                <Tooltip content={t('options.caseSensitive')}>
+                  <button
+                    type="button"
+                    className={`bitfun-files-panel__search-option ${searchOptions.caseSensitive ? 'active' : ''}`}
+                    onClick={() => setSearchOptions(prev => ({ ...prev, caseSensitive: !prev.caseSensitive }))}
+                  >
+                    <CaseSensitive size={14} />
+                  </button>
+                </Tooltip>
+                <Tooltip content={t('options.wholeWord')}>
+                  <button
+                    type="button"
+                    className={`bitfun-files-panel__search-option ${searchOptions.wholeWord ? 'active' : ''}`}
+                    onClick={() => setSearchOptions(prev => ({ ...prev, wholeWord: !prev.wholeWord }))}
+                  >
+                    <WholeWord size={14} />
+                  </button>
+                </Tooltip>
+                <Tooltip content={t('options.useRegex')}>
+                  <button
+                    type="button"
+                    className={`bitfun-files-panel__search-option ${searchOptions.useRegex ? 'active' : ''}`}
+                    onClick={() => setSearchOptions(prev => ({ ...prev, useRegex: !prev.useRegex }))}
+                  >
+                    <Regex size={14} />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
           </div>
         )}
 
@@ -720,12 +864,9 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
         ) : viewMode === 'search' ? (
           searchQuery ? (
             <div className="bitfun-files-panel__search-content">
-              {isSearching && (
-                <div className="bitfun-files-panel__search-status">
-                  <Loader2 size={14} className="bitfun-files-panel__search-spinner" />
-                  <span>
-                    {!searchPhase.filenameComplete ? t('status.searchingFilename') : t('status.searchingContent')}
-                  </span>
+              {searchLimitNotice && (
+                <div className="bitfun-files-panel__search-limit-notice">
+                  <span>{searchLimitNotice}</span>
                 </div>
               )}
               
@@ -745,7 +886,8 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
                 <FileSearchResults
                   results={searchResults}
                   searchQuery={searchQuery}
-                  onFileSelect={handleFileSelect}
+                  onFileSelect={handleSearchResultSelect}
+                  workspacePath={workspacePath}
                   className="bitfun-files-panel__search-results"
                 />
               ) : (
@@ -768,7 +910,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
             </div>
           )
         ) : (
-          loading ? (
+          loading && fileTree.length === 0 ? (
             <div className="bitfun-files-panel__loading">
               <CubeLoading size="medium" text={t('status.loadingFileTree')} />
             </div>
@@ -788,6 +930,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
               fileTree={fileTree}
               selectedFile={selectedFile}
               expandedFolders={expandedFolders}
+              loadingPaths={loadingPaths}
               onNodeExpand={handleNodeExpandLazy}
               onFileSelect={handleFileSelect}
               onFileDoubleClick={handleFileDoubleClick}

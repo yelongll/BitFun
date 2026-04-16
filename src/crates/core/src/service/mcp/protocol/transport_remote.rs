@@ -3,12 +3,11 @@
 //! Uses the official `rmcp` Rust SDK to implement the MCP Streamable HTTP client transport.
 
 use super::types::{
-    InitializeResult as BitFunInitializeResult, MCPCapability, MCPAnnotations, MCPPrompt,
+    InitializeResult as BitFunInitializeResult, MCPAnnotations, MCPCapability, MCPPrompt,
     MCPPromptArgument, MCPPromptMessage, MCPPromptMessageContent, MCPPromptMessageContentBlock,
-    MCPResource, MCPResourceContent, MCPResourceIcon, MCPServerInfo, MCPTool,
-    MCPToolAnnotations, MCPToolResult, MCPToolResultContent,
-    PromptsGetResult, PromptsListResult, ResourcesListResult, ResourcesReadResult,
-    ToolsListResult,
+    MCPResource, MCPResourceContent, MCPResourceIcon, MCPServerInfo, MCPTool, MCPToolAnnotations,
+    MCPToolResult, MCPToolResultContent, PromptsGetResult, PromptsListResult, ResourcesListResult,
+    ResourcesReadResult, ToolsListResult,
 };
 use crate::service::mcp::auth::build_authorization_manager;
 use crate::util::errors::{BitFunError, BitFunResult};
@@ -731,7 +730,9 @@ fn map_tool(tool: rmcp::model::Tool) -> MCPTool {
         title: tool.title,
         description: tool.description.map(|d| d.to_string()),
         input_schema: schema,
-        output_schema: tool.output_schema.map(|schema| Value::Object((*schema).clone())),
+        output_schema: tool
+            .output_schema
+            .map(|schema| Value::Object((*schema).clone())),
         icons: map_icons(tool.icons.as_ref()),
         annotations: tool.annotations.map(map_tool_annotations),
         meta: map_optional_via_json(tool.meta.as_ref()),
@@ -841,10 +842,7 @@ fn map_prompt_message(message: rmcp::model::PromptMessage) -> MCPPromptMessage {
         }
     };
 
-    MCPPromptMessage {
-        role,
-        content,
-    }
+    MCPPromptMessage { role, content }
 }
 
 fn map_tool_result(result: rmcp::model::CallToolResult) -> MCPToolResult {
@@ -897,13 +895,7 @@ fn map_icons(icons: Option<&Vec<rmcp::model::Icon>>) -> Option<Vec<MCPResourceIc
                 src: icon.src.clone(),
                 mime_type: icon.mime_type.clone(),
                 sizes: icon.sizes.as_ref().map(|sizes| {
-                    Value::Array(
-                        sizes
-                            .iter()
-                            .cloned()
-                            .map(Value::String)
-                            .collect::<Vec<_>>(),
-                    )
+                    Value::Array(sizes.iter().cloned().map(Value::String).collect::<Vec<_>>())
                 }),
             })
             .collect()
@@ -917,7 +909,9 @@ fn map_annotations(annotations: Option<&rmcp::model::Annotations>) -> Option<MCP
             .as_ref()
             .map(|audience| audience.iter().map(map_role).collect()),
         priority: annotations.priority.map(f64::from),
-        last_modified: annotations.last_modified.map(|timestamp| timestamp.to_rfc3339()),
+        last_modified: annotations
+            .last_modified
+            .map(|timestamp| timestamp.to_rfc3339()),
     })
 }
 
@@ -1150,7 +1144,8 @@ mod tests {
         let mapped = map_prompt_message(prompt_message);
         assert!(matches!(
             mapped.content,
-            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Text { ref text }) if text == "hello"
+            MCPPromptMessageContent::Block(ref block)
+                if matches!(block.as_ref(), MCPPromptMessageContentBlock::Text { text } if text == "hello")
         ));
 
         let resource_link = RawResource {
@@ -1173,8 +1168,12 @@ mod tests {
         let mapped = map_prompt_message(prompt_message);
         assert!(matches!(
             mapped.content,
-            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::ResourceLink { ref uri, .. })
-                if uri == "file:///tmp/input.md"
+            MCPPromptMessageContent::Block(ref block)
+                if matches!(
+                    block.as_ref(),
+                    MCPPromptMessageContentBlock::ResourceLink { uri, .. }
+                        if uri == "file:///tmp/input.md"
+                )
         ));
 
         let embedded = rmcp::model::RawEmbeddedResource {
@@ -1194,8 +1193,12 @@ mod tests {
         let mapped = map_prompt_message(prompt_message);
         assert!(matches!(
             mapped.content,
-            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Resource { ref resource })
-                if resource.uri == "file:///tmp/embedded.txt"
+            MCPPromptMessageContent::Block(ref block)
+                if matches!(
+                    block.as_ref(),
+                    MCPPromptMessageContentBlock::Resource { resource }
+                        if resource.uri == "file:///tmp/embedded.txt"
+                )
         ));
     }
 }

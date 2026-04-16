@@ -74,16 +74,17 @@ pub const COMPUTER_USE_POINT_CROP_HALF_MAX: u32 = 250;
 #[inline]
 pub fn clamp_point_crop_half_extent(requested: Option<u32>) -> u32 {
     let v = requested.unwrap_or(COMPUTER_USE_POINT_CROP_HALF_DEFAULT);
-    v.clamp(COMPUTER_USE_POINT_CROP_HALF_MIN, COMPUTER_USE_POINT_CROP_HALF_MAX)
+    v.clamp(
+        COMPUTER_USE_POINT_CROP_HALF_MIN,
+        COMPUTER_USE_POINT_CROP_HALF_MAX,
+    )
 }
 
 /// Suggest a tighter half-extent from AX **native** bounds size (smaller controls → smaller JPEG).
 #[inline]
 pub fn suggested_point_crop_half_extent_from_native_bounds(native_w: u32, native_h: u32) -> u32 {
     let max_edge = native_w.max(native_h).max(1);
-    let half = max_edge
-        .saturating_div(2)
-        .saturating_add(32);
+    let half = max_edge.saturating_div(2).saturating_add(32);
     clamp_point_crop_half_extent(Some(half))
 }
 
@@ -174,6 +175,9 @@ pub struct ComputerScreenshot {
     /// When non-empty, the model can use `click_label` with a label number instead of coordinates.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub som_labels: Vec<SomElement>,
+    /// Condensed text representation of the UI tree, focusing on interactive elements (inspired by TuriX-CUA).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_tree_text: Option<String>,
     /// Desktop: this JPEG was produced by implicit 500×500 confirmation crop (mouse or text focus center).
     #[serde(default, skip_serializing_if = "is_false")]
     pub implicit_confirmation_crop_applied: bool,
@@ -382,13 +386,17 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
     /// Press a mouse button and hold it at the current pointer position.
     /// `button`: "left" | "right" | "middle"
     async fn mouse_down(&self, _button: &str) -> BitFunResult<()> {
-        Err(BitFunError::tool("mouse_down is not supported on this host.".to_string()))
+        Err(BitFunError::tool(
+            "mouse_down is not supported on this host.".to_string(),
+        ))
     }
 
     /// Release a mouse button at the current pointer position.
     /// `button`: "left" | "right" | "middle"
     async fn mouse_up(&self, _button: &str) -> BitFunResult<()> {
-        Err(BitFunError::tool("mouse_up is not supported on this host.".to_string()))
+        Err(BitFunError::tool(
+            "mouse_up is not supported on this host.".to_string(),
+        ))
     }
 
     async fn scroll(&self, delta_x: i32, delta_y: i32) -> BitFunResult<()>;
@@ -467,8 +475,8 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
     /// Enumerate all visible interactive UI elements for Set-of-Mark (SoM) overlay.
     /// Returns elements suitable for numbered label annotation on screenshots.
     /// Default: empty (no SoM support).
-    async fn enumerate_som_elements(&self) -> Vec<SomElement> {
-        vec![]
+    async fn enumerate_som_elements(&self) -> (Vec<SomElement>, Option<String>) {
+        (vec![], None)
     }
 
     /// Record a completed action for loop detection and history tracking.
@@ -496,6 +504,25 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
     fn get_action_history(&self) -> Vec<ActionRecord> {
         vec![]
     }
+
+    /// Launch a macOS/Windows/Linux application by name and return its PID.
+    /// Default: unsupported. Desktop host overrides with platform-specific implementation.
+    async fn open_app(&self, _app_name: &str) -> BitFunResult<OpenAppResult> {
+        Err(BitFunError::tool(
+            "open_app is not available on this host.".to_string(),
+        ))
+    }
+}
+
+/// Result of launching an application via [`ComputerUseHost::open_app`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAppResult {
+    pub app_name: String,
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_id: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
 }
 
 /// A visible interactive UI element discovered via the accessibility tree,
@@ -512,6 +539,12 @@ pub struct SomElement {
     /// AX identifier, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
+    /// AX value, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// AX description, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Global screen center X (host pointer space).
     pub global_center_x: f64,
     /// Global screen center Y (host pointer space).
@@ -523,12 +556,14 @@ pub struct SomElement {
     pub bounds_height: f64,
 }
 
-
 /// Whether the latest screenshot JPEG was the full display, a point crop, or a quadrant-drill region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComputerUseScreenshotRefinement {
     FullDisplay,
-    RegionAroundPoint { center_x: u32, center_y: u32 },
+    RegionAroundPoint {
+        center_x: u32,
+        center_y: u32,
+    },
     /// Partial-screen view from hierarchical quadrant navigation.
     QuadrantNavigation {
         x0: u32,

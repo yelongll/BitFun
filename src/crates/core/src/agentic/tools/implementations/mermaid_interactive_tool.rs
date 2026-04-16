@@ -58,10 +58,10 @@ impl MermaidInteractiveTool {
         if !starts_with_valid {
             return (false, Some(format!(
                 "Mermaid code must start with a valid diagram type. Supported diagram types: graph, flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, journey, timeline, mindmap, etc.\nCurrent code start: {}",
-                if trimmed.len() > 50 { 
+                if trimmed.len() > 50 {
                     format!("{}...", &trimmed[..50]) 
-                } else { 
-                    trimmed.to_string() 
+                } else {
+                    trimmed.to_string()
                 }
             )));
         }
@@ -87,24 +87,29 @@ impl MermaidInteractiveTool {
         // Check if sequenceDiagram has participants
         if trimmed.starts_with("sequenceDiagram")
             && !trimmed.contains("participant")
-                && !trimmed.contains("->>")
-                && !trimmed.contains("-->>")
-            {
-                return (false, Some("Sequence diagram (sequenceDiagram) must contain participant definitions and interaction arrows. Example: participant A\nA->>B: Message".to_string()));
-            }
+            && !trimmed.contains("->>")
+            && !trimmed.contains("-->>")
+        {
+            return (false, Some("Sequence diagram (sequenceDiagram) must contain participant definitions and interaction arrows. Example: participant A\nA->>B: Message".to_string()));
+        }
 
         // Check if classDiagram has class definitions
         if trimmed.starts_with("classDiagram")
-            && !trimmed.contains("class ") && !trimmed.contains("<|--") && !trimmed.contains("..>")
-            {
-                return (false, Some("Class diagram (classDiagram) must contain class definitions and relationships. Example: class A\nclass B\nA <|-- B".to_string()));
-            }
+            && !trimmed.contains("class ")
+            && !trimmed.contains("<|--")
+            && !trimmed.contains("..>")
+        {
+            return (false, Some("Class diagram (classDiagram) must contain class definitions and relationships. Example: class A\nclass B\nA <|-- B".to_string()));
+        }
 
         // Check if stateDiagram has state definitions
         if trimmed.starts_with("stateDiagram")
-            && !trimmed.contains("state ") && !trimmed.contains("[*]") && !trimmed.contains("-->") {
-                return (false, Some("State diagram (stateDiagram) must contain state definitions and transitions. Example: state A\n[*] --> A".to_string()));
-            }
+            && !trimmed.contains("state ")
+            && !trimmed.contains("[*]")
+            && !trimmed.contains("-->")
+        {
+            return (false, Some("State diagram (stateDiagram) must contain state definitions and transitions. Example: state A\n[*] --> A".to_string()));
+        }
 
         // Check for unclosed brackets
         let open_brackets = trimmed.matches('[').count();

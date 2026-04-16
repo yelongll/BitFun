@@ -147,6 +147,37 @@ export interface SearchFilesRequest {
   rootPath: string;
   pattern: string;
   searchContent?: boolean;
+  searchId?: string;
+  caseSensitive?: boolean;
+  useRegex?: boolean;
+  wholeWord?: boolean;
+  maxResults?: number;
+  includeDirectories?: boolean;
+}
+
+export interface SearchFilenamesRequest {
+  rootPath: string;
+  pattern: string;
+  searchId?: string;
+  caseSensitive?: boolean;
+  useRegex?: boolean;
+  wholeWord?: boolean;
+  maxResults?: number;
+  includeDirectories?: boolean;
+}
+
+export interface SearchFileContentsRequest {
+  rootPath: string;
+  pattern: string;
+  searchId?: string;
+  caseSensitive?: boolean;
+  useRegex?: boolean;
+  wholeWord?: boolean;
+  maxResults?: number;
+}
+
+export interface CancelSearchRequest {
+  searchId: string;
 }
 
 export type SearchMatchType = 'fileName' | 'content';
@@ -158,4 +189,66 @@ export interface FileSearchResult {
   matchType: SearchMatchType;
   lineNumber?: number;
   matchedContent?: string;
+  previewBefore?: string;
+  previewInside?: string;
+  previewAfter?: string;
+}
+
+export interface FileSearchResponse {
+  results: FileSearchResult[];
+  limit: number;
+  truncated: boolean;
+}
+
+export interface FileSearchResultGroup {
+  path: string;
+  name: string;
+  isDirectory: boolean;
+  fileNameMatch?: FileSearchResult;
+  contentMatches: FileSearchResult[];
+}
+
+export type FileSearchStreamKind = 'filenames' | 'content';
+
+export interface FileSearchStreamStartResponse {
+  searchId: string;
+  limit: number;
+}
+
+export interface FileSearchProgressEvent {
+  searchId: string;
+  searchKind: FileSearchStreamKind;
+  results: FileSearchResultGroup[];
+}
+
+export interface FileSearchCompleteEvent {
+  searchId: string;
+  searchKind: FileSearchStreamKind;
+  limit: number;
+  truncated: boolean;
+  totalResults: number;
+}
+
+export interface FileSearchErrorEvent {
+  searchId: string;
+  searchKind: FileSearchStreamKind;
+  error: string;
+}
+
+export interface ExplorerNodeDto {
+  path: string;
+  name: string;
+  isDirectory: boolean;
+  size?: number | null;
+  extension?: string | null;
+  lastModified?: number | null;
+  children?: ExplorerNodeDto[];
+}
+
+export interface ExplorerChildrenPageDto {
+  children: ExplorerNodeDto[];
+  total: number;
+  hasMore: boolean;
+  offset: number;
+  limit: number;
 }

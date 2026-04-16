@@ -1,36 +1,68 @@
 //! Tool framework - Tool interface definition and execution context
-use crate::util::types::ToolImageAttachment;
-use super::image_context::ImageContextProviderRef;
-use super::pipeline::SubagentParentInfo;
+use crate::agentic::tools::workspace_paths::{
+    build_bitfun_runtime_uri, is_bitfun_runtime_uri, normalize_runtime_relative_path,
+    parse_bitfun_runtime_uri,
+};
 use crate::agentic::workspace::WorkspaceServices;
 use crate::agentic::WorkspaceBinding;
+use crate::infrastructure::get_path_manager_arc;
+use crate::service::remote_ssh::workspace_state::remote_workspace_runtime_root;
+use crate::service::{get_workspace_runtime_service_arc, WorkspaceRuntimeContext};
 use crate::util::errors::BitFunResult;
+use crate::util::types::ToolImageAttachment;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolPathBackend {
+    Local,
+    RemoteWorkspace,
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolPathResolution {
+    pub requested_path: String,
+    pub logical_path: String,
+    pub resolved_path: String,
+    pub backend: ToolPathBackend,
+    pub runtime_scope: Option<String>,
+    pub runtime_root: Option<PathBuf>,
+}
+
+impl ToolPathResolution {
+    pub fn uses_remote_workspace_backend(&self) -> bool {
+        matches!(self.backend, ToolPathBackend::RemoteWorkspace)
+    }
+
+    pub fn is_runtime_artifact(&self) -> bool {
+        self.runtime_scope.is_some()
+    }
+
+    pub fn logical_child_path(&self, absolute_child_path: &Path) -> Option<String> {
+        let scope = self.runtime_scope.as_deref()?;
+        let root = self.runtime_root.as_ref()?;
+        let relative = absolute_child_path.strip_prefix(root).ok()?;
+        let relative_str = relative.to_string_lossy().replace('\\', "/");
+        build_bitfun_runtime_uri(scope, &relative_str).ok()
+    }
+}
 
 /// Tool use context
 #[derive(Debug, Clone)]
 pub struct ToolUseContext {
     pub tool_call_id: Option<String>,
-    pub message_id: Option<String>,
     pub agent_type: Option<String>,
     pub session_id: Option<String>,
     pub dialog_turn_id: Option<String>,
     pub workspace: Option<WorkspaceBinding>,
-    pub safe_mode: Option<bool>,
-    pub abort_controller: Option<String>,
-    pub read_file_timestamps: HashMap<String, u64>,
-    pub options: Option<ToolOptions>,
-    pub response_state: Option<ResponseState>,
-    /// Image context provider (dependency injection)
-    pub image_context_provider: Option<ImageContextProviderRef>,
+    /// Extended context data passed from execution layer to tools.
+    pub custom_data: HashMap<String, Value>,
     /// Desktop automation (Computer use); only set in BitFun desktop.
     pub computer_use_host: Option<crate::agentic::tools::computer_use_host::ComputerUseHostRef>,
-    pub subagent_parent_info: Option<SubagentParentInfo>,
     // Cancel tool execution more timely, especially for tools like TaskTool that need to run for a long time
     pub cancellation_token: Option<CancellationToken>,
     /// Workspace I/O services (filesystem + shell) — use these instead of
@@ -61,10 +93,8 @@ impl ToolUseContext {
     /// Whether the session primary model accepts image inputs (from tool-definition / pipeline context).
     /// Defaults to **true** when unset (e.g. API listings without model metadata).
     pub fn primary_model_supports_image_understanding(&self) -> bool {
-        self.options
-            .as_ref()
-            .and_then(|o| o.custom_data.as_ref())
-            .and_then(|m| m.get("primary_model_supports_image_understanding"))
+        self.custom_data
+            .get("primary_model_supports_image_understanding")
             .and_then(|v| v.as_bool())
             .unwrap_or(true)
     }
@@ -72,10 +102,7 @@ impl ToolUseContext {
     /// Resolve a user or model-supplied path for file/shell tools. Uses POSIX semantics when the
     /// workspace is remote SSH so Windows-hosted clients still resolve `/home/...` correctly.
     pub fn resolve_workspace_tool_path(&self, path: &str) -> BitFunResult<String> {
-        let workspace_root_owned = self
-            .workspace
-            .as_ref()
-            .map(|w| w.root_path_string());
+        let workspace_root_owned = self.workspace.as_ref().map(|w| w.root_path_string());
         crate::agentic::tools::workspace_paths::resolve_workspace_tool_path(
             path,
             workspace_root_owned.as_deref(),
@@ -83,39 +110,165 @@ impl ToolUseContext {
         )
     }
 
+    pub fn current_workspace_runtime_root(&self) -> BitFunResult<PathBuf> {
+        let workspace = self.workspace.as_ref().ok_or_else(|| {
+            crate::util::errors::BitFunError::tool(
+                "A workspace is required to resolve runtime artifacts".to_string(),
+            )
+        })?;
+
+        if workspace.is_remote() {
+            let identity = &workspace.session_identity;
+            Ok(remote_workspace_runtime_root(
+                &identity.hostname,
+                &identity.workspace_path,
+            ))
+        } else {
+            Ok(get_path_manager_arc().project_runtime_root(workspace.root_path()))
+        }
+    }
+
+    pub fn current_workspace_scope(&self) -> Option<String> {
+        self.workspace
+            .as_ref()
+            .and_then(|workspace| workspace.workspace_id.clone())
+    }
+
+    pub async fn ensure_current_workspace_runtime(&self) -> BitFunResult<WorkspaceRuntimeContext> {
+        let workspace = self.workspace.as_ref().ok_or_else(|| {
+            crate::util::errors::BitFunError::tool(
+                "A workspace is required to ensure runtime artifacts".to_string(),
+            )
+        })?;
+
+        let runtime_service = get_workspace_runtime_service_arc();
+        Ok(runtime_service
+            .ensure_runtime_for_workspace_binding(workspace)
+            .await?
+            .context)
+    }
+
+    pub fn should_emit_runtime_uri(&self) -> bool {
+        self.is_remote()
+    }
+
+    pub fn build_runtime_uri(&self, relative_path: &str) -> BitFunResult<String> {
+        let scope = self
+            .current_workspace_scope()
+            .unwrap_or_else(|| "current".to_string());
+        build_bitfun_runtime_uri(&scope, &normalize_runtime_relative_path(relative_path)?)
+    }
+
+    pub fn build_runtime_artifact_reference(&self, relative_path: &str) -> BitFunResult<String> {
+        let normalized_relative_path = normalize_runtime_relative_path(relative_path)?;
+        if self.should_emit_runtime_uri() {
+            return self.build_runtime_uri(&normalized_relative_path);
+        }
+
+        let mut resolved_path = self.current_workspace_runtime_root()?;
+        for segment in normalized_relative_path.split('/') {
+            resolved_path.push(segment);
+        }
+
+        Ok(resolved_path.to_string_lossy().to_string())
+    }
+
+    pub fn build_session_runtime_artifact_reference(
+        &self,
+        session_id: &str,
+        relative_path: &str,
+    ) -> BitFunResult<String> {
+        let normalized_relative_path = normalize_runtime_relative_path(relative_path)?;
+        self.build_runtime_artifact_reference(&format!(
+            "sessions/{}/{}",
+            session_id, normalized_relative_path
+        ))
+    }
+
+    pub fn current_workspace_session_dir(&self, session_id: &str) -> BitFunResult<PathBuf> {
+        Ok(self
+            .current_workspace_runtime_root()?
+            .join("sessions")
+            .join(session_id))
+    }
+
+    pub fn current_workspace_session_tool_results_dir(
+        &self,
+        session_id: &str,
+    ) -> BitFunResult<PathBuf> {
+        Ok(self
+            .current_workspace_session_dir(session_id)?
+            .join("tool-results"))
+    }
+
+    pub fn current_workspace_session_tool_result_path(
+        &self,
+        session_id: &str,
+        file_name: &str,
+    ) -> BitFunResult<PathBuf> {
+        Ok(self
+            .current_workspace_session_tool_results_dir(session_id)?
+            .join(file_name))
+    }
+
+    pub fn resolve_tool_path(&self, path: &str) -> BitFunResult<ToolPathResolution> {
+        if is_bitfun_runtime_uri(path) {
+            let parsed = parse_bitfun_runtime_uri(path)?;
+            let workspace_scope = self.current_workspace_scope();
+            let scope_matches = parsed.workspace_scope == "current"
+                || workspace_scope.as_deref() == Some(parsed.workspace_scope.as_str());
+            if !scope_matches {
+                return Err(crate::util::errors::BitFunError::tool(format!(
+                    "Runtime URI scope '{}' does not match the current workspace",
+                    parsed.workspace_scope
+                )));
+            }
+
+            let runtime_root = self.current_workspace_runtime_root()?;
+            let mut resolved_path = runtime_root.clone();
+            for segment in parsed.relative_path.split('/') {
+                resolved_path.push(segment);
+            }
+
+            let effective_scope = workspace_scope.unwrap_or_else(|| parsed.workspace_scope.clone());
+            let logical_path = build_bitfun_runtime_uri(&effective_scope, &parsed.relative_path)?;
+
+            return Ok(ToolPathResolution {
+                requested_path: path.to_string(),
+                logical_path,
+                resolved_path: resolved_path.to_string_lossy().to_string(),
+                backend: ToolPathBackend::Local,
+                runtime_scope: Some(effective_scope),
+                runtime_root: Some(runtime_root),
+            });
+        }
+
+        let resolved_path = self.resolve_workspace_tool_path(path)?;
+        Ok(ToolPathResolution {
+            requested_path: path.to_string(),
+            logical_path: resolved_path.clone(),
+            resolved_path,
+            backend: if self.is_remote() {
+                ToolPathBackend::RemoteWorkspace
+            } else {
+                ToolPathBackend::Local
+            },
+            runtime_scope: None,
+            runtime_root: None,
+        })
+    }
+
     /// Whether `path` is absolute for the active workspace (POSIX `/` for remote SSH).
     pub fn workspace_path_is_effectively_absolute(&self, path: &str) -> bool {
+        if is_bitfun_runtime_uri(path) {
+            return true;
+        }
         if self.is_remote() {
             crate::agentic::tools::workspace_paths::posix_style_path_is_absolute(path)
         } else {
             Path::new(path).is_absolute()
         }
     }
-}
-
-/// Tool options
-#[derive(Debug, Clone)]
-pub struct ToolOptions {
-    pub commands: Vec<Value>,
-    pub tools: Vec<String>,
-    pub verbose: Option<bool>,
-    pub slow_and_capable_model: Option<String>,
-    pub safe_mode: Option<bool>,
-    pub fork_number: Option<u32>,
-    pub message_log_name: Option<String>,
-    pub max_thinking_tokens: Option<u32>,
-    pub is_koding_request: Option<bool>,
-    pub koding_context: Option<String>,
-    pub is_custom_command: Option<bool>,
-    /// Extended data fields, for passing extra context information
-    pub custom_data: Option<HashMap<String, Value>>,
-}
-
-/// Response state - for model state management like GPT-5
-#[derive(Debug, Clone)]
-pub struct ResponseState {
-    pub previous_response_id: Option<String>,
-    pub conversation_id: Option<String>,
 }
 
 /// Validation result
@@ -225,10 +378,7 @@ pub trait Tool: Send + Sync {
 
     /// JSON Schema for the model when tool listing has a [`ToolUseContext`] (e.g. primary model vision capability).
     /// Default: ignores context and delegates to [`input_schema_for_model`].
-    async fn input_schema_for_model_with_context(
-        &self,
-        context: Option<&ToolUseContext>,
-    ) -> Value {
+    async fn input_schema_for_model_with_context(&self, context: Option<&ToolUseContext>) -> Value {
         let _ = context;
         self.input_schema_for_model().await
     }
@@ -308,13 +458,19 @@ pub trait Tool: Send + Sync {
         format!("{} completed", self.name())
     }
 
-    /// Call tool - return async generator
+    /// Execute the tool's concrete business logic.
+    /// Implementors should put the actual tool behavior here and assume
+    /// [`call`] will wrap it with cross-cutting concerns such as cancellation.
     async fn call_impl(
         &self,
         input: &Value,
         context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>>;
 
+    /// Unified tool entry point.
+    /// This method owns shared framework behavior and delegates the actual
+    /// execution to [`call_impl`], so most tools should override `call_impl`
+    /// instead of overriding this method directly.
     async fn call(&self, input: &Value, context: &ToolUseContext) -> BitFunResult<Vec<ToolResult>> {
         if let Some(cancellation_token) = context.cancellation_token.as_ref() {
             tokio::select! {

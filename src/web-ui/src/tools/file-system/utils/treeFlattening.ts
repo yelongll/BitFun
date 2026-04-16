@@ -26,6 +26,7 @@ function nodeToFlatNode(
 export function flattenFileTree(
   nodes: FileSystemNode[],
   expandedFolders: Set<string>,
+  loadingPaths: Set<string> = new Set(),
   parentPath: string | null = null,
   depth: number = 0
 ): FlatFileNode[] {
@@ -36,17 +37,22 @@ export function flattenFileTree(
     const hasChildren = node.children && node.children.length > 0;
     const childrenLoaded = node.isDirectory ? (node.children !== undefined) : true;
 
-    result.push(nodeToFlatNode(node, parentPath, depth, childrenLoaded));
+    result.push({
+      ...nodeToFlatNode(node, parentPath, depth, childrenLoaded),
+      isLoading: loadingPaths.has(node.path),
+    });
 
     if (node.isDirectory && isExpanded && hasChildren) {
       const childNodes = flattenFileTree(
         node.children!,
         expandedFolders,
+        loadingPaths,
         node.path,
         depth + 1
       );
       result.push(...childNodes);
     }
+
   }
 
   return result;
