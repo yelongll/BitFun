@@ -524,17 +524,22 @@ impl FileOperationService {
         if is_write {
             if let Some(parent) = path.parent() {
                 if parent.exists() {
-                    let metadata = fs::metadata(parent).await.map_err(|e| {
-                        BitFunError::service(format!(
-                            "Failed to check parent directory permissions: {}",
-                            e
-                        ))
-                    })?;
+                    // On Windows, the readonly flag is not a reliable indicator of write permission
+                    // Skip this check on Windows and let the actual operation fail if truly read-only
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        let metadata = fs::metadata(parent).await.map_err(|e| {
+                            BitFunError::service(format!(
+                                "Failed to check parent directory permissions: {}",
+                                e
+                            ))
+                        })?;
 
-                    if metadata.permissions().readonly() {
-                        return Err(BitFunError::service(
-                            "Parent directory is read-only".to_string(),
-                        ));
+                        if metadata.permissions().readonly() {
+                            return Err(BitFunError::service(
+                                "Parent directory is read-only".to_string(),
+                            ));
+                        }
                     }
                 }
             }

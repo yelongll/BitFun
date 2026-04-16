@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@/component-library';
 import { Tab } from './Tab';
 import { TabOverflowMenu } from './TabOverflowMenu';
+import { TabToolbar } from './TabToolbar';
 import type { CanvasTab, EditorGroupId, TabDragPayload } from '../types';
 import { createLogger } from '@/shared/utils/logger';
 import './TabBar.scss';
@@ -46,6 +47,36 @@ export interface TabBarProps {
   onCloseAllTabs?: () => Promise<void> | void;
   /** Pop out tab as independent scene */
   onTabPopOut?: (tabId: string) => void;
+  /** Toolbar run handler */
+  onToolbarRun?: (configId?: string) => void;
+  /** Toolbar debug handler */
+  onToolbarDebug?: () => void;
+  /** Toolbar stop handler */
+  onToolbarStop?: () => void;
+  /** Toolbar restart handler */
+  onToolbarRestart?: () => void;
+  /** Toolbar build handler */
+  onToolbarBuild?: () => void;
+  /** Toolbar format handler */
+  onToolbarFormat?: () => void;
+  /** Toolbar open terminal handler */
+  onToolbarOpenTerminal?: () => void;
+  /** Toolbar open settings handler */
+  onToolbarOpenSettings?: () => void;
+  /** Whether toolbar operation is running */
+  isToolbarRunning?: boolean;
+  /** Whether toolbar is debugging */
+  isToolbarDebugging?: boolean;
+  /** Whether toolbar is building */
+  isToolbarBuilding?: boolean;
+  /** Whether to show toolbar */
+  showToolbar?: boolean;
+  /** Run configurations */
+  toolbarRunConfigs?: { id: string; name: string }[];
+  /** Selected toolbar config */
+  toolbarSelectedConfig?: string;
+  /** Toolbar config change handler */
+  onToolbarConfigChange?: (configId: string) => void;
 }
 
 /**
@@ -97,6 +128,21 @@ export const TabBar: React.FC<TabBarProps> = ({
   onOpenMissionControl,
   onCloseAllTabs,
   onTabPopOut,
+  onToolbarRun,
+  onToolbarDebug,
+  onToolbarStop,
+  onToolbarRestart,
+  onToolbarBuild,
+  onToolbarFormat,
+  onToolbarOpenTerminal,
+  onToolbarOpenSettings,
+  isToolbarRunning = false,
+  isToolbarDebugging = false,
+  isToolbarBuilding = false,
+  showToolbar = false,
+  toolbarRunConfigs = [],
+  toolbarSelectedConfig = 'debug',
+  onToolbarConfigChange,
 }) => {
   const { t } = useTranslation('components');
   const [visibleTabsCount, setVisibleTabsCount] = useState(tabs.length);
@@ -328,6 +374,27 @@ export const TabBar: React.FC<TabBarProps> = ({
 
       {/* Actions area */}
       <div ref={actionsRef} className="canvas-tab-bar__actions">
+        {/* Toolbar - shown when there's an active tab */}
+        {showToolbar && activeTabId && (
+          <TabToolbar
+            isVisible={true}
+            onRun={onToolbarRun}
+            onDebug={onToolbarDebug}
+            onStop={onToolbarStop}
+            onRestart={onToolbarRestart}
+            onBuild={onToolbarBuild}
+            onFormat={onToolbarFormat}
+            onOpenTerminal={onToolbarOpenTerminal}
+            onOpenSettings={onToolbarOpenSettings}
+            isRunning={isToolbarRunning}
+            isDebugging={isToolbarDebugging}
+            isBuilding={isToolbarBuilding}
+            runConfigs={toolbarRunConfigs}
+            selectedConfig={toolbarSelectedConfig}
+            onConfigChange={onToolbarConfigChange}
+          />
+        )}
+
         {/* Overflow menu (all groups; mission control only in primary) */}
         {visibleTabs.length > 0 && layoutReady && (
           <TabOverflowMenu

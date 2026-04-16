@@ -1,0 +1,122 @@
+/**
+ * TabToolbar component styles.
+ */
+
+.tab-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  margin-left: 8px;
+
+  &__run-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  &__config-select {
+    min-width: 70px;
+
+    .select__trigger {
+      height: 24px;
+      padding: 0 6px;
+      font-size: 11px;
+      border: none;
+      background: transparent;
+
+      &:hover {
+        background: var(--color-bg-hover, rgba(255, 255, 255, 0.1));
+      }
+    }
+
+    .select__value {
+      color: var(--color-text-secondary, rgba(255, 255, 255, 0.6));
+    }
+  }
+
+  &__btn {
+    width: 24px !important;
+    height: 24px !important;
+    padding: 0 !important;
+
+    &--run {
+      color: var(--color-success, #22c55e) !important;
+
+      &:hover:not(:disabled) {
+        background: rgba(34, 197, 94, 0.15) !important;
+      }
+    }
+
+    &--debug {
+      color: var(--color-warning, #f59e0b) !important;
+
+      &:hover:not(:disabled) {
+        background: rgba(245, 158, 11, 0.15) !important;
+      }
+    }
+
+    &--build {
+      color: var(--color-info, #3b82f6) !important;
+
+      &:hover:not(:disabled) {
+        background: rgba(59, 130, 246, 0.15) !important;
+      }
+    }
+
+    &--stop {
+      color: var(--color-error, #ef4444) !important;
+
+      &:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.15) !important;
+      }
+
+      &:disabled {
+        opacity: 0.3;
+      }
+    }
+
+    &--restart {
+      color: var(--color-text-secondary, rgba(255, 255, 255, 0.6)) !important;
+
+      &:hover:not(:disabled) {
+        background: var(--color-bg-hover, rgba(255, 255, 255, 0.1)) !important;
+        color: var(--color-text-primary, rgba(255, 255, 255, 0.9)) !important;
+      }
+
+      &:disabled {
+        opacity: 0.3;
+      }
+    }
+
+    &--format {
+      color: var(--color-purple, #a855f7) !important;
+
+      &:hover {
+        background: rgba(168, 85, 247, 0.15) !important;
+      }
+    }
+
+    &--terminal {
+      color: var(--color-text-secondary, rgba(255, 255, 255, 0.6)) !important;
+
+      &:hover {
+        background: var(--color-bg-hover, rgba(255, 255, 255, 0.1)) !important;
+        color: var(--color-text-primary, rgba(255, 255, 255, 0.9)) !important;
+      }
+    }
+
+    &--settings {
+      color: var(--color-text-secondary, rgba(255, 255, 255, 0.6)) !important;
+
+      &:hover {
+        background: var(--color-bg-hover, rgba(255, 255, 255, 0.1)) !important;
+        color: var(--color-text-primary, rgba(255, 255, 255, 0.9)) !important;
+      }
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+  }
+}

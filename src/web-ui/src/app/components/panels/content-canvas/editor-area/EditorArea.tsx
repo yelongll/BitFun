@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { EditorGroup } from './EditorGroup';
 import { SplitHandle } from './SplitHandle';
 import { useCanvasStore } from '../stores';
+import { useToolbar } from '@/app/contexts/ToolbarContext';
 import type { 
   EditorGroupId, 
   TabDragPayload, 
@@ -30,6 +31,9 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const topRowRef = useRef<HTMLDivElement>(null);
+
+  // Toolbar state from context
+  const toolbar = useToolbar();
 
   const {
     primaryGroup,
@@ -148,6 +152,21 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
       onCloseAllTabs={handleCloseAllTabs(groupId)}
       onInteraction={onInteraction}
       disablePopOut={disablePopOut}
+      showToolbar={true}
+      onToolbarRun={toolbar.handleRun}
+      onToolbarDebug={toolbar.handleDebug}
+      onToolbarStop={toolbar.handleStop}
+      onToolbarRestart={toolbar.handleRestart}
+      onToolbarBuild={toolbar.handleBuild}
+      onToolbarFormat={toolbar.handleFormat}
+      onToolbarOpenTerminal={toolbar.handleOpenTerminal}
+      onToolbarOpenSettings={toolbar.handleOpenSettings}
+      isToolbarRunning={toolbar.isRunning}
+      isToolbarDebugging={toolbar.isDebugging}
+      isToolbarBuilding={toolbar.isBuilding}
+      toolbarRunConfigs={toolbar.runConfigs}
+      toolbarSelectedConfig={toolbar.selectedConfig}
+      onToolbarConfigChange={toolbar.setSelectedConfig}
     />
   );
 

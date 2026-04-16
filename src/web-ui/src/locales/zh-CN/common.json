@@ -37,7 +37,7 @@
   },
   "header": {
     "openProject": "打开工作区",
-    "newProject": "新建工作区",
+    "newProject": "新建空灵项目",
     "goHome": "返回首页",
     "about": "关于",
     "openMenu": "打开菜单",
@@ -356,21 +356,21 @@
     "close": "关闭"
   },
   "newProject": {
-    "title": "新建工作区",
-    "subtitle": "创建一个新的工作区目录",
+    "title": "新建空灵项目",
+    "subtitle": "创建一个新的空灵项目目录",
     "parentDirectory": "父目录",
     "parentDirectoryPlaceholder": "点击右侧按钮选择父目录",
-    "selectParentDirectory": "选择新工作区的父目录位置",
+    "selectParentDirectory": "选择新空灵项目的父目录位置",
     "select": "选择",
-    "projectName": "工作区名称",
-    "projectNamePlaceholder": "请输入工作区名称，例如：my-project",
+    "projectName": "项目名称",
+    "projectNamePlaceholder": "请输入项目名称，例如：my-project",
     "fullPath": "完整路径",
     "cancel": "取消",
     "create": "创建",
     "creating": "创建中...",
     "errorSelectParent": "请选择父目录",
-    "errorEnterName": "请输入工作区名称",
-    "errorCreateFailed": "创建工作区失败"
+    "errorEnterName": "请输入项目名称",
+    "errorCreateFailed": "创建空灵项目失败"
   },
   "remoteConnect": {
     "title": "远程控制",
@@ -861,7 +861,7 @@
       "noWorkspaceHint": "尚未打开任何工作区",
       "openProject": "打开项目",
       "openProjectDesc": "选择一个已有的项目目录，开始你的 AI 编程之旅",
-      "newProject": "新建项目",
+      "newProject": "新建空灵项目",
       "newProjectDesc": "从零开始创建一个全新的项目"
     }
   },

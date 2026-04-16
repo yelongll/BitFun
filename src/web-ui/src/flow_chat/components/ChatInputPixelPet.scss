@@ -1,5 +1,5 @@
 /**
- * Pixel panda — process states use stronger motion + layered FX (dots / pips / sweat / speed).
+ * Pixel bull — process states use stronger motion + layered FX (dots / pips / sweat / speed).
  */
 
 .bitfun-chat-input-pixel-pet {
@@ -37,28 +37,50 @@
   }
 }
 
-.bitfun-panda__halo {
+/* Bull colors */
+.bitfun-bull__halo {
   fill: #ffffff;
 }
 
-/* Face fill: light gray so the head reads on light UI; halo + eye whites stay brighter */
-.bitfun-panda__w {
-  fill: #e0e4e9;
+/* Bull head base: brown */
+.bitfun-bull__base {
+  fill: #8B4513;
 }
 
-.bitfun-panda__b {
-  fill: #141414;
+/* Bull horns: dark gray with light tips */
+.bitfun-bull__horn {
+  fill: #4a4a4a;
 }
 
-.bitfun-panda__eye-hi {
+.bitfun-bull__horn-tip {
+  fill: #9ca3af;
+}
+
+/* Bull ears: darker brown */
+.bitfun-bull__ear {
+  fill: #654321;
+}
+
+/* Bull eyes */
+.bitfun-bull__eye-white {
   fill: #ffffff;
 }
 
-.bitfun-panda__pupil {
+.bitfun-bull__pupil {
   fill: #141414;
 }
 
-.bitfun-panda-head {
+/* Nose ring: golden */
+.bitfun-bull__ring {
+  fill: #FFD700;
+}
+
+/* Nostrils: dark */
+.bitfun-bull__nostril {
+  fill: #3d2817;
+}
+
+.bitfun-bull-head {
   transform-origin: 16px 16px;
   transform-box: fill-box;
 
@@ -78,93 +100,93 @@
     animation: bitfun-head-work 0.32s ease-in-out infinite;
   }
 
-  &__face--rest .bitfun-panda__eye-hi {
+  &__face--rest .bitfun-bull__eye-white {
     animation: bitfun-head-blink 3.2s ease-in-out infinite;
   }
 
   /* Thinking: eyes look around */
-  &--analyzing .bitfun-panda__pupil {
+  &--analyzing .bitfun-bull__pupil {
     animation: bitfun-pupil-scan 0.9s ease-in-out infinite;
   }
 
-  &--analyzing .bitfun-panda-head__ears {
-    animation: bitfun-ear-twitch 0.55s ease-in-out infinite;
+  &--analyzing .bitfun-bull-head__horns {
+    animation: bitfun-horn-twitch 0.55s ease-in-out infinite;
     transform-origin: 16px 6px;
   }
 
-  /* Busy: ears wobble faster */
-  &--working .bitfun-panda-head__ears {
-    animation: bitfun-ear-wiggle 0.28s ease-in-out infinite;
+  /* Busy: horns wobble faster */
+  &--working .bitfun-bull-head__horns {
+    animation: bitfun-horn-wiggle 0.28s ease-in-out infinite;
     transform-origin: 16px 6px;
   }
 
-  &__dots .bitfun-panda-head__dot {
+  &__dots .bitfun-bull-head__dot {
     animation: bitfun-head-dot-bounce 0.55s ease-in-out infinite;
   }
 
-  &__dots .bitfun-panda-head__dot:nth-child(1) {
+  &__dots .bitfun-bull-head__dot:nth-child(1) {
     animation-delay: 0s;
   }
 
-  &__dots .bitfun-panda-head__dot:nth-child(2) {
+  &__dots .bitfun-bull-head__dot:nth-child(2) {
     animation-delay: 0.18s;
   }
 
-  &__dots .bitfun-panda-head__dot:nth-child(3) {
+  &__dots .bitfun-bull-head__dot:nth-child(3) {
     animation-delay: 0.36s;
   }
 
-  &__wait-pips .bitfun-panda-head__wait-pip {
+  &__wait-pips .bitfun-bull-head__wait-pip {
     animation: bitfun-wait-pip 0.7s ease-in-out infinite;
     fill: #94a3b8;
   }
 
-  &__wait-pips .bitfun-panda-head__wait-pip:nth-child(1) {
+  &__wait-pips .bitfun-bull-head__wait-pip:nth-child(1) {
     animation-delay: 0s;
   }
 
-  &__wait-pips .bitfun-panda-head__wait-pip:nth-child(2) {
+  &__wait-pips .bitfun-bull-head__wait-pip:nth-child(2) {
     animation-delay: 0.12s;
   }
 
-  &__wait-pips .bitfun-panda-head__wait-pip:nth-child(3) {
+  &__wait-pips .bitfun-bull-head__wait-pip:nth-child(3) {
     animation-delay: 0.24s;
   }
 
-  &__sweat .bitfun-panda-head__sweat-drop {
+  &__sweat .bitfun-bull-head__sweat-drop {
     fill: #38bdf8;
   }
 
-  &__sweat .bitfun-panda-head__sweat-drop:nth-child(1) {
+  &__sweat .bitfun-bull-head__sweat-drop:nth-child(1) {
     animation: bitfun-sweat-a 0.55s ease-in-out infinite;
   }
 
-  &__sweat .bitfun-panda-head__sweat-drop:nth-child(2) {
+  &__sweat .bitfun-bull-head__sweat-drop:nth-child(2) {
     animation: bitfun-sweat-b 0.55s ease-in-out 0.2s infinite;
   }
 
-  &__speed .bitfun-panda-head__speed-line {
+  &__speed .bitfun-bull-head__speed-line {
     fill: #94a3b8;
     opacity: 0.85;
   }
 
-  &__speed .bitfun-panda-head__speed-line:nth-child(1),
-  &__speed .bitfun-panda-head__speed-line:nth-child(4) {
+  &__speed .bitfun-bull-head__speed-line:nth-child(1),
+  &__speed .bitfun-bull-head__speed-line:nth-child(4) {
     animation: bitfun-speed-streak 0.22s linear infinite;
   }
 
-  &__speed .bitfun-panda-head__speed-line:nth-child(2),
-  &__speed .bitfun-panda-head__speed-line:nth-child(5) {
+  &__speed .bitfun-bull-head__speed-line:nth-child(2),
+  &__speed .bitfun-bull-head__speed-line:nth-child(5) {
     animation: bitfun-speed-streak 0.22s linear 0.07s infinite;
   }
 
-  &__speed .bitfun-panda-head__speed-line:nth-child(3),
-  &__speed .bitfun-panda-head__speed-line:nth-child(6) {
+  &__speed .bitfun-bull-head__speed-line:nth-child(3),
+  &__speed .bitfun-bull-head__speed-line:nth-child(6) {
     animation: bitfun-speed-streak 0.22s linear 0.14s infinite;
   }
 }
 
-.bitfun-panda-head__dot {
+.bitfun-bull-head__dot {
   fill: #7dd3fc;
 }
 
@@ -192,7 +214,7 @@
   }
 }
 
-/* Stronger “thinking” — squash + sway + bounce */
+/* Stronger "thinking" — squash + sway + bounce */
 @keyframes bitfun-head-analyze {
   0% {
     transform: translateY(0) rotate(-2.5deg) scale(1, 1);
@@ -234,7 +256,7 @@
   }
 }
 
-@keyframes bitfun-ear-twitch {
+@keyframes bitfun-horn-twitch {
   0%,
   100% {
     transform: rotate(0deg);
@@ -262,7 +284,7 @@
   }
 }
 
-/* Waiting: side-to-side + squash — reads as “blocked / pending” */
+/* Waiting: side-to-side + squash — reads as "blocked / pending" */
 @keyframes bitfun-head-wait {
   0%,
   100% {
@@ -315,7 +337,7 @@
   }
 }
 
-@keyframes bitfun-ear-wiggle {
+@keyframes bitfun-horn-wiggle {
   0%,
   100% {
     transform: rotate(0deg);
@@ -380,18 +402,18 @@
     transition-duration: 0.18s;
   }
 
-  .bitfun-panda-head--rest,
-  .bitfun-panda-head--analyzing,
-  .bitfun-panda-head--waiting,
-  .bitfun-panda-head--working,
-  .bitfun-panda-head__face--rest .bitfun-panda__eye-hi,
-  .bitfun-panda-head--analyzing .bitfun-panda__pupil,
-  .bitfun-panda-head--analyzing .bitfun-panda-head__ears,
-  .bitfun-panda-head--working .bitfun-panda-head__ears,
-  .bitfun-panda-head__dots .bitfun-panda-head__dot,
-  .bitfun-panda-head__wait-pips .bitfun-panda-head__wait-pip,
-  .bitfun-panda-head__sweat .bitfun-panda-head__sweat-drop,
-  .bitfun-panda-head__speed .bitfun-panda-head__speed-line {
+  .bitfun-bull-head--rest,
+  .bitfun-bull-head--analyzing,
+  .bitfun-bull-head--waiting,
+  .bitfun-bull-head--working,
+  .bitfun-bull-head__face--rest .bitfun-bull__eye-white,
+  .bitfun-bull-head--analyzing .bitfun-bull__pupil,
+  .bitfun-bull-head--analyzing .bitfun-bull-head__horns,
+  .bitfun-bull-head--working .bitfun-bull-head__horns,
+  .bitfun-bull-head__dots .bitfun-bull-head__dot,
+  .bitfun-bull-head__wait-pips .bitfun-bull-head__wait-pip,
+  .bitfun-bull-head__sweat .bitfun-bull-head__sweat-drop,
+  .bitfun-bull-head__speed .bitfun-bull-head__speed-line {
     animation: none;
   }
 }

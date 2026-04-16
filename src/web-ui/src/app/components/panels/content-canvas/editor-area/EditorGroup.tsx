@@ -45,6 +45,22 @@ export interface EditorGroupProps {
   onCloseAllTabs?: () => Promise<void> | void;
   onInteraction?: (itemId: string, userInput: string) => Promise<void>;
   disablePopOut?: boolean;
+  /** Toolbar props */
+  showToolbar?: boolean;
+  onToolbarRun?: (configId?: string) => void;
+  onToolbarDebug?: () => void;
+  onToolbarStop?: () => void;
+  onToolbarRestart?: () => void;
+  onToolbarBuild?: () => void;
+  onToolbarFormat?: () => void;
+  onToolbarOpenTerminal?: () => void;
+  onToolbarOpenSettings?: () => void;
+  isToolbarRunning?: boolean;
+  isToolbarDebugging?: boolean;
+  isToolbarBuilding?: boolean;
+  toolbarRunConfigs?: { id: string; name: string }[];
+  toolbarSelectedConfig?: string;
+  onToolbarConfigChange?: (configId: string) => void;
 }
 
 export const EditorGroup: React.FC<EditorGroupProps> = ({
@@ -72,6 +88,21 @@ export const EditorGroup: React.FC<EditorGroupProps> = ({
   onCloseAllTabs,
   onInteraction,
   disablePopOut = false,
+  showToolbar,
+  onToolbarRun,
+  onToolbarDebug,
+  onToolbarStop,
+  onToolbarRestart,
+  onToolbarBuild,
+  onToolbarFormat,
+  onToolbarOpenTerminal,
+  onToolbarOpenSettings,
+  isToolbarRunning,
+  isToolbarDebugging,
+  isToolbarBuilding,
+  toolbarRunConfigs,
+  toolbarSelectedConfig,
+  onToolbarConfigChange,
 }) => {
   const { t } = useTranslation('components');
   const visibleTabs = useMemo(() => group.tabs.filter(t => !t.isHidden), [group.tabs]);
@@ -156,6 +187,21 @@ export const EditorGroup: React.FC<EditorGroupProps> = ({
         onOpenMissionControl={onOpenMissionControl}
         onCloseAllTabs={onCloseAllTabs}
         onTabPopOut={disablePopOut ? undefined : handleTabPopOut}
+        showToolbar={showToolbar}
+        onToolbarRun={onToolbarRun}
+        onToolbarDebug={onToolbarDebug}
+        onToolbarStop={onToolbarStop}
+        onToolbarRestart={onToolbarRestart}
+        onToolbarBuild={onToolbarBuild}
+        onToolbarFormat={onToolbarFormat}
+        onToolbarOpenTerminal={onToolbarOpenTerminal}
+        onToolbarOpenSettings={onToolbarOpenSettings}
+        isToolbarRunning={isToolbarRunning}
+        isToolbarDebugging={isToolbarDebugging}
+        isToolbarBuilding={isToolbarBuilding}
+        toolbarRunConfigs={toolbarRunConfigs}
+        toolbarSelectedConfig={toolbarSelectedConfig}
+        onToolbarConfigChange={onToolbarConfigChange}
       />
 
       <DropZone

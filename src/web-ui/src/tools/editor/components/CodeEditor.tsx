@@ -41,6 +41,7 @@ import {
 import { useI18n } from '@/infrastructure/i18n';
 import { EditorBreadcrumb } from './EditorBreadcrumb';
 import { EditorStatusBar } from './EditorStatusBar';
+import { EditorFloatingToolbar } from './EditorFloatingToolbar';
 
 const log = createLogger('CodeEditor');
 import {
@@ -224,6 +225,19 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const [statusBarAnchorRect, setStatusBarAnchorRect] = useState<AnchorRect | null>(null);
   const [encoding, setEncoding] = useState<string>('UTF-8');
   const [largeFileMode, setLargeFileMode] = useState(false);
+  // Floating toolbar disabled - moved to tab bar
+  const showFloatingToolbar = false;
+  const [isRunning, setIsRunning] = useState(false);
+  const [isDebugging, setIsDebugging] = useState(false);
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [selectedRunConfig, setSelectedRunConfig] = useState<string>('debug');
+  
+  // Sample run configs - in real app, these would come from project config
+  const runConfigs = [
+    { id: 'debug', name: '调试', command: 'npm run debug' },
+    { id: 'release', name: '发布', command: 'npm run build' },
+    { id: 'test', name: '测试', command: 'npm test' },
+  ];
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const modelRef = useRef<monaco.editor.ITextModel | null>(null);
@@ -1562,6 +1576,119 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     saveFileContentRef.current = saveFileContent;
   }, [saveFileContent]);
 
+  // Run file
+  const handleRun = useCallback(async () => {
+    if (!filePath || isRunning) return;
+    
+    setIsRunning(true);
+    try {
+      const { workspaceAPI } = await import('@/infrastructure/api');
+      await workspaceAPI.executeCommand({
+        command: `run ${filePath}`,
+        workspacePath: workspacePath || '',
+      });
+    } catch (err) {
+      log.error('Failed to run file', err);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [filePath, isRunning, workspacePath]);
+
+  // Debug file
+  const handleDebug = useCallback(async () => {
+    if (!filePath || isDebugging) return;
+    
+    setIsDebugging(true);
+    try {
+      const { workspaceAPI } = await import('@/infrastructure/api');
+      await workspaceAPI.executeCommand({
+        command: `debug ${filePath}`,
+        workspacePath: workspacePath || '',
+      });
+    } catch (err) {
+      log.error('Failed to debug file', err);
+    } finally {
+      setIsDebugging(false);
+    }
+  }, [filePath, isDebugging, workspacePath]);
+
+  // Build file
+  const handleBuild = useCallback(async () => {
+    if (!filePath || isBuilding) return;
+    
+    setIsBuilding(true);
+    try {
+      const { workspaceAPI } = await import('@/infrastructure/api');
+      await workspaceAPI.executeCommand({
+        command: `build ${filePath}`,
+        workspacePath: workspacePath || '',
+      });
+    } catch (err) {
+      log.error('Failed to build file', err);
+    } finally {
+      setIsBuilding(false);
+    }
+  }, [filePath, isBuilding, workspacePath]);
+
+  // Run with arguments
+  const handleRunWithArgs = useCallback(async (args: string) => {
+    if (!filePath || isRunning) return;
+    
+    setIsRunning(true);
+    try {
+      const { workspaceAPI } = await import('@/infrastructure/api');
+      await workspaceAPI.executeCommand({
+        command: `run ${filePath} ${args}`,
+        workspacePath: workspacePath || '',
+      });
+    } catch (err) {
+      log.error('Failed to run file with args', err);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [filePath, isRunning, workspacePath]);
+
+  // Stop running/debugging/building
+  const handleStop = useCallback(() => {
+    setIsRunning(false);
+    setIsDebugging(false);
+    setIsBuilding(false);
+    // TODO: Send actual stop command to backend
+    log.info('Stop requested');
+  }, []);
+
+  // Restart current operation
+  const handleRestart = useCallback(() => {
+    handleStop();
+    setTimeout(() => {
+      handleRun();
+    }, 100);
+    log.info('Restart requested');
+  }, [handleRun, handleStop]);
+
+  // Format code
+  const handleFormat = useCallback(async () => {
+    if (!editorRef.current) return;
+    try {
+      await editorRef.current.getAction('editor.action.formatDocument')?.run();
+      log.info('Code formatted');
+    } catch (err) {
+      log.error('Failed to format code', err);
+    }
+  }, []);
+
+  // Open terminal
+  const handleOpenTerminal = useCallback(() => {
+    globalEventBus.emit('terminal:open', { workspacePath });
+    log.info('Terminal opened');
+  }, [workspacePath]);
+
+  // Open run settings
+  const handleOpenSettings = useCallback(() => {
+    globalEventBus.emit('settings:open', { section: 'run' });
+    log.info('Settings opened');
+  }, []);
+
   // Container-level keyboard event handler, solves global conflict issues with multiple editor instances
   const handleContainerKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const hasFocus = editorRef.current?.hasTextFocus() ?? false;
@@ -2134,6 +2261,27 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       />
       
       <div className="code-editor-tool__content">
+        {/* Floating Toolbar */}
+        <EditorFloatingToolbar
+          isVisible={showFloatingToolbar && !readOnly}
+          position={{ x: 50, y: 60 }}
+          onRun={handleRun}
+          onDebug={handleDebug}
+          onBuild={handleBuild}
+          onStop={handleStop}
+          onRestart={handleRestart}
+          onFormat={handleFormat}
+          onOpenTerminal={handleOpenTerminal}
+          onOpenSettings={handleOpenSettings}
+          isRunning={isRunning}
+          isDebugging={isDebugging}
+          isBuilding={isBuilding}
+          language={detectedLanguage}
+          filePath={filePath}
+          runConfigs={runConfigs}
+          selectedConfig={selectedRunConfig}
+          onConfigChange={setSelectedRunConfig}
+        />
         <div 
           ref={containerRef} 
           style={{ 

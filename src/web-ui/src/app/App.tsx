@@ -13,6 +13,7 @@ import { createLogger } from '@/shared/utils/logger';
 import { useWorkspaceContext } from '../infrastructure/contexts/WorkspaceContext';
 import SplashScreen from './components/SplashScreen/SplashScreen';
 import { useGlobalSceneShortcuts } from './hooks/useGlobalSceneShortcuts';
+import { ToolbarProvider } from './contexts/ToolbarContext';
 
 // Toolbar Mode
 import { ToolbarModeProvider } from '../flow_chat';
@@ -207,26 +208,28 @@ function App() {
       <ViewModeProvider defaultMode="coder">
         <SSHRemoteProvider>
           <ToolbarModeProvider>
-            {/* Unified app layout with startup/workspace modes */}
-            <AppLayout />
+            <ToolbarProvider>
+              {/* Unified app layout with startup/workspace modes */}
+              <AppLayout />
 
-            {/* Context menu renderer */}
-            <ContextMenuRenderer />
+              {/* Context menu renderer */}
+              <ContextMenuRenderer />
 
-            {/* Notification system */}
-            <NotificationContainer />
-            <NotificationCenter />
+              {/* Notification system */}
+              <NotificationContainer />
+              <NotificationCenter />
 
-            {/* Confirm dialog */}
-            <ConfirmDialogRenderer />
+              {/* Confirm dialog */}
+              <ConfirmDialogRenderer />
 
-            {/* Announcement / feature-demo / tips system */}
-            <AnnouncementProvider />
+              {/* Announcement / feature-demo / tips system */}
+              <AnnouncementProvider />
 
-            {/* Startup splash — sits above everything, exits once workspace is ready */}
-            {splashVisible && (
-              <SplashScreen isExiting={splashExiting} onExited={handleSplashExited} />
-            )}
+              {/* Startup splash — sits above everything, exits once workspace is ready */}
+              {splashVisible && (
+                <SplashScreen isExiting={splashExiting} onExited={handleSplashExited} />
+              )}
+            </ToolbarProvider>
           </ToolbarModeProvider>
         </SSHRemoteProvider>
       </ViewModeProvider>

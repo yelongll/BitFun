@@ -1,0 +1,172 @@
+@use '@/component-library/styles/tokens' as *;
+
+.editor-floating-toolbar {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 100;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  &__container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--spacing-xs);
+    gap: var(--spacing-xs);
+    min-width: fit-content;
+    backdrop-filter: blur(8px);
+  }
+
+  &__run-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: var(--spacing-xs);
+    border-right: 1px solid var(--color-border-default);
+  }
+
+  &__config-wrapper {
+    .select {
+      min-width: 80px;
+      
+      &__trigger {
+        height: 28px;
+        padding: 0 var(--spacing-sm);
+        font-size: 12px;
+        border: none;
+        background: transparent;
+        
+        &:hover {
+          background: var(--color-surface-hover);
+        }
+      }
+      
+      &__value {
+        color: var(--color-text-secondary);
+      }
+    }
+  }
+
+  &__run-btn {
+    background: var(--color-success) !important;
+    color: white !important;
+
+    &:hover:not(:disabled) {
+      background: var(--color-success-hover) !important;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__debug-btn {
+    color: var(--color-warning) !important;
+
+    &:hover:not(:disabled) {
+      background: var(--color-warning-subtle) !important;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__build-btn {
+    color: var(--color-info) !important;
+
+    &:hover:not(:disabled) {
+      background: var(--color-info-subtle) !important;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__stop-btn {
+    color: var(--color-error) !important;
+
+    &:hover {
+      background: var(--color-error-subtle) !important;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &__divider {
+    width: 1px;
+    height: 20px;
+    background: var(--color-border-default);
+    margin: 0 var(--spacing-xs);
+  }
+
+  &__restart-btn {
+    color: var(--color-text-secondary) !important;
+
+    &:hover:not(:disabled) {
+      background: var(--color-surface-hover) !important;
+      color: var(--color-text-primary) !important;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &__format-btn {
+    color: var(--color-purple) !important;
+
+    &:hover {
+      background: var(--color-purple-subtle) !important;
+    }
+  }
+
+  &__terminal-btn {
+    color: var(--color-text-secondary) !important;
+
+    &:hover {
+      background: var(--color-surface-hover) !important;
+      color: var(--color-text-primary) !important;
+    }
+  }
+
+  &__settings-btn {
+    color: var(--color-text-secondary) !important;
+
+    &:hover {
+      background: var(--color-surface-hover) !important;
+      color: var(--color-text-primary) !important;
+    }
+  }
+
+  &__spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

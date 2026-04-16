@@ -1,6 +1,6 @@
 /**
- * BitFun pixel panda — 32×32, white halo + ear rims for dark UI,
- * softer patches and dot eyes for silly-cute (蠢萌) read.
+ * BitFun pixel bull head — 32×32, white halo for dark UI,
+ * angry-cute bull with horns and nose ring.
  */
 
 import React from 'react';
@@ -17,33 +17,33 @@ const MOODS: ChatInputPetMood[] = ['rest', 'analyzing', 'waiting', 'working'];
 
 const VIEW = 32;
 
-/** Cream face — slightly rounded; bottom rows taper (no “neck” block). */
-const CREAM_ROWS: [number, number, number][] = [
-  [5, 10, 12],
-  [6, 8, 16],
-  [8, 6, 20],
-  [10, 5, 22],
+/** Bull head shape — rounded rectangle, brown base. */
+const HEAD_ROWS: [number, number, number][] = [
+  [8, 10, 12],
+  [9, 8, 16],
+  [10, 6, 20],
+  [11, 5, 22],
   [12, 4, 24],
+  [13, 4, 24],
   [14, 4, 24],
+  [15, 4, 24],
   [16, 4, 24],
+  [17, 4, 24],
   [18, 4, 24],
-  [20, 4, 24],
-  [22, 5, 22],
-  [24, 6, 20],
-  [25, 8, 16],
-  [26, 10, 12],
+  [19, 4, 24],
+  [20, 5, 22],
+  [21, 6, 20],
+  [22, 8, 16],
+  [23, 10, 12],
 ];
 
-/**
- * White rim only: pad each cream row + extra top rows for ears.
- * No extra full-width rows below the face (avoids “pedestal” look).
- */
+/** White halo around the head. */
 function buildHaloRows(pad: number): [number, number, number][] {
   const out: [number, number, number][] = [];
-  const first = CREAM_ROWS[0];
+  const first = HEAD_ROWS[0];
   out.push([first[0] - 2, first[1] - pad, first[2] + 2 * pad]);
   out.push([first[0] - 1, first[1] - pad, first[2] + 2 * pad]);
-  for (const r of CREAM_ROWS) {
+  for (const r of HEAD_ROWS) {
     out.push([r[0], r[1] - pad, r[2] + 2 * pad]);
   }
   return out;
@@ -51,48 +51,51 @@ function buildHaloRows(pad: number): [number, number, number][] {
 
 const HALO_ROWS = buildHaloRows(3);
 
-/** Left / right ear — black pixels (drawn after white ear-rim). */
+/** Bull horns — curved upward. */
+const HORN_LEFT: [number, number, number, number][] = [
+  [4, 4, 3, 2],
+  [3, 3, 3, 2],
+  [2, 2, 4, 2],
+  [1, 3, 3, 2],
+  [0, 5, 2, 2],
+];
+const HORN_RIGHT: [number, number, number, number][] = [
+  [4, 25, 3, 2],
+  [3, 26, 3, 2],
+  [2, 26, 4, 2],
+  [1, 26, 3, 2],
+  [0, 25, 2, 2],
+];
+
+/** Horn tips — lighter color. */
+const HORN_TIP_LEFT: [number, number, number, number][] = [
+  [0, 5, 2, 2],
+];
+const HORN_TIP_RIGHT: [number, number, number, number][] = [
+  [0, 25, 2, 2],
+];
+
+/** Bull ears — small on sides. */
 const EAR_LEFT: [number, number, number, number][] = [
-  [2, 5, 4, 2],
-  [3, 4, 6, 2],
-  [4, 4, 6, 2],
+  [10, 2, 3, 3],
+  [11, 3, 2, 2],
 ];
 const EAR_RIGHT: [number, number, number, number][] = [
-  [2, 23, 4, 2],
-  [3, 22, 6, 2],
-  [4, 22, 6, 2],
+  [10, 27, 3, 3],
+  [11, 28, 2, 2],
 ];
 
-/** White under ears so black ears read on dark backgrounds. */
-const EAR_RIM_LEFT: [number, number, number, number][] = [
-  [1, 4, 6, 4],
-  [2, 3, 8, 4],
-  [3, 3, 8, 4],
-  [4, 3, 8, 4],
-];
-const EAR_RIM_RIGHT: [number, number, number, number][] = [
-  [1, 22, 6, 4],
-  [2, 21, 8, 4],
-  [3, 21, 8, 4],
-  [4, 21, 8, 4],
+/** Nose ring — golden circle. */
+const NOSE_RING: [number, number, number, number][] = [
+  [19, 14, 4, 4],
 ];
 
-/** Irregular oval-ish patches (less “gas mask” than big rectangles). */
-const PATCH_LEFT: [number, number, number, number][] = [
-  [9, 5, 6, 2],
-  [10, 4, 8, 2],
-  [11, 3, 10, 6],
-  [12, 3, 10, 6],
-  [13, 4, 8, 2],
-  [14, 5, 6, 2],
+/** Nostrils. */
+const NOSTRIL_LEFT: [number, number, number, number][] = [
+  [20, 12, 2, 2],
 ];
-const PATCH_RIGHT: [number, number, number, number][] = [
-  [9, 19, 6, 2],
-  [10, 18, 8, 2],
-  [11, 17, 10, 6],
-  [12, 17, 10, 6],
-  [13, 18, 8, 2],
-  [14, 19, 6, 2],
+const NOSTRIL_RIGHT: [number, number, number, number][] = [
+  [20, 18, 2, 2],
 ];
 
 function Px({
@@ -117,9 +120,9 @@ function PxRow({ x, y, w, className }: { x: number; y: number; w: number; classN
 }
 
 function HeadHalo() {
-  const cls = 'bitfun-panda__halo';
+  const cls = 'bitfun-bull__halo';
   return (
-    <g className="bitfun-panda-head__halo">
+    <g className="bitfun-bull-head__halo">
       {HALO_ROWS.map(([y, x0, lw], i) => (
         <PxRow key={`h-${i}`} x={x0} y={y} w={lw} className={cls} />
       ))}
@@ -128,106 +131,110 @@ function HeadHalo() {
 }
 
 function HeadDisk() {
-  const cls = 'bitfun-panda__w';
+  const cls = 'bitfun-bull__base';
   return (
-    <g className="bitfun-panda-head__disk">
-      {CREAM_ROWS.map(([y, x0, lw], i) => (
+    <g className="bitfun-bull-head__disk">
+      {HEAD_ROWS.map(([y, x0, lw], i) => (
         <PxRow key={`c-${i}`} x={x0} y={y} w={lw} className={cls} />
       ))}
     </g>
   );
 }
 
-function EarRims() {
-  const cls = 'bitfun-panda__halo';
+function Horns() {
+  const cls = 'bitfun-bull__horn';
+  const tipCls = 'bitfun-bull__horn-tip';
   return (
-    <g className="bitfun-panda-head__ear-rims" aria-hidden>
-      {EAR_RIM_LEFT.map(([y, x, w, h], i) => (
-        <Px key={`el-${i}`} x={x} y={y} w={w} h={h} className={cls} />
+    <g className="bitfun-bull-head__horns" aria-hidden>
+      {HORN_LEFT.map(([y, x, w, h], i) => (
+        <Px key={`hl-${i}`} x={x} y={y} w={w} h={h} className={cls} />
       ))}
-      {EAR_RIM_RIGHT.map(([y, x, w, h], i) => (
-        <Px key={`er-${i}`} x={x} y={y} w={w} h={h} className={cls} />
+      {HORN_RIGHT.map(([y, x, w, h], i) => (
+        <Px key={`hr-${i}`} x={x} y={y} w={w} h={h} className={cls} />
+      ))}
+      {HORN_TIP_LEFT.map(([y, x, w, h], i) => (
+        <Px key={`htl-${i}`} x={x} y={y} w={w} h={h} className={tipCls} />
+      ))}
+      {HORN_TIP_RIGHT.map(([y, x, w, h], i) => (
+        <Px key={`htr-${i}`} x={x} y={y} w={w} h={h} className={tipCls} />
       ))}
     </g>
   );
 }
 
 function Ears() {
-  const b = 'bitfun-panda__b';
+  const cls = 'bitfun-bull__ear';
   return (
-    <g className="bitfun-panda-head__ears" aria-hidden>
+    <g className="bitfun-bull-head__ears" aria-hidden>
       {EAR_LEFT.map(([y, x, w, h], i) => (
-        <Px key={`eL-${i}`} x={x} y={y} w={w} h={h} className={b} />
+        <Px key={`el-${i}`} x={x} y={y} w={w} h={h} className={cls} />
       ))}
       {EAR_RIGHT.map(([y, x, w, h], i) => (
-        <Px key={`eR-${i}`} x={x} y={y} w={w} h={h} className={b} />
+        <Px key={`er-${i}`} x={x} y={y} w={w} h={h} className={cls} />
       ))}
     </g>
   );
 }
 
-function EyePatches() {
-  const b = 'bitfun-panda__b';
+function NoseRing() {
+  const ringCls = 'bitfun-bull__ring';
+  const nostrilCls = 'bitfun-bull__nostril';
   return (
-    <g className="bitfun-panda-head__patches" aria-hidden>
-      {PATCH_LEFT.map(([y, x, w, h], i) => (
-        <Px key={`pl-${i}`} x={x} y={y} w={w} h={h} className={b} />
+    <g className="bitfun-bull-head__nose" aria-hidden>
+      {NOSE_RING.map(([y, x, w, h], i) => (
+        <Px key={`ring-${i}`} x={x} y={y} w={w} h={h} className={ringCls} />
       ))}
-      {PATCH_RIGHT.map(([y, x, w, h], i) => (
-        <Px key={`pr-${i}`} x={x} y={y} w={w} h={h} className={b} />
+      {NOSTRIL_LEFT.map(([y, x, w, h], i) => (
+        <Px key={`nl-${i}`} x={x} y={y} w={w} h={h} className={nostrilCls} />
+      ))}
+      {NOSTRIL_RIGHT.map(([y, x, w, h], i) => (
+        <Px key={`nr-${i}`} x={x} y={y} w={w} h={h} className={nostrilCls} />
       ))}
     </g>
   );
 }
 
-/** Small inverted-T nose — cute button, not wide bar. */
-function Nose() {
-  const b = 'bitfun-panda__b';
-  return (
-    <g className="bitfun-panda-head__nose" aria-hidden>
-      <Px x={15} y={21} w={2} h={1} className={b} />
-      <Px x={14} y={22} w={4} h={1} className={b} />
-    </g>
-  );
-}
-
-/** Open: chunky whites + 1px pupils (offset slightly — silly). */
+/** Open eyes — angry determined look. */
 function EyesOpen() {
-  const hi = 'bitfun-panda__eye-hi';
-  const pu = 'bitfun-panda__pupil';
+  const white = 'bitfun-bull__eye-white';
+  const pupil = 'bitfun-bull__pupil';
   return (
-    <g className="bitfun-panda-head__eyes-open" aria-hidden>
-      <Px x={7} y={12} w={4} h={4} className={hi} />
-      <Px x={21} y={12} w={4} h={4} className={hi} />
-      <Px x={9} y={14} w={1} h={1} className={pu} />
-      <Px x={23} y={14} w={1} h={1} className={pu} />
+    <g className="bitfun-bull-head__eyes-open" aria-hidden>
+      {/* Left eye - bigger, moved left */}
+      <Px x={7} y={9} w={8} h={6} className={white} />
+      <Px x={9} y={11} w={4} h={3} className={pupil} />
+      {/* Right eye - bigger, moved right */}
+      <Px x={17} y={9} w={8} h={6} className={white} />
+      <Px x={19} y={11} w={4} h={3} className={pupil} />
+      {/* Angry eyebrows */}
+      <Px x={6} y={7} w={5} h={2} className={pupil} />
+      <Px x={21} y={7} w={5} h={2} className={pupil} />
     </g>
   );
 }
 
-/** Rest: soft “sleep” arcs — two short curves, not one stern bar. */
+/** Rest: closed eyes — peaceful. */
 function FaceRest() {
-  const hi = 'bitfun-panda__eye-hi';
+  const line = 'bitfun-bull__eye-white';
   return (
-    <g className="bitfun-panda-head__face bitfun-panda-head__face--rest">
-      <Px x={7} y={14} w={4} h={1} className={hi} />
-      <Px x={8} y={15} w={2} h={1} className={hi} />
-      <Px x={21} y={14} w={4} h={1} className={hi} />
-      <Px x={22} y={15} w={2} h={1} className={hi} />
-      <Nose />
+    <g className="bitfun-bull-head__face bitfun-bull-head__face--rest">
+      {/* Closed eyes - bigger, spaced apart */}
+      <Px x={8} y={12} w={6} h={2} className={line} />
+      <Px x={18} y={12} w={6} h={2} className={line} />
+      <NoseRing />
     </g>
   );
 }
 
 function FaceAnalyzing() {
   return (
-    <g className="bitfun-panda-head__face bitfun-panda-head__face--analyze">
+    <g className="bitfun-bull-head__face bitfun-bull-head__face--analyze">
       <EyesOpen />
-      <Nose />
-      <g className="bitfun-panda-head__dots" aria-hidden>
-        <Px x={2} y={6} w={2} h={2} className="bitfun-panda-head__dot" />
-        <Px x={28} y={4} w={2} h={2} className="bitfun-panda-head__dot" />
-        <Px x={15} y={1} w={2} h={2} className="bitfun-panda-head__dot" />
+      <NoseRing />
+      <g className="bitfun-bull-head__dots" aria-hidden>
+        <Px x={2} y={6} w={2} h={2} className="bitfun-bull-head__dot" />
+        <Px x={28} y={4} w={2} h={2} className="bitfun-bull-head__dot" />
+        <Px x={15} y={1} w={2} h={2} className="bitfun-bull-head__dot" />
       </g>
     </g>
   );
@@ -235,13 +242,13 @@ function FaceAnalyzing() {
 
 function FaceWaiting() {
   return (
-    <g className="bitfun-panda-head__face bitfun-panda-head__face--wait">
+    <g className="bitfun-bull-head__face bitfun-bull-head__face--wait">
       <EyesOpen />
-      <Nose />
-      <g className="bitfun-panda-head__wait-pips" aria-hidden>
-        <Px x={10} y={27} w={2} h={2} className="bitfun-panda-head__wait-pip" />
-        <Px x={15} y={27} w={2} h={2} className="bitfun-panda-head__wait-pip" />
-        <Px x={20} y={27} w={2} h={2} className="bitfun-panda-head__wait-pip" />
+      <NoseRing />
+      <g className="bitfun-bull-head__wait-pips" aria-hidden>
+        <Px x={10} y={27} w={2} h={2} className="bitfun-bull-head__wait-pip" />
+        <Px x={15} y={27} w={2} h={2} className="bitfun-bull-head__wait-pip" />
+        <Px x={20} y={27} w={2} h={2} className="bitfun-bull-head__wait-pip" />
       </g>
     </g>
   );
@@ -249,20 +256,20 @@ function FaceWaiting() {
 
 function FaceWorking() {
   return (
-    <g className="bitfun-panda-head__face bitfun-panda-head__face--work">
+    <g className="bitfun-bull-head__face bitfun-bull-head__face--work">
       <EyesOpen />
-      <Nose />
-      <g className="bitfun-panda-head__sweat" aria-hidden>
-        <Px x={4} y={8} w={2} h={2} className="bitfun-panda-head__sweat-drop" />
-        <Px x={26} y={7} w={2} h={2} className="bitfun-panda-head__sweat-drop" />
+      <NoseRing />
+      <g className="bitfun-bull-head__sweat" aria-hidden>
+        <Px x={4} y={8} w={2} h={2} className="bitfun-bull-head__sweat-drop" />
+        <Px x={26} y={7} w={2} h={2} className="bitfun-bull-head__sweat-drop" />
       </g>
-      <g className="bitfun-panda-head__speed" aria-hidden>
-        <Px x={0} y={10} w={2} h={2} className="bitfun-panda-head__speed-line" />
-        <Px x={0} y={14} w={2} h={2} className="bitfun-panda-head__speed-line" />
-        <Px x={0} y={18} w={2} h={2} className="bitfun-panda-head__speed-line" />
-        <Px x={30} y={10} w={2} h={2} className="bitfun-panda-head__speed-line" />
-        <Px x={30} y={14} w={2} h={2} className="bitfun-panda-head__speed-line" />
-        <Px x={30} y={18} w={2} h={2} className="bitfun-panda-head__speed-line" />
+      <g className="bitfun-bull-head__speed" aria-hidden>
+        <Px x={0} y={10} w={2} h={2} className="bitfun-bull-head__speed-line" />
+        <Px x={0} y={14} w={2} h={2} className="bitfun-bull-head__speed-line" />
+        <Px x={0} y={18} w={2} h={2} className="bitfun-bull-head__speed-line" />
+        <Px x={30} y={10} w={2} h={2} className="bitfun-bull-head__speed-line" />
+        <Px x={30} y={14} w={2} h={2} className="bitfun-bull-head__speed-line" />
+        <Px x={30} y={18} w={2} h={2} className="bitfun-bull-head__speed-line" />
       </g>
     </g>
   );
@@ -282,7 +289,7 @@ function Face({ mood }: { mood: ChatInputPetMood }) {
 }
 
 function MoodSvg({ mood }: { mood: ChatInputPetMood }) {
-  const rootClass = `bitfun-panda-head bitfun-panda-head--${mood}`;
+  const rootClass = `bitfun-bull-head bitfun-bull-head--${mood}`;
 
   return (
     <svg
@@ -294,9 +301,8 @@ function MoodSvg({ mood }: { mood: ChatInputPetMood }) {
       <g className={rootClass}>
         <HeadHalo />
         <HeadDisk />
-        <EarRims />
+        <Horns />
         <Ears />
-        <EyePatches />
         <Face mood={mood} />
       </g>
     </svg>
@@ -324,3 +330,5 @@ export const ChatInputPixelPet: React.FC<ChatInputPixelPetProps> = ({
     </div>
   );
 };
+
+export default ChatInputPixelPet;
