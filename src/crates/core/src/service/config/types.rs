@@ -420,6 +420,10 @@ pub struct AIConfig {
     /// Global proxy configuration.
     pub proxy: ProxyConfig,
 
+    /// Streaming idle timeout in seconds; `None` means wait indefinitely.
+    #[serde(default = "default_stream_idle_timeout")]
+    pub stream_idle_timeout_secs: Option<u64>,
+
     /// Tool execution timeout in seconds; `None` means wait indefinitely.
     #[serde(default = "default_tool_execution_timeout")]
     pub tool_execution_timeout_secs: Option<u64>,
@@ -526,6 +530,11 @@ pub struct ModeConfigView {
 
 fn default_true() -> bool {
     true
+}
+
+/// Default is no timeout (wait forever).
+fn default_stream_idle_timeout() -> Option<u64> {
+    None
 }
 
 /// Default is no timeout (wait forever).
@@ -853,7 +862,7 @@ pub struct AIModelConfig {
 
     /// Whether to parse OpenAI-compatible text chunks containing `<think>...</think>` into
     /// streaming reasoning content.
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub inline_think_in_text: bool,
 
     /// Custom HTTP request headers.
@@ -910,6 +919,7 @@ struct AIModelConfigCompat {
     metadata: Option<serde_json::Value>,
     enable_thinking_process: Option<bool>,
     reasoning_mode: Option<ReasoningMode>,
+    #[serde(default = "default_true")]
     inline_think_in_text: bool,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     custom_headers_mode: Option<String>,
@@ -1311,6 +1321,7 @@ impl Default for AIConfig {
             mode_configs: std::collections::HashMap::new(),
             subagent_configs: std::collections::HashMap::new(),
             proxy: ProxyConfig::default(),
+            stream_idle_timeout_secs: default_stream_idle_timeout(),
             tool_execution_timeout_secs: default_tool_execution_timeout(),
             tool_confirmation_timeout_secs: default_tool_confirmation_timeout(),
             skip_tool_confirmation: true,
@@ -1342,7 +1353,7 @@ impl Default for AIModelConfig {
             metadata: None,
             enable_thinking_process: false,
             reasoning_mode: None,
-            inline_think_in_text: false,
+            inline_think_in_text: true,
             custom_headers: None,
             custom_headers_mode: None,
             skip_ssl_verify: false,
@@ -1520,7 +1531,7 @@ impl AIModelConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{AIModelConfig, ReasoningMode};
+    use super::{AIConfig, AIModelConfig, ReasoningMode};
 
     #[test]
     fn deserializes_compatibility_thinking_flag_into_reasoning_mode() {
@@ -1579,5 +1590,53 @@ mod tests {
             value.get("reasoning_mode").and_then(|v| v.as_str()),
             Some("enabled")
         );
+    }
+
+    #[test]
+    fn default_model_config_enables_inline_think_in_text() {
+        let config = AIModelConfig::default();
+        assert!(config.inline_think_in_text);
+    }
+
+    #[test]
+    fn deserializes_missing_inline_think_in_text_as_enabled() {
+        let config: AIModelConfig = serde_json::from_value(serde_json::json!({
+            "id": "model_1",
+            "name": "Provider",
+            "provider": "openai",
+            "model_name": "test-model",
+            "base_url": "https://example.com/v1",
+            "api_key": "key",
+            "enabled": true
+        }))
+        .expect("config without inline_think_in_text should deserialize");
+
+        assert!(config.inline_think_in_text);
+    }
+
+    #[test]
+    fn default_ai_config_uses_no_stream_idle_timeout() {
+        let config = AIConfig::default();
+
+        assert_eq!(config.stream_idle_timeout_secs, None);
+    }
+
+    #[test]
+    fn deserializes_missing_stream_idle_timeout_as_none() {
+        let config: AIConfig = serde_json::from_value(serde_json::json!({
+            "models": [],
+            "agent_models": {},
+            "func_agent_models": {},
+            "default_models": {},
+            "mode_configs": {},
+            "subagent_configs": {},
+            "proxy": {
+                "enabled": false,
+                "url": ""
+            }
+        }))
+        .expect("config without stream_idle_timeout_secs should deserialize");
+
+        assert_eq!(config.stream_idle_timeout_secs, None);
     }
 }
