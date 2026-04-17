@@ -16,16 +16,13 @@ import {
   FileText,
   Image,
   Code,
-  Terminal,
   MessageSquare,
   Calendar,
-  Mail,
-  Cloud,
   Lock,
   Zap,
   Github,
 } from 'lucide-react';
-import { Button, Input, Badge, Modal } from '@/component-library';
+import { Button, Input, Modal } from '@/component-library';
 import { useNotification } from '@/shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
 import './MCPMarket.scss';
@@ -114,7 +111,6 @@ const categoryLabels: Record<MCPCategory, string> = {
 function detectCategory(server: ExternalMCPServer): MCPCategory {
   const tags = (server.tags || []).map(t => t.toLowerCase());
   const name = server.name.toLowerCase();
-  const desc = (server.description || '').toLowerCase();
   const lang = (server.language || '').toLowerCase();
   
   if (tags.includes('database') || tags.includes('sql') || tags.includes('redis') || 
@@ -158,7 +154,7 @@ function detectCategory(server: ExternalMCPServer): MCPCategory {
 }
 
 // Convert external server to market item
-function convertToMarketItem(server: ExternalMCPServer, index: number): MCPMarketItem {
+function convertToMarketItem(server: ExternalMCPServer): MCPMarketItem {
   const category = detectCategory(server);
   const id = server.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
   
@@ -228,8 +224,8 @@ export const MCPMarket: React.FC<MCPMarketProps> = ({
         if (response.ok) {
           const data = await response.json();
           if (data.servers && Array.isArray(data.servers)) {
-            allServers = data.servers.map((server: ExternalMCPServer, index: number) => 
-              convertToMarketItem(server, index)
+            allServers = data.servers.map((server: ExternalMCPServer) => 
+              convertToMarketItem(server)
             );
           }
         }
@@ -335,7 +331,7 @@ export const MCPMarket: React.FC<MCPMarketProps> = ({
           </div>
           <Button
             variant="ghost"
-            size="sm"
+            size="small"
             onClick={handleRefresh}
             disabled={loading}
             className="mcp-market__refresh"
@@ -465,7 +461,7 @@ export const MCPMarket: React.FC<MCPMarketProps> = ({
                       </span>
                     ) : (
                       <Button
-                        size="sm"
+                        size="small"
                         onClick={() => handleInstall(item)}
                         disabled={isInstalling}
                         className="mcp-market__card-install"

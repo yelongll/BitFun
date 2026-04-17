@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { 
   Play, 
   Bug, 
   Hammer, 
   Square,
-  ChevronDown,
   Terminal,
   Settings,
   RotateCcw,
@@ -43,7 +42,6 @@ export interface EditorFloatingToolbarProps {
 
 export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
   isVisible,
-  position = { x: 20, y: 20 },
   onRun,
   onDebug,
   onBuild,
@@ -56,12 +54,11 @@ export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
   isDebugging = false,
   isBuilding = false,
   language,
-  filePath,
   runConfigs = [],
   selectedConfig = 'default',
   onConfigChange,
 }) => {
-  const { t } = useI18n('editor');
+  const { t } = useI18n();
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const handleRun = useCallback(() => {

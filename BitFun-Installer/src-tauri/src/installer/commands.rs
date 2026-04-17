@@ -396,7 +396,7 @@ pub async fn start_installation(window: Window, options: InstallOptions) -> Resu
 
         write_installed_manifest(&install_path, installed_files)?;
 
-        // Step 4: Save first-launch language preference for BitFun app.
+        // Step 4: Save first-launch language preference for 空灵语言 app.
         emit_progress(&window, "config", 92, "Applying startup preferences...");
         apply_first_launch_language(&options.app_language)
             .map_err(|e| format!("Failed to apply startup preferences: {}", e))?;
@@ -418,7 +418,7 @@ pub async fn start_installation(window: Window, options: InstallOptions) -> Resu
     Ok(())
 }
 
-/// Uninstall BitFun (for the uninstaller companion).
+/// Uninstall 空灵语言 (for the uninstaller companion).
 #[tauri::command]
 pub async fn uninstall(install_path: String) -> Result<(), String> {
     let install_path = PathBuf::from(&install_path);
@@ -589,7 +589,7 @@ pub fn launch_application(install_path: String) -> Result<(), String> {
     std::process::Command::new(&exe)
         .current_dir(&install_path)
         .spawn()
-        .map_err(|e| format!("Failed to launch BitFun: {}", e))?;
+        .map_err(|e| format!("Failed to launch 空灵语言: {}", e))?;
 
     Ok(())
 }
@@ -938,18 +938,18 @@ fn find_existing_ancestor(path: &Path) -> PathBuf {
     current
 }
 
-/// Actual install root is always under a `BitFun` directory: `{user choice}/BitFun`.
-/// If the user already chose a path whose last segment is `BitFun`, do not append again.
-fn with_bitfun_install_subdir(path: PathBuf) -> PathBuf {
-    let already_bitfun = path
+/// Actual install root is always under a `空灵语言` directory: `{user choice}/空灵语言`.
+/// If the user already chose a path whose last segment is `空灵语言`, do not append again.
+fn with_kongling_install_subdir(path: PathBuf) -> PathBuf {
+    let already_kongling = path
         .file_name()
         .and_then(|n| n.to_str())
-        .map(|s| s.eq_ignore_ascii_case("BitFun"))
+        .map(|s| s.eq_ignore_ascii_case("空灵语言"))
         .unwrap_or(false);
-    if already_bitfun {
+    if already_kongling {
         path
     } else {
-        path.join("BitFun")
+        path.join("空灵语言")
     }
 }
 
@@ -969,7 +969,7 @@ fn prepare_install_target(requested_path: &Path) -> Result<PathBuf, String> {
         return Err(format!("{}path_not_directory", INSTALL_PATH_ERR_PREFIX));
     }
 
-    let install_path = with_bitfun_install_subdir(requested_path.to_path_buf());
+    let install_path = with_kongling_install_subdir(requested_path.to_path_buf());
 
     if install_path.exists() {
         if !install_path.is_dir() {
@@ -980,7 +980,7 @@ fn prepare_install_target(requested_path: &Path) -> Result<PathBuf, String> {
             && !install_path.join("BitFun.exe").exists()
         {
             return Err(format!(
-                "{}directory_must_be_empty_or_bitfun",
+                "{}directory_must_be_empty_or_kongling",
                 INSTALL_PATH_ERR_PREFIX
             ));
         }
@@ -1020,7 +1020,7 @@ fn ensure_app_config_path() -> Result<PathBuf, String> {
         .join("bitfun")
         .join("config");
     std::fs::create_dir_all(&config_root)
-        .map_err(|e| format!("Failed to create BitFun config directory: {}", e))?;
+        .map_err(|e| format!("Failed to create 空灵语言 config directory: {}", e))?;
     Ok(config_root.join("app.json"))
 }
 
@@ -1307,7 +1307,7 @@ fn preflight_validate_payload_zip_archive<R: std::io::Read + std::io::Seek>(
     }
 
     let size = exe_size
-        .ok_or_else(|| format!("Payload from {source_label} does not contain BitFun.exe"))?;
+        .ok_or_else(|| format!("Payload from {source_label} does not contain application executable"))?;
     validate_payload_exe_size(size, source_label)
 }
 
@@ -1325,7 +1325,7 @@ fn preflight_validate_payload_dir(path: &Path, source_label: &str) -> Result<(),
 fn validate_payload_exe_size(size: u64, source_label: &str) -> Result<(), String> {
     if size < MIN_WINDOWS_APP_EXE_BYTES {
         return Err(format!(
-            "Payload BitFun.exe from {source_label} is too small ({size} bytes)"
+            "Payload application executable from {source_label} is too small ({size} bytes)"
         ));
     }
     Ok(())
@@ -1452,7 +1452,7 @@ fn read_installed_manifest(install_path: &Path) -> Result<Option<InstalledManife
 fn collect_uninstall_targets(install_path: &Path) -> Result<Vec<PathBuf>, String> {
     let mut relative_paths = match read_installed_manifest(install_path)? {
         Some(manifest) => manifest.files,
-        None => vec!["BitFun.exe".to_string(), "uninstall.exe".to_string()],
+        None => vec!["空灵语言.exe".to_string(), "uninstall.exe".to_string()],
     };
     relative_paths.push(INSTALL_MANIFEST_FILE.to_string());
 
@@ -1547,10 +1547,10 @@ fn path_buf_to_manifest_string(path: PathBuf) -> String {
 fn verify_installed_payload(install_path: &Path) -> Result<(), String> {
     let app_exe = install_path.join("BitFun.exe");
     let app_meta = std::fs::metadata(&app_exe)
-        .map_err(|_| "Installed BitFun.exe is missing after extraction".to_string())?;
+        .map_err(|_| "Installed application executable is missing after extraction".to_string())?;
     if app_meta.len() < MIN_WINDOWS_APP_EXE_BYTES {
         return Err(format!(
-            "Installed BitFun.exe is too small ({} bytes). Payload is likely invalid.",
+            "Installed application executable is too small ({} bytes). Payload is likely invalid.",
             app_meta.len()
         ));
     }

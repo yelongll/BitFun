@@ -21,7 +21,9 @@ const DEFAULT_CONFIG: EditorConfig = {
   fontSize: 14,
   fontFamily: "'Fira Code', 'Noto Sans SC', Consolas, 'Courier New', monospace",
   fontWeight: 'normal',
+  fontLigatures: true,
   lineHeight: 1.5,
+  rulers: [],
   tabSize: 2,
   insertSpaces: true,
   wordWrap: 'off',
@@ -40,6 +42,9 @@ const DEFAULT_CONFIG: EditorConfig = {
   autoSaveDelay: 1000,
   scrollBeyondLastLine: false,
   smoothScrolling: true,
+  mouseWheelZoom: true,
+  folding: true,
+  links: true,
   formatOnSave: true,
   formatOnPaste: true,
   trimAutoWhitespace: true,
@@ -82,6 +87,8 @@ const DEFAULT_CONFIG: EditorConfig = {
     fontFamily: "'Fira Code', Consolas, 'Courier New', monospace",
     padding: false,
   },
+  occurrencesHighlight: 'singleFile',
+  selectionHighlight: true,
 };
 
 export class EditorManager implements IEditorManager {

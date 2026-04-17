@@ -368,6 +368,7 @@ export interface EditorConfig {
   font_size: number;
   font_family: string;
   font_weight?: 'normal' | 'bold';
+  font_ligatures?: boolean;
   line_height: number;
   tab_size: number;
   insert_spaces: boolean;
@@ -388,6 +389,61 @@ export interface EditorConfig {
   scroll_beyond_last_line?: boolean;
   semantic_highlighting?: boolean;
   bracket_pair_colorization?: boolean;
+  mouse_wheel_zoom?: boolean;
+  folding?: boolean;
+  links?: boolean;
+  rulers?: number[];
+  guides?: EditorGuidesConfig;
+  scrollbar?: EditorScrollbarConfig;
+  hover?: EditorHoverConfig;
+  suggest?: EditorSuggestConfig;
+  quick_suggestions?: EditorQuickSuggestionsConfig;
+  inlay_hints?: EditorInlayHintsConfig;
+  occurrences_highlight?: 'off' | 'singleFile' | 'multiFile';
+  selection_highlight?: boolean;
+}
+
+export interface EditorGuidesConfig {
+  indentation?: boolean;
+  bracket_pairs?: boolean;
+  bracket_pairs_horizontal?: 'active' | 'true' | 'false';
+  highlight_active_bracket_pair?: boolean;
+  highlight_active_indentation?: boolean;
+}
+
+export interface EditorScrollbarConfig {
+  vertical?: 'auto' | 'visible' | 'hidden';
+  horizontal?: 'auto' | 'visible' | 'hidden';
+  vertical_scrollbar_size?: number;
+  horizontal_scrollbar_size?: number;
+  use_shadows?: boolean;
+}
+
+export interface EditorHoverConfig {
+  enabled?: boolean;
+  delay?: number;
+  sticky?: boolean;
+  above?: boolean;
+}
+
+export interface EditorSuggestConfig {
+  show_keywords?: boolean;
+  show_snippets?: boolean;
+  preview?: boolean;
+  show_inline_details?: boolean;
+}
+
+export interface EditorQuickSuggestionsConfig {
+  other?: boolean;
+  comments?: boolean;
+  strings?: boolean;
+}
+
+export interface EditorInlayHintsConfig {
+  enabled?: 'on' | 'off' | 'offUnlessPressed' | 'onUnlessPressed';
+  font_size?: number;
+  font_family?: string;
+  padding?: boolean;
 }
 
 export interface MinimapConfig {

@@ -12,7 +12,7 @@
       "notAbsolute": "安装路径必须是绝对路径（例如 C:\\…）。",
       "filesystemRoot": "不能安装到磁盘根目录，请选择磁盘下的某个文件夹。",
       "pathNotDirectory": "所选路径已存在但不是文件夹。",
-      "directoryMustBeEmptyOrBitfun": "安装目录必须为空，或已包含 BitFun 安装。",
+      "directoryMustBeEmptyOrKongling": "安装目录必须为空，或已包含空灵语言安装。",
       "inspectDirectoryFailed": "无法读取安装目录，请检查权限后重试。",
       "directoryNotWritable": "安装目录不可写入。请更换路径，或以管理员身份运行安装器（见下方说明）。",
       "parentNotWritable": "上级目录不可写入。系统目录（如 Program Files）通常需要管理员权限（见下方说明）。",
@@ -39,7 +39,7 @@
     "startMenu": "添加到开始菜单",
     "contextMenu": "添加右键菜单",
     "addToPath": "添加到系统 PATH",
-    "launchAfterInstall": "安装后启动 BitFun",
+    "launchAfterInstall": "安装后启动空灵语言",
     "back": "返回",
     "install": "安装",
     "installing": "准备中…",
@@ -63,12 +63,12 @@
     "getApiKey": "获取 API Key",
     "modelNamePlaceholder": "输入自定义模型名称...",
     "baseUrlPlaceholder": "示例：https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    "customRequestBodyPlaceholder": "{\n  \"temperature\": 0.8,\n  \"top_p\": 0.9\n}",
+    "customRequestBodyPlaceholder": "例如：\n{\n  \"temperature\": 0.8,\n  \"top_p\": 0.9\n}",
     "jsonValid": "JSON格式有效",
     "jsonInvalid": "JSON格式错误，请检查语法",
     "skipSslVerify": "跳过SSL证书验证",
-    "customHeadersModeMerge": "合并覆盖",
-    "customHeadersModeReplace": "完全替换",
+    "customHeadersModeMerge": "合并",
+    "customHeadersModeReplace": "替换",
     "addHeader": "添加字段",
     "headerKey": "key",
     "headerValue": "value",
@@ -140,6 +140,39 @@
       "openrouter": {
         "name": "OpenRouter",
         "description": "OpenRouter 大模型平台"
+      },
+      "opencode-zen": {
+        "name": "OpenCode Zen (免费模型)",
+        "description": "OpenCode Zen 免费模型：GPT-5-Nano、BigPickle、MiMo、Nemotron、MiniMax",
+        "urlOptions": {
+          "openai": "OpenAI Chat Completions API",
+          "responses": "OpenAI Responses API",
+          "anthropic": "Anthropic Messages API"
+        }
+      },
+      "azure": {
+        "name": "Azure OpenAI",
+        "description": "微软 Azure OpenAI 服务"
+      },
+      "tencent": {
+        "name": "腾讯混元",
+        "description": "腾讯混元大模型"
+      },
+      "baidu": {
+        "name": "百度文心",
+        "description": "百度文心一言大模型"
+      },
+      "yi": {
+        "name": "零一万物",
+        "description": "零一万物 Yi 系列大模型"
+      },
+      "mistral": {
+        "name": "Mistral AI",
+        "description": "Mistral AI 大模型"
+      },
+      "cohere": {
+        "name": "Cohere",
+        "description": "Cohere 大模型平台"
       }
     },
     "modelNameSelectPlaceholder": "选择模型",
@@ -208,14 +241,14 @@
   "complete": {
     "title": "完成",
     "heading": "安装完成",
-    "ready": "BitFun 已准备就绪。",
+    "ready": "空灵语言 已准备就绪。",
     "autoLaunch": "将自动启动应用。",
-    "launchFinish": "启动 BitFun",
+    "launchFinish": "启动空灵语言",
     "finish": "完成"
   },
   "uninstall": {
-    "title": "卸载 BitFun",
-    "subtitle": "将移除 BitFun 及其集成项（快捷方式、右键菜单、PATH）。",
+    "title": "卸载空灵语言",
+    "subtitle": "将移除空灵语言及其集成项（快捷方式、右键菜单、PATH）。",
     "installPath": "安装目录",
     "inlineHint": "将清理集成与安装目录",
     "pathUnknown": "未检测到安装目录",
@@ -226,6 +259,6 @@
     "close": "关闭"
   },
   "titlebar": {
-    "default": "BitFun"
+    "default": "空灵语言"
   }
 }

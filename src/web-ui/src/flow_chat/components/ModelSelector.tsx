@@ -15,7 +15,7 @@ import { agentAPI } from '@/infrastructure/api/service-api/AgentAPI';
 import { getProviderDisplayName } from '@/infrastructure/config/services/modelConfigs';
 import { getEffectiveReasoningMode, isReasoningVisiblyEnabled } from '@/infrastructure/config/utils/reasoning';
 import { globalEventBus } from '@/infrastructure/event-bus';
-import type { AIModelConfig } from '@/infrastructure/config/types';
+import type { AIModelConfig, ModelCategory } from '@/infrastructure/config/types';
 import { Tooltip } from '@/component-library';
 import { FlowChatStore } from '../store/FlowChatStore';
 import { createLogger } from '@/shared/utils/logger';
@@ -224,7 +224,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         id: modelId,
         configName: modelId === 'primary' ? t('modelSelector.primaryModel') : t('modelSelector.fastModel'),
         modelName: model.model_name,
-        displayName: model.display_name,
+        displayName: model.name,
         providerName: getProviderDisplayName(model),
         provider: model.provider,
         contextWindow: model.context_window,
@@ -241,7 +241,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       id: model.id || '',
       configName: model.name,
       modelName: model.model_name,
-      displayName: model.display_name,
+      displayName: model.name,
       providerName: getProviderDisplayName(model),
       provider: model.provider,
       contextWindow: model.context_window,
@@ -263,7 +263,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         id: m.id || '',
         configName: m.name,
         modelName: m.model_name,
-        displayName: m.display_name,
+        displayName: m.name,
         providerName: getProviderDisplayName(m),
         provider: m.provider,
         contextWindow: m.context_window,

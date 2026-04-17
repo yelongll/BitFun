@@ -12,7 +12,7 @@
       "notAbsolute": "The installation path must be an absolute path (for example C:\\…).",
       "filesystemRoot": "Cannot install to a drive root. Choose a folder inside the drive.",
       "pathNotDirectory": "The selected path exists but is not a folder.",
-      "directoryMustBeEmptyOrBitfun": "The installation folder must be empty, or already contain a BitFun installation.",
+      "directoryMustBeEmptyOrKongling": "The installation folder must be empty, or already contain a 空灵语言 installation.",
       "inspectDirectoryFailed": "Could not read the installation folder. Check permissions and try again.",
       "directoryNotWritable": "The installation folder is not writable. Choose another location or run the installer as administrator (see below).",
       "parentNotWritable": "The parent folder is not writable. System folders such as Program Files often require administrator rights (see below).",
@@ -39,7 +39,7 @@
     "startMenu": "Add to Start Menu",
     "contextMenu": "Add right-click context menu",
     "addToPath": "Add to system PATH",
-    "launchAfterInstall": "Launch BitFun after setup",
+    "launchAfterInstall": "Launch 空灵语言 after setup",
     "back": "Back",
     "install": "Install",
     "installing": "Preparing…",
@@ -63,12 +63,12 @@
     "getApiKey": "Get API Key",
     "modelNamePlaceholder": "Enter model name...",
     "baseUrlPlaceholder": "e.g., https://open.bigmodel.cn/api/paas/v4/chat/completions",
-    "customRequestBodyPlaceholder": "{\n  \"temperature\": 0.8,\n  \"top_p\": 0.9\n}",
+    "customRequestBodyPlaceholder": "Example:\n{\n  \"temperature\": 0.8,\n  \"top_p\": 0.9\n}",
     "jsonValid": "JSON format is valid",
     "jsonInvalid": "Invalid JSON format, please check syntax",
     "skipSslVerify": "Skip SSL Certificate Verification",
-    "customHeadersModeMerge": "Merge Override",
-    "customHeadersModeReplace": "Replace All",
+    "customHeadersModeMerge": "Merge",
+    "customHeadersModeReplace": "Replace",
     "addHeader": "Add Field",
     "headerKey": "key",
     "headerValue": "value",
@@ -140,6 +140,39 @@
       "openrouter": {
         "name": "OpenRouter",
         "description": "OpenRouter Model Platform"
+      },
+      "opencode-zen": {
+        "name": "OpenCode Zen (Free Models)",
+        "description": "OpenCode Zen free models: GPT-5-Nano, BigPickle, MiMo, Nemotron, MiniMax",
+        "urlOptions": {
+          "openai": "OpenAI Chat Completions API",
+          "responses": "OpenAI Responses API",
+          "anthropic": "Anthropic Messages API"
+        }
+      },
+      "azure": {
+        "name": "Azure OpenAI",
+        "description": "Microsoft Azure OpenAI Service"
+      },
+      "tencent": {
+        "name": "Tencent Hunyuan",
+        "description": "Tencent Hunyuan Large Model"
+      },
+      "baidu": {
+        "name": "Baidu ERNIE",
+        "description": "Baidu ERNIE Large Model"
+      },
+      "yi": {
+        "name": "01.AI",
+        "description": "01.AI Yi Series Large Model"
+      },
+      "mistral": {
+        "name": "Mistral AI",
+        "description": "Mistral AI Large Model"
+      },
+      "cohere": {
+        "name": "Cohere",
+        "description": "Cohere Model Platform"
       }
     },
     "modelNameSelectPlaceholder": "Select model",
@@ -208,14 +241,14 @@
   "complete": {
     "title": "Complete",
     "heading": "Installation Complete",
-    "ready": "BitFun is ready to use.",
+    "ready": "空灵语言 is ready to use.",
     "autoLaunch": " It will launch automatically.",
-    "launchFinish": "Launch BitFun",
+    "launchFinish": "Launch 空灵语言",
     "finish": "Finish"
   },
   "uninstall": {
-    "title": "Uninstall BitFun",
-    "subtitle": "This removes BitFun and related integrations (shortcuts, context menu, PATH).",
+    "title": "Uninstall 空灵语言",
+    "subtitle": "This removes 空灵语言 and related integrations (shortcuts, context menu, PATH).",
     "installPath": "Install path",
     "inlineHint": "Will remove integration and install directory",
     "pathUnknown": "Install path not detected",
@@ -226,6 +259,6 @@
     "close": "Close"
   },
   "titlebar": {
-    "default": "BitFun"
+    "default": "空灵语言"
   }
 }

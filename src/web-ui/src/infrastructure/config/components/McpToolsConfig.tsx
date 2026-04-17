@@ -915,13 +915,6 @@ const McpToolsConfig: React.FC = () => {
   // Handle install from market
   const handleInstallFromMarket = useCallback(async (item: MCPMarketItem) => {
     try {
-      // Build the server config from template
-      const serverConfig = {
-        mcpServers: {
-          [item.id]: item.configTemplate,
-        },
-      };
-
       // Load current config
       const currentConfig = await MCPAPI.loadMCPJsonConfig();
       let parsedConfig: Record<string, any> = {};

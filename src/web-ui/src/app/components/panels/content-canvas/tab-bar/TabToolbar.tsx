@@ -3,7 +3,7 @@
  * Compact toolbar for tab bar with run/debug actions.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   Play,
   Bug,
@@ -12,10 +12,7 @@ import {
   Hammer,
   Wand2,
   Terminal,
-  Settings,
-  ChevronDown,
-  ListTree,
-  FileCode
+  Settings
 } from 'lucide-react';
 import { IconButton, Tooltip, Select } from '@/component-library';
 import { useTranslation } from 'react-i18next';

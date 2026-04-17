@@ -227,7 +227,7 @@ function convertToSnakeCase(config: EditorConfigPartial): Record<string, any> {
     };
   }
 
-  if (config.quick_suggestions) {
+  if (config.quickSuggestions) {
     result.quick_suggestions = {
       other: config.quickSuggestions.other,
       comments: config.quickSuggestions.comments,
@@ -235,7 +235,7 @@ function convertToSnakeCase(config: EditorConfigPartial): Record<string, any> {
     };
   }
 
-  if (config.inlay_hints) {
+  if (config.inlayHints) {
     result.inlay_hints = {
       enabled: config.inlayHints.enabled,
       font_size: config.inlayHints.fontSize,
@@ -537,16 +537,6 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
       ...prev,
       suggest: {
         ...prev.suggest,
-        [key]: value
-      }
-    }));
-  }, []);
-
-  const updateQuickSuggestionsConfig = useCallback((key: keyof EditorConfigType['quickSuggestions'], value: any) => {
-    setConfig(prev => ({
-      ...prev,
-      quickSuggestions: {
-        ...prev.quickSuggestions,
         [key]: value
       }
     }));

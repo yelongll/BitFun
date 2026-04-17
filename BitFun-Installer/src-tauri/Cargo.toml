@@ -1,9 +1,9 @@
 [package]
 name = "bitfun-installer"
 version = "0.2.2"
-authors = ["BitFun Team"]
+authors = ["Kongling Language Team"]
 edition = "2021"
-description = "BitFun Custom Installer - Modern branded installation experience"
+description = "Kongling Language Custom Installer - Modern branded installation experience"
 
 [lib]
 name = "bitfun_installer_lib"
@@ -40,6 +40,8 @@ bitfun-ai-adapters = { path = "../../src/crates/ai-adapters" }
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 mslnk = "0.1"
+windows = { version = "0.52", features = ["Win32_System_Com", "Win32_UI_Shell", "Win32_Foundation"] }
+windows-core = "0.52"
 
 [profile.release]
 opt-level = "z"

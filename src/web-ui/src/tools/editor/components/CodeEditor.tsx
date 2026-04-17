@@ -1582,71 +1582,39 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     
     setIsRunning(true);
     try {
-      const { workspaceAPI } = await import('@/infrastructure/api');
-      await workspaceAPI.executeCommand({
-        command: `run ${filePath}`,
-        workspacePath: workspacePath || '',
-      });
+      log.info('Run file', { filePath });
     } catch (err) {
       log.error('Failed to run file', err);
     } finally {
       setIsRunning(false);
     }
-  }, [filePath, isRunning, workspacePath]);
+  }, [filePath, isRunning]);
 
-  // Debug file
   const handleDebug = useCallback(async () => {
     if (!filePath || isDebugging) return;
     
     setIsDebugging(true);
     try {
-      const { workspaceAPI } = await import('@/infrastructure/api');
-      await workspaceAPI.executeCommand({
-        command: `debug ${filePath}`,
-        workspacePath: workspacePath || '',
-      });
+      log.info('Debug file', { filePath });
     } catch (err) {
       log.error('Failed to debug file', err);
     } finally {
       setIsDebugging(false);
     }
-  }, [filePath, isDebugging, workspacePath]);
+  }, [filePath, isDebugging]);
 
-  // Build file
   const handleBuild = useCallback(async () => {
     if (!filePath || isBuilding) return;
     
     setIsBuilding(true);
     try {
-      const { workspaceAPI } = await import('@/infrastructure/api');
-      await workspaceAPI.executeCommand({
-        command: `build ${filePath}`,
-        workspacePath: workspacePath || '',
-      });
+      log.info('Build file', { filePath });
     } catch (err) {
       log.error('Failed to build file', err);
     } finally {
       setIsBuilding(false);
     }
-  }, [filePath, isBuilding, workspacePath]);
-
-  // Run with arguments
-  const handleRunWithArgs = useCallback(async (args: string) => {
-    if (!filePath || isRunning) return;
-    
-    setIsRunning(true);
-    try {
-      const { workspaceAPI } = await import('@/infrastructure/api');
-      await workspaceAPI.executeCommand({
-        command: `run ${filePath} ${args}`,
-        workspacePath: workspacePath || '',
-      });
-    } catch (err) {
-      log.error('Failed to run file with args', err);
-    } finally {
-      setIsRunning(false);
-    }
-  }, [filePath, isRunning, workspacePath]);
+  }, [filePath, isBuilding]);
 
   // Stop running/debugging/building
   const handleStop = useCallback(() => {
