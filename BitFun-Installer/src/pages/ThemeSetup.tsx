@@ -60,7 +60,7 @@ export function ThemeSetup({ options, setOptions, onLaunch, onClose }: ThemeSetu
       }
       onClose();
     } catch (err: unknown) {
-      setFinishError(typeof err === 'string' ? err : (err as Error)?.message || 'Failed to launch BitFun');
+      setFinishError(typeof err === 'string' ? err : (err as Error)?.message || 'Failed to launch 空灵语言');
     } finally {
       setIsFinishing(false);
     }

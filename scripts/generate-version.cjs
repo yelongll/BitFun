@@ -48,7 +48,7 @@ function generateVersionInfo() {
   const isDev = buildEnv === 'development';
   
   const versionInfo = {
-    name: packageJson.name === 'BitFun' ? 'BitFun' : packageJson.name,
+    name: packageJson.name === 'BitFun' ? '空灵语言' : packageJson.name,
     version: packageJson.version,
     buildDate,
     buildTimestamp,

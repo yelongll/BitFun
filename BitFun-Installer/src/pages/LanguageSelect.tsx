@@ -7,13 +7,13 @@ interface LanguageSelectProps {
 }
 
 const LANGUAGES = [
-  { code: 'en', label: 'English', native: 'English' },
   { code: 'zh', label: 'Chinese', native: '\u7b80\u4f53\u4e2d\u6587' },
+  { code: 'en', label: 'English', native: 'English' },
 ];
 
 export function LanguageSelect({ onSelect }: LanguageSelectProps) {
   const { i18n } = useTranslation();
-  const [selected, setSelected] = useState<string>('en');
+  const [selected, setSelected] = useState<string>('zh');
 
   const handleSelect = (code: string) => {
     setSelected(code);
@@ -45,7 +45,7 @@ export function LanguageSelect({ onSelect }: LanguageSelectProps) {
           textAlign: 'center', maxWidth: 280, padding: '0 24px',
           animation: 'heroContentFadeIn 0.8s ease-out 0.3s both',
         }}>
-          <img src={logoUrl} alt="BitFun" style={{
+          <img src={logoUrl} alt="空灵语言" style={{
             display: 'block', margin: '0 auto 16px',
             width: 56, height: 56, borderRadius: 14,
             filter: 'drop-shadow(0 0 40px rgba(100, 180, 255, 0.15))',
@@ -55,7 +55,7 @@ export function LanguageSelect({ onSelect }: LanguageSelectProps) {
             color: 'var(--color-text-primary)', letterSpacing: '-0.03em',
             lineHeight: 0.95, margin: '0 0 16px 0',
             textShadow: '0 0 60px rgba(100, 180, 255, 0.3)',
-          }}>BitFun</h1>
+          }}>空灵语言</h1>
         </div>
 
         <div style={{
@@ -97,7 +97,7 @@ export function LanguageSelect({ onSelect }: LanguageSelectProps) {
                   <line x1="2" y1="12" x2="22" y2="12" />
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                 </svg>
-                Select Language / {'\u9009\u62e9\u8bed\u8a00'}
+                {'\u9009\u62e9\u8bed\u8a00'}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

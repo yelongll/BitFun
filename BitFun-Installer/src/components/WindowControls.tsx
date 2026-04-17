@@ -1,7 +1,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 /**
- * Window controls — matches BitFun main app style.
+ * Window controls — matches 空灵语言 main app style.
  * 32x32 transparent buttons with SVG icons, subtle hover bg.
  */
 export function WindowControls() {

@@ -1,9 +1,9 @@
 [package]
 name = "bitfun-installer"
 version = "0.2.2"
-authors = ["Kongling Language Team"]
+authors = ["KonglingLanguage Team"]
 edition = "2021"
-description = "Kongling Language Custom Installer - Modern branded installation experience"
+description = "KonglingLanguage Custom Installer - Modern branded installation experience"
 
 [lib]
 name = "bitfun_installer_lib"
