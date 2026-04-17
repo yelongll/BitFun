@@ -73,10 +73,58 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
   box-sizing: border-box;
   height: calc(var(--skills-left-body-h) * 2);
   max-height: calc(var(--skills-left-body-h) * 2);
-  border: 1px solid var(--border-medium);
   border-radius: $size-radius-xl;
   padding: $size-gap-3 $size-gap-4 $size-gap-2;
   overflow: hidden;
+  position: relative;
+  background: var(--element-bg-subtle);
+
+  // Waterfall flowing border effect
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(
+      180deg,
+      var(--color-accent-400) 0%,
+      var(--color-accent-300) 20%,
+      var(--color-accent-500) 40%,
+      var(--color-accent-300) 60%,
+      var(--color-accent-400) 80%,
+      var(--color-accent-500) 100%
+    );
+    background-size: 100% 300%;
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: waterfall-border-glow 4s linear infinite;
+    pointer-events: none;
+  }
+
+  // Shimmer overlay
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background: conic-gradient(
+      from 0deg at 50% 50%,
+      transparent 0deg,
+      transparent 60deg,
+      color-mix(in srgb, var(--color-accent-300) 40%, transparent) 90deg,
+      color-mix(in srgb, var(--color-accent-400) 60%, transparent) 120deg,
+      color-mix(in srgb, var(--color-accent-300) 40%, transparent) 150deg,
+      transparent 180deg,
+      transparent 360deg
+    );
+    opacity: 0.3;
+    animation: waterfall-rotate-shimmer 8s linear infinite;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -515,11 +563,22 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
 }
 
 .skills-split__right-title {
-  font-size: clamp(16px, 1.6vw, 18px);
-  font-weight: $font-weight-semibold;
+  font-size: clamp(18px, 1.8vw, 20px);
+  font-weight: $font-weight-bold;
   color: var(--color-text-primary);
   letter-spacing: -0.02em;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: $size-gap-2;
+
+  &::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(180deg, var(--color-accent-400) 0%, var(--color-accent-600) 100%);
+    border-radius: 2px;
+  }
 }
 
 // Filters + total count + add on one row (wraps on narrow width)
@@ -548,23 +607,22 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
   display: inline-flex;
   align-items: center;
   gap: $size-gap-1;
-  height: 24px;
-  padding: 0 $size-gap-2;
+  height: 28px;
+  padding: 0 $size-gap-3;
   border: 1px solid var(--border-subtle);
   border-radius: $size-radius-full;
-  background: transparent;
+  background: var(--element-bg-subtle);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
   font-weight: $font-weight-medium;
   cursor: pointer;
-  transition:
-    background $motion-fast $easing-standard,
-    color $motion-fast $easing-standard,
-    border-color $motion-fast $easing-standard;
+  transition: all $motion-fast $easing-standard;
 
   &:hover {
     color: var(--color-text-primary);
     background: var(--element-bg-soft);
+    border-color: var(--border-medium);
+    transform: translateY(-1px);
   }
 
   &:focus-visible {
@@ -574,8 +632,9 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
 
   &.is-active {
     color: var(--color-accent-500);
-    background: var(--color-accent-100);
+    background: linear-gradient(135deg, var(--color-accent-100) 0%, var(--color-accent-50) 100%);
     border-color: var(--color-accent-300);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent-500) 15%, transparent);
   }
 }
 
@@ -583,18 +642,19 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
-  min-width: 16px;
-  padding: 0 4px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
   border-radius: $size-radius-full;
   background: var(--element-bg-medium);
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: $font-weight-semibold;
   transition: inherit;
 
   .skills-split__filter-chip.is-active & {
-    background: color-mix(in srgb, var(--color-accent-500) 15%, transparent);
-    color: var(--color-accent-500);
+    background: var(--color-accent-500);
+    color: white;
   }
 }
 
@@ -619,21 +679,86 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
   margin-top: auto;
 }
 
-// Installed skill row
+// Installed skill row - enhanced styling with waterfall shimmer border
 .skills-split__installed-row {
   display: flex;
   align-items: center;
   gap: $size-gap-3;
-  padding: $size-gap-3 $size-gap-2;
-  border-radius: $size-radius-lg;
+  padding: $size-gap-3 $size-gap-3;
+  margin: 2px 0;
+  border-radius: $size-radius-xl;
   cursor: pointer;
-  animation: skills-row-in 0.2s $easing-decelerate both;
-  animation-delay: calc(var(--row-index, 0) * 25ms);
-  transition:
-    background $motion-fast $easing-standard;
+  animation: skills-row-in 0.25s $easing-decelerate both;
+  animation-delay: calc(var(--row-index, 0) * 30ms);
+  transition: all $motion-fast $easing-standard;
+  background: var(--element-bg-subtle);
+  border: 1px solid transparent;
+  position: relative;
+  overflow: hidden;
+
+  // Waterfall shimmer border effect
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 40%,
+      color-mix(in srgb, var(--color-accent-400) 30%, transparent) 50%,
+      color-mix(in srgb, var(--color-accent-300) 50%, transparent) 55%,
+      color-mix(in srgb, var(--color-accent-400) 30%, transparent) 60%,
+      transparent 100%
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  // Staggered waterfall animation delay based on row index
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-accent-400) 0%, transparent) 0%,
+      color-mix(in srgb, var(--color-accent-400) calc(var(--row-index, 0) * 10%), transparent) 30%,
+      color-mix(in srgb, var(--color-accent-300) calc(60% - var(--row-index, 0) * 5%), transparent) 70%,
+      color-mix(in srgb, var(--color-accent-400) 0%, transparent) 100%
+    );
+    -webkit-mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    animation: waterfall-border-flow 3s ease-in-out infinite;
+    animation-delay: calc(var(--row-index, 0) * 150ms);
+  }
 
   &:hover {
     background: var(--element-bg-soft);
+    border-color: var(--border-medium);
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+    &::before {
+      opacity: 1;
+      animation: waterfall-shimmer 2s ease-in-out infinite;
+      animation-delay: calc(var(--row-index, 0) * 100ms);
+    }
+
+    &::after {
+      opacity: 1;
+    }
   }
 
   &:focus-visible {
@@ -644,15 +769,21 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
 
 .skills-split__row-icon {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: $size-radius-base;
-  background: var(--element-bg-medium);
-  border: 1px solid var(--border-subtle);
-  color: var(--color-text-secondary);
+  border-radius: $size-radius-lg;
+  background: linear-gradient(135deg, var(--color-accent-100) 0%, var(--element-bg-medium) 100%);
+  border: 1px solid var(--color-accent-200);
+  color: var(--color-accent-500);
+  transition: all $motion-fast $easing-standard;
+
+  .skills-split__installed-row:hover & {
+    background: linear-gradient(135deg, var(--color-accent-200) 0%, var(--color-accent-100) 100%);
+    transform: scale(1.05);
+  }
 }
 
 .skills-split__row-body {
@@ -664,24 +795,25 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
 }
 
 .skills-split__row-name {
-  font-size: var(--font-size-sm);
-  font-weight: $font-weight-medium;
+  font-size: var(--font-size-base);
+  font-weight: $font-weight-semibold;
   color: var(--color-text-primary);
   line-height: $line-height-tight;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
 .skills-split__row-desc {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  opacity: 0.72;
   line-height: $line-height-relaxed;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  max-width: 280px;
 }
 
 .skills-split__row-end {
@@ -695,27 +827,26 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
-  border-radius: $size-radius-base;
+  border-radius: $size-radius-full;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   opacity: 0;
-  transition:
-    background $motion-fast $easing-standard,
-    color $motion-fast $easing-standard,
-    opacity $motion-fast $easing-standard;
+  transition: all $motion-fast $easing-standard;
 
   .skills-split__installed-row:hover & {
-    opacity: 1;
+    opacity: 0.6;
   }
 
   &:hover {
-    background: color-mix(in srgb, var(--color-error) 10%, var(--element-bg-medium));
+    background: color-mix(in srgb, var(--color-error) 12%, transparent);
     color: var(--color-error);
+    opacity: 1;
+    transform: scale(1.1);
   }
 
   &:focus-visible {
@@ -889,6 +1020,59 @@ $skills-content-top: clamp(36px, 4.5vh, 48px);
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+// Waterfall shimmer animation - horizontal sweep
+@keyframes waterfall-shimmer {
+  0% {
+    left: -100%;
+  }
+  50% {
+    left: 100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+// Waterfall border flow animation - vertical flowing gradient
+@keyframes waterfall-border-flow {
+  0%, 100% {
+    background-position: 0% 0%;
+    filter: hue-rotate(0deg);
+  }
+  25% {
+    background-position: 0% 50%;
+    filter: hue-rotate(15deg);
+  }
+  50% {
+    background-position: 0% 100%;
+    filter: hue-rotate(0deg);
+  }
+  75% {
+    background-position: 0% 50%;
+    filter: hue-rotate(-15deg);
+  }
+}
+
+// Waterfall border glow - vertical gradient flow
+@keyframes waterfall-border-glow {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 0% 300%;
+  }
+}
+
+// Waterfall rotate shimmer - conic gradient rotation
+@keyframes waterfall-rotate-shimmer {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
   }
 }
 

@@ -89,7 +89,12 @@ export function useSkillMarket({
   }, [installedSkillNames, marketSkills]);
 
   const loadedPages = Math.ceil(displayMarketSkills.length / pageSize);
-  const totalPages = hasMore ? loadedPages + 1 : Math.max(1, loadedPages);
+  // Calculate estimated total pages based on current data
+  // If we have hasMore=false, we know the exact total
+  // If hasMore=true, we estimate based on what we've loaded so far
+  const totalPages = hasMore
+    ? Math.max(loadedPages + 1, currentPage + 2)
+    : Math.max(1, loadedPages);
 
   const paginatedSkills = useMemo(() => displayMarketSkills.slice(
     currentPage * pageSize,

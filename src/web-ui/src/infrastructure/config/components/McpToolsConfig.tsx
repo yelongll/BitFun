@@ -4,7 +4,7 @@
  * Uses settings/mcp-tools for page title/subtitle, settings/mcp for the MCP section.
  */
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FileJson,
@@ -18,6 +18,7 @@ import {
   MinusCircle,
   KeyRound,
   Trash2,
+  Store,
 } from 'lucide-react';
 import { Button, Textarea, IconButton, Modal } from '@/component-library';
 import {
@@ -29,12 +30,9 @@ import {
 } from './common';
 import { useNotification } from '@/shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
-import {
-  MCPAPI,
-  MCPRemoteOAuthSessionSnapshot,
-  MCPServerInfo,
-} from '../../api/service-api/MCPAPI';
+import { MCPAPI, MCPRemoteOAuthSessionSnapshot, MCPServerInfo } from '../../api/service-api/MCPAPI';
 import { systemAPI } from '../../api/service-api/SystemAPI';
+import { MCPMarket, MCPMarketItem } from './MCPMarket';
 import './McpToolsConfig.scss';
 
 const log = createLogger('McpToolsConfig');
@@ -186,6 +184,7 @@ const McpToolsConfig: React.FC = () => {
     column?: number;
     position?: number;
   } | null>(null);
+  const [showMarket, setShowMarket] = useState(false);
 
   const tryFormatJson = (input: string): string | null => {
     try {
@@ -913,15 +912,66 @@ const McpToolsConfig: React.FC = () => {
     return tMcp('actions.startRemoteOAuth');
   };
 
+  // Handle install from market
+  const handleInstallFromMarket = useCallback(async (item: MCPMarketItem) => {
+    try {
+      // Build the server config from template
+      const serverConfig = {
+        mcpServers: {
+          [item.id]: item.configTemplate,
+        },
+      };
+
+      // Load current config
+      const currentConfig = await MCPAPI.loadMCPJsonConfig();
+      let parsedConfig: Record<string, any> = {};
+      try {
+        parsedConfig = JSON.parse(currentConfig);
+      } catch {
+        // If parse fails, start fresh
+      }
+
+      // Merge configs
+      const mergedConfig = {
+        ...parsedConfig,
+        mcpServers: {
+          ...(parsedConfig.mcpServers || {}),
+          [item.id]: item.configTemplate,
+        },
+      };
+
+      // Save config
+      await MCPAPI.saveMCPJsonConfig(JSON.stringify(mergedConfig, null, 2));
+
+      // Reload servers
+      await loadServers();
+
+      return Promise.resolve();
+    } catch (error) {
+      log.error('Failed to install MCP from market', { item, error });
+      return Promise.reject(error);
+    }
+  }, []);
+
   const mcpSectionExtra = (
-    <IconButton
-      variant="ghost"
-      size="small"
-      onClick={() => setShowJsonEditor(!showJsonEditor)}
-      tooltip={showJsonEditor ? tMcp('actions.backToList') : tMcp('actions.jsonConfig')}
-    >
-      {showJsonEditor ? <X size={16} /> : <FileJson size={16} />}
-    </IconButton>
+    <div className="bitfun-mcp-tools__header-actions">
+      <IconButton
+        variant="ghost"
+        size="small"
+        onClick={() => setShowMarket(true)}
+        tooltip={tMcp('actions.market', { defaultValue: 'MCP 市场' })}
+      >
+        <Store size={16} />
+      </IconButton>
+      <IconButton
+        variant="ghost"
+        size="small"
+        onClick={() => setShowJsonEditor(!showJsonEditor)}
+        tooltip={showJsonEditor ? tMcp('actions.backToList') : tMcp('actions.jsonConfig')}
+      >
+        {showJsonEditor ? <X size={16} /> : <FileJson size={16} />}
+      </IconButton>
+    </div>
   );
 
   const renderServerBadge = (server: MCPServerInfo) => (
@@ -1269,6 +1319,14 @@ const McpToolsConfig: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* MCP Market Modal */}
+      <MCPMarket
+        isOpen={showMarket}
+        onClose={() => setShowMarket(false)}
+        installedServerIds={servers.map((s) => s.id)}
+        onInstall={handleInstallFromMarket}
+      />
     </ConfigPageLayout>
   );
 };

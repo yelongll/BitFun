@@ -26,6 +26,7 @@ import { getCardGradient } from '@/shared/utils/cardGradients';
 import { useInstalledSkills } from './hooks/useInstalledSkills';
 import { useSkillMarket } from './hooks/useSkillMarket';
 import SkillCard from './components/SkillCard';
+import { MarketPagination } from './components/MarketPagination';
 import './SkillsScene.scss';
 import { useSkillsSceneStore } from './skillsSceneStore';
 import { useGallerySceneAutoRefresh } from '@/app/hooks/useGallerySceneAutoRefresh';
@@ -259,31 +260,16 @@ const SkillsScene: React.FC = () => {
 
             {/* Pagination */}
             {!market.marketLoading && !market.marketError && (market.totalPages > 1 || market.hasMore) && (
-              <div className="skills-split__pagination">
-                <button
-                  type="button"
-                  className="skills-split__page-btn"
-                  onClick={market.goToPrevPage}
-                  disabled={market.currentPage === 0 || market.loadingMore}
-                  aria-label={t('market.pagination.prev')}
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="skills-split__page-info">
-                  {market.hasMore
-                    ? t('market.pagination.infoMore', { current: market.currentPage + 1 })
-                    : t('market.pagination.info', { current: market.currentPage + 1, total: market.totalPages })}
-                </span>
-                <button
-                  type="button"
-                  className="skills-split__page-btn"
-                  onClick={() => void market.goToNextPage()}
-                  disabled={(!market.hasMore && market.currentPage >= market.totalPages - 1) || market.loadingMore}
-                  aria-label={t('market.pagination.next')}
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
+              <MarketPagination
+                currentPage={market.currentPage}
+                totalPages={market.totalPages}
+                hasMore={market.hasMore}
+                loadingMore={market.loadingMore}
+                onPrevPage={market.goToPrevPage}
+                onNextPage={() => void market.goToNextPage()}
+                prevLabel={t('market.pagination.prev')}
+                nextLabel={t('market.pagination.next')}
+              />
             )}
           </div>
         </div>
