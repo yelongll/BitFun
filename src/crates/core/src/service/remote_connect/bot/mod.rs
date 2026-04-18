@@ -6,12 +6,16 @@
 
 pub mod command_router;
 pub mod feishu;
+pub mod locale;
+pub mod menu;
 pub mod telegram;
 pub mod weixin;
 
 use serde::{Deserialize, Serialize};
 
 pub use command_router::{BotChatState, ForwardRequest, ForwardedTurnResult, HandleResult};
+pub use locale::BotLanguage;
+pub use menu::{MenuItem, MenuItemStyle, MenuView};
 
 /// Configuration for a bot-based connection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,64 +492,70 @@ pub fn extract_downloadable_file_paths(
     paths
 }
 
-// ── Shared file-download action builder ───────────────────────────
+// ── Auto-push file delivery helpers ───────────────────────────────
 
-/// Scan `text` for downloadable file references (`computer://`, `file://`,
-/// and markdown hyperlinks to local files), register them as pending downloads
-/// in `state`, and return a ready-to-send [`HandleResult`] with one download
-/// button per file.  Returns `None` when no downloadable files are found.
-pub fn prepare_file_download_actions(
-    text: &str,
-    state: &mut command_router::BotChatState,
-    workspace_root: Option<&std::path::Path>,
-) -> Option<command_router::HandleResult> {
-    use command_router::BotAction;
-
-    let file_paths = extract_downloadable_file_paths(text, workspace_root);
-    if file_paths.is_empty() {
-        return None;
-    }
-
-    let mut actions: Vec<BotAction> = Vec::new();
-    for path in &file_paths {
-        if let Some((name, size)) = get_file_metadata(path, workspace_root) {
-            let token = generate_download_token(&state.chat_id);
-            state.pending_files.insert(token.clone(), path.clone());
-            actions.push(BotAction::secondary(
-                format!("📥 {} ({})", name, format_file_size(size)),
-                format!("download_file:{token}"),
-            ));
-        }
-    }
-
-    if actions.is_empty() {
-        return None;
-    }
-
-    let intro = if actions.len() == 1 {
-        "📎 1 file ready to download:".to_string()
-    } else {
-        format!("📎 {} files ready to download:", actions.len())
-    };
-
-    Some(command_router::HandleResult {
-        reply: intro,
-        actions,
-        forward_to_session: None,
-    })
+/// One file to be auto-pushed to the IM peer alongside an agent reply.
+#[derive(Debug, Clone)]
+pub struct AutoPushFile {
+    /// Absolute path on the desktop (already resolved).
+    pub abs_path: String,
+    /// User-visible filename (basename of `abs_path`).
+    pub name: String,
+    /// Plaintext file size in bytes (for size-limit checks and UI).
+    pub size: u64,
 }
 
-/// Produce a short hex token for a pending file download.
-fn generate_download_token(chat_id: &str) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let ns = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    let salt = chat_id
-        .bytes()
-        .fold(0u32, |acc, b| acc.wrapping_add(b as u32));
-    format!("{:08x}", ns ^ salt)
+/// Scan an agent reply for downloadable file references and resolve their
+/// metadata so each platform adapter can push them directly to the user
+/// without an intermediate "tap to download" prompt.
+pub fn collect_auto_push_files(
+    text: &str,
+    workspace_root: Option<&std::path::Path>,
+) -> Vec<AutoPushFile> {
+    extract_downloadable_file_paths(text, workspace_root)
+        .into_iter()
+        .filter_map(|path| {
+            get_file_metadata(&path, workspace_root).map(|(name, size)| AutoPushFile {
+                abs_path: path,
+                name,
+                size,
+            })
+        })
+        .collect()
+}
+
+/// Caption sent once before the first auto-pushed file.
+pub fn auto_push_intro(language: BotLanguage, count: usize) -> String {
+    let strings = locale::strings_for(language);
+    if count <= 1 {
+        strings.auto_push_intro_one.to_string()
+    } else {
+        locale::fmt_count(strings.auto_push_intro_many_fmt, count)
+    }
+}
+
+/// Notice sent when a single file exceeds the platform's size limit and is skipped.
+pub fn auto_push_skip_too_large_message(
+    language: BotLanguage,
+    file_name: &str,
+    size: u64,
+    limit: u64,
+) -> String {
+    let strings = locale::strings_for(language);
+    strings
+        .auto_push_skip_too_large_fmt
+        .replace("{name}", file_name)
+        .replace("{size}", &format_file_size(size))
+        .replace("{limit}", &format_file_size(limit))
+}
+
+/// Notice sent when an upload/send call fails for a single file.
+pub fn auto_push_failed_message(language: BotLanguage, file_name: &str, err: &str) -> String {
+    let strings = locale::strings_for(language);
+    strings
+        .auto_push_failed_fmt
+        .replace("{name}", file_name)
+        .replace("{err}", err)
 }
 
 const REMOTE_CONNECT_PERSISTENCE_FILENAME: &str = "remote_connect_persistence.json";

@@ -182,6 +182,7 @@ impl MiniAppManager {
             permissions,
             ai_context,
             runtime,
+            i18n: None,
         };
 
         self.storage.save(&app).await?;
@@ -285,6 +286,13 @@ impl MiniAppManager {
         let gp = self.granted_paths.read().await;
         let granted = gp.get(app_id).map(|v| v.as_slice()).unwrap_or(&[]);
         resolve_policy(permissions, app_id, &app_data_dir, workspace_root, granted)
+    }
+
+    /// Snapshot of user-granted extra paths for an app (used by the host-side dispatch
+    /// to mirror what `resolve_policy_for_app` would inject into the worker policy).
+    pub async fn granted_paths_for_app(&self, app_id: &str) -> Vec<PathBuf> {
+        let gp = self.granted_paths.read().await;
+        gp.get(app_id).cloned().unwrap_or_default()
     }
 
     /// Grant workspace access for an app (no-op; workspace context is supplied by caller).
