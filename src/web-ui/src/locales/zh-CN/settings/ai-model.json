@@ -65,8 +65,8 @@
   },
   "providers": {
     "opencode-zen": {
-      "name": "OpenCode Zen (免费模型)",
-      "description": "OpenCode Zen 免费模型：GPT-5-Nano、BigPickle、MiMo、Nemotron、MiniMax",
+      "name": "免费模型",
+      "description": "免费模型：GPT-5-Nano、BigPickle、MiMo、Nemotron、MiniMax",
       "urlOptions": {
         "openai": "OpenAI Chat Completions API",
         "responses": "OpenAI Responses API",
@@ -74,8 +74,8 @@
       }
     },
     "openbitfun": {
-      "name": "OpenBitFun",
-      "description": "OpenBitFun 大模型平台"
+      "name": "空灵AI",
+      "description": "空灵系列模型"
     },
     "gemini": {
       "name": "Google Gemini",

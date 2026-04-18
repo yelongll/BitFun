@@ -38,7 +38,7 @@ export function getVersionInfo(): VersionInfo {
  
 export function formatVersion(version: string, isDev: boolean): string {
   if (isDev) {
-    return `${version}-dev`;
+    return `${version}-预览版`;
   }
   return version;
 }

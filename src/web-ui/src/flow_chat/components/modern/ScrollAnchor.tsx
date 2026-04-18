@@ -125,10 +125,10 @@ export const ScrollAnchor: React.FC<ScrollAnchorProps> = ({
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes} min ago`;
-    if (hours < 24) return `${hours} hr ago`;
-    if (days < 7) return `${days} days ago`;
+    if (minutes < 1) return '刚刚';
+    if (minutes < 60) return `${minutes} 分钟前`;
+    if (hours < 24) return `${hours} 小时前`;
+    if (days < 7) return `${days} 天前`;
     
     return i18nService.formatDate(date, { 
       month: 'short', 
@@ -194,7 +194,7 @@ export const ScrollAnchor: React.FC<ScrollAnchorProps> = ({
             </span>
           </div>
           <div className="scroll-anchor__preview-header">
-            <span className="scroll-anchor__preview-label">User message</span>
+            <span className="scroll-anchor__preview-label">用户消息</span>
             <span className="scroll-anchor__preview-time">
               {formatTimestamp(hoveredAnchor.timestamp)}
             </span>

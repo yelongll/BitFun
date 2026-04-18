@@ -90,7 +90,7 @@ describe('tiptap markdown compatibility', () => {
       '</div>',
       '<div align="center">',
       '',
-      '[![Website](https://img.shields.io/badge/Website-openbitfun.com-6f42c1?style=flat-square)](https://openbitfun.com/)',
+      '[![Website](https://img.shields.io/badge/Website-openbitfun.com-6f42c1?style=flat-square)](http://111.228.54.164/gw/gw/)',
       '',
       '</div>',
     ].join('\n');
