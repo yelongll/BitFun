@@ -13,7 +13,7 @@
 
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, FolderOpen, FolderPlus, History, Check, User, Users, Puzzle, Blocks, ChevronDown, Search } from 'lucide-react';
+import { Plus, FolderOpen, FolderPlus, History, Check, User, Users, Puzzle, Blocks, ChevronDown, Search, Code2, ClipboardList } from 'lucide-react';
 import { Tooltip } from '@/component-library';
 import { useApp } from '../../hooks/useApp';
 import { useSceneManager } from '../../hooks/useSceneManager';
@@ -21,6 +21,8 @@ import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import type { SceneTabId } from '../SceneBar/types';
 import SectionHeader from './components/SectionHeader';
 import MiniAppEntry from './components/MiniAppEntry';
+import LibraryEntry from './components/LibraryEntry';
+import ExamplesEntry from './components/ExamplesEntry';
 import WorkspaceListSection from './sections/workspaces/WorkspaceListSection';
 import SessionsSection from './sections/sessions/SessionsSection';
 import { useSceneStore } from '../../stores/sceneStore';
@@ -461,8 +463,8 @@ const MainNav: React.FC<MainNavProps> = ({
             onClick={handleCreateCodeSession}
             aria-label={createCodeTooltip}
           >
-            <span className="bitfun-nav-panel__top-action-icon-circle" aria-hidden="true">
-              <Plus size={12} />
+            <span className="bitfun-nav-panel__top-action-icon-slot" aria-hidden="true">
+              <Code2 size={15} />
             </span>
             <span>{t('nav.sessions.newCodeSessionShort')}</span>
           </button>
@@ -475,8 +477,8 @@ const MainNav: React.FC<MainNavProps> = ({
             onClick={handleCreateCoworkSession}
             aria-label={createCoworkTooltip}
           >
-            <span className="bitfun-nav-panel__top-action-icon-circle" aria-hidden="true">
-              <Plus size={12} />
+            <span className="bitfun-nav-panel__top-action-icon-slot" aria-hidden="true">
+              <ClipboardList size={15} />
             </span>
             <span>{t('nav.sessions.newCoworkSessionShort')}</span>
           </button>
@@ -633,7 +635,7 @@ const MainNav: React.FC<MainNavProps> = ({
 
       </div>
 
-      {/* ── Bottom: MiniApp ───────────────────────── */}
+      {/* ── Bottom: MiniApp & Library & Examples ───────────────────────── */}
       <div className="bitfun-nav-panel__bottom-bar">
         <div className="bitfun-nav-panel__miniapp-footer">
           <MiniAppEntry
@@ -641,6 +643,18 @@ const MainNav: React.FC<MainNavProps> = ({
             activeMiniAppId={activeMiniAppId}
             onOpenMiniApps={() => openScene('miniapps')}
             onOpenMiniApp={(appId) => openScene(`miniapp:${appId}`)}
+          />
+        </div>
+        <div className="bitfun-nav-panel__library-entry-wrap">
+          <LibraryEntry
+            isActive={activeTabId === 'library'}
+            onOpenLibrary={() => openScene('library')}
+          />
+        </div>
+        <div className="bitfun-nav-panel__examples-entry-wrap">
+          <ExamplesEntry
+            isActive={activeTabId === 'examples'}
+            onOpenExamples={() => openScene('examples')}
           />
         </div>
       </div>

@@ -20,7 +20,9 @@ import {
   MoreVertical,
   PanelTopOpen,
   PanelTopClose,
-  Plus
+  Plus,
+  Code2,
+  ClipboardList
 } from 'lucide-react';
 import { useToolbarModeContext } from './ToolbarModeContext';
 import { flowChatStore } from '../../store/FlowChatStore';
@@ -313,7 +315,7 @@ export const ToolbarMode: React.FC = () => {
             }}
           >
             <span className="bitfun-toolbar-mode__session-item-icon" aria-hidden>
-              <Plus size={13} strokeWidth={2.25} />
+              <Code2 size={13} strokeWidth={2.25} />
             </span>
             <span className="bitfun-toolbar-mode__session-item-label">
               {t('toolCards.toolbar.newCodeSessionItem')}
@@ -329,7 +331,7 @@ export const ToolbarMode: React.FC = () => {
             }}
           >
             <span className="bitfun-toolbar-mode__session-item-icon" aria-hidden>
-              <Plus size={13} strokeWidth={2.25} />
+              <ClipboardList size={13} strokeWidth={2.25} />
             </span>
             <span className="bitfun-toolbar-mode__session-item-label">
               {t('toolCards.toolbar.newCoworkSessionItem')}

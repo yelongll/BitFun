@@ -176,9 +176,11 @@ function convertToMarketItem(server: ExternalMCPServer): MCPMarketItem {
     configTemplate: isNpx ? {
       command: 'npx',
       args: ['-y', repoName],
+      env: {},
     } : {
       command: 'python',
       args: ['-m', repoName],
+      env: {},
     },
     homepage: server.repository,
     repository: server.repository,
@@ -534,6 +536,7 @@ function getFallbackServers(): MCPMarketItem[] {
       configTemplate: {
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://localhost/mydb'],
+        env: {},
       },
       homepage: 'https://github.com/modelcontextprotocol/servers',
       repository: 'https://github.com/modelcontextprotocol/servers',
@@ -552,6 +555,7 @@ function getFallbackServers(): MCPMarketItem[] {
       configTemplate: {
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-sqlite', '/path/to/database.db'],
+        env: {},
       },
       homepage: 'https://github.com/modelcontextprotocol/servers',
       repository: 'https://github.com/modelcontextprotocol/servers',
@@ -570,6 +574,7 @@ function getFallbackServers(): MCPMarketItem[] {
       configTemplate: {
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-puppeteer'],
+        env: {},
       },
       homepage: 'https://github.com/modelcontextprotocol/servers',
       repository: 'https://github.com/modelcontextprotocol/servers',
@@ -588,6 +593,7 @@ function getFallbackServers(): MCPMarketItem[] {
       configTemplate: {
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/allowed/dir'],
+        env: {},
       },
       homepage: 'https://github.com/modelcontextprotocol/servers',
       repository: 'https://github.com/modelcontextprotocol/servers',

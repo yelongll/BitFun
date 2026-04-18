@@ -36,7 +36,7 @@
     "clarificationBatchCompleted": "批量澄清处理完成"
   },
   "header": {
-    "openProject": "打开工作区",
+    "openProject": "打开项目",
     "newProject": "新建空灵项目",
     "goHome": "返回首页",
     "about": "关于",
@@ -80,13 +80,13 @@
     "items": {
       "sessions": "会话",
       "project": "目录",
-      "persona": "助理",
+      "persona": "代码助理",
       "agents": "专业智能体",
       "skills": "技能",
       "tools": "工具",
       "terminal": "Shell",
       "git": "Git",
-      "miniApps": "小应用",
+      "miniApps": "轻应用",
       "insights": "洞察"
     },
     "tooltips": {
@@ -97,10 +97,10 @@
       "addWorkspace": "添加工作区"
     },
     "sections": {
-      "workspace": "工作区",
-      "extensions": "定制",
+      "workspace": "项目管理器",
+      "extensions": "拓展配置",
       "shell": "Shell",
-      "assistantSessions": "助理会话"
+      "assistantSessions": "助理会话(Claw)"
     },
     "search": {
       "triggerPlaceholder": "搜索",
@@ -161,15 +161,15 @@
     },
     "sessions": {
       "newSession": "新建会话",
-      "newCodeSession": "新建 Code 会话",
-      "newCoworkSession": "新建 Cowork 会话",
-      "newCodeSessionShort": "编码会话",
-      "newCoworkSessionShort": "办公会话",
+      "newCodeSession": "新建代码会话",
+      "newCoworkSession": "新建协作会话",
+      "newCodeSessionShort": "代码会话(Code)",
+      "newCoworkSessionShort": "协作会话(Cowork)",
       "newClawSession": "新建 Claw 会话",
       "modeCode": "Code",
       "modeCowork": "Cowork",
-      "codeSessionMode": "Code 会话",
-      "coworkSessionMode": "Cowork 会话",
+      "codeSessionMode": "代码会话",
+      "coworkSessionMode": "协作会话",
       "noSessions": "暂无会话",
       "rename": "重命名",
       "delete": "删除",
@@ -795,13 +795,35 @@
     "projectContext": "项目概况",
     "agents": "智能体",
     "skills": "技能",
-    "miniApps": "小应用",
+    "miniApps": "轻应用",
     "browser": "浏览器",
     "mermaidEditor": "Mermaid 图表",
     "insights": "洞察",
     "assistant": "助理",
     "shell": "Shell",
-    "panelView": "面板视图"
+    "panelView": "面板视图",
+    "library": "库资源",
+    "examples": "项目示例"
+  },
+  "library": {
+    "subtitle": "管理您的代码库和资源",
+    "emptyHint": "暂无库内容，敬请期待",
+    "searchPlaceholder": "搜索库...",
+    "filterAll": "全部",
+    "filterInstalled": "已安装",
+    "filterRecent": "最近使用",
+    "install": "安装",
+    "demo": "未上线"
+  },
+  "examples": {
+    "subtitle": "空灵语言项目示例和模板",
+    "emptyHint": "暂无示例内容，敬请期待",
+    "searchPlaceholder": "搜索示例...",
+    "filterAll": "全部",
+    "filterBeginner": "入门",
+    "filterAdvanced": "进阶",
+    "download": "下载",
+    "demo": "未上线"
   },
   "loading": {
     "scenes": "正在加载场景"
@@ -814,9 +836,9 @@
     "heroBadge": "空灵语言 Workspace",
     "heroTitle": "真实工作台，而不只是一个聊天框",
     "heroDescription": "有个性，有记忆，帮你做事的 AI 助理。会话流与小应用围绕同一个工作流协同展开，AI 在做事，不只是回答。",
-    "newCodeSession": "新建 Code 会话",
+    "newCodeSession": "新建代码会话",
     "newCodeSessionDesc": "开始代码任务、调试问题，或打开一个项目进入开发状态",
-    "newCoworkSession": "新建 Cowork 会话",
+    "newCoworkSession": "新建协作会话",
     "newCoworkSessionDesc": "适合整理需求、推进任务、起草内容和日常协作",
     "newClawSession": "新建 Claw 会话",
     "newClawSessionDesc": "进入个人助理工作区，延续上下文与偏好持续协作",

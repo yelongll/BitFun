@@ -43,7 +43,8 @@ Analyze this BitFun usage data and suggest improvements.
        "mcpServers": {
          "postgres": {
            "command": "npx",
-           "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+           "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"],
+           "env": {}
          }
        }
      }

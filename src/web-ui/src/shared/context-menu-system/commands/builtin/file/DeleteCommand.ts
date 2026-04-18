@@ -5,6 +5,7 @@ import { CommandResult } from '../../../types/command.types';
 import { MenuContext, ContextType, FileNodeContext } from '../../../types/context.types';
 import { globalEventBus } from '../../../../../infrastructure/event-bus';
 import { i18nService } from '@/infrastructure/i18n';
+import { confirmWarning } from '@/component-library/components/ConfirmDialog';
 
 export class DeleteFileCommand extends BaseCommand {
   constructor() {
@@ -31,7 +32,6 @@ export class DeleteFileCommand extends BaseCommand {
       const t = i18nService.getT();
       const fileContext = context as FileNodeContext;
       
-      
       const confirmed = await this.confirmDelete(fileContext);
       if (!confirmed) {
         return this.failure(t('errors:contextMenu.deleteCancelled'));
@@ -55,7 +55,16 @@ export class DeleteFileCommand extends BaseCommand {
       ? t('common:contextMenu.confirmDeleteFolder', { name: context.fileName })
       : t('common:contextMenu.confirmDeleteFile', { name: context.fileName });
 
-    return window.confirm(message);
+    // Use the custom confirm dialog service
+    return await confirmWarning(
+      t('common:actions.delete'),
+      message,
+      {
+        confirmText: t('common:actions.confirm'),
+        cancelText: t('common:actions.cancel'),
+        confirmDanger: true
+      }
+    );
   }
 }
 

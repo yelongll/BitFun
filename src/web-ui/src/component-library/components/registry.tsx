@@ -1982,7 +1982,7 @@ Aborting`,
       },
       {
         id: 'init-miniapp-card',
-        name: 'InitMiniApp - 小应用创建',
+        name: 'InitMiniApp - 轻应用创建',
         description: '创建 Mini App 骨架后的工具卡片（InitMiniApp）',
         category: 'flowchat-cards',
         component: () => (

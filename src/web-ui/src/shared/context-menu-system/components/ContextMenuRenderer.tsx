@@ -47,7 +47,6 @@ function convertMenuItem(item: SystemMenuItem): UIMenuItem {
 export const ContextMenuRenderer: React.FC = () => {
   const { visible, position, items, context, hideMenu } = useContextMenuStore();
 
-  
   const uiItems = items.map(convertMenuItem);
 
   if (!visible) {

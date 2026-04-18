@@ -96,7 +96,7 @@ const buildResolvedModelTooltipText = (
 const getModelDisplayLabel = (model: ModelInfo | null, fallback: string): string => {
   if (!model) return fallback;
   if (isSpecialModel(model.id)) return model.configName;
-  return model.displayName || model.modelName || model.configName || fallback;
+  return model.modelName || model.displayName || model.configName || fallback;
 };
 
 const getModelTooltipText = (model: ModelInfo | null, fallback: string): string => {
@@ -462,7 +462,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   </div>
                   {modelsByProvider[providerName].map(model => {
                     const isSelected = currentModelId === model.id;
-                    const displayLabel = model.displayName || model.modelName;
+                    const displayLabel = model.modelName || model.displayName;
 
                     return (
                       <Tooltip key={model.id} content={buildModelMetaText(model)} placement="right">

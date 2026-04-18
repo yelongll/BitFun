@@ -73,7 +73,6 @@ export class CommandExecutor {
         return this.createFailureResult('Command cannot be executed in current context');
       }
 
-      
       const result = await this.executeWithTimeout(command, context);
 
       

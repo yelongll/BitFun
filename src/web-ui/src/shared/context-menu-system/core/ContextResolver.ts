@@ -55,10 +55,16 @@ export class ContextResolver {
     };
 
     
+    // Check for file node first (before selection) to ensure file operations work
+    // even when text is selected in the file tree
+    const fileNodeContext = this.resolveFileNode(baseContext);
+    if (fileNodeContext) {
+      return fileNodeContext;
+    }
+
     const context =
       this.resolveSelection(baseContext) ??
       this.resolveTerminal(baseContext) ??
-      this.resolveFileNode(baseContext) ??
       this.resolveEditor(baseContext) ??
       this.resolveFlowChat(baseContext) ??
       this.resolveTab(baseContext) ??
@@ -149,7 +155,6 @@ export class ContextResolver {
 
    
   private resolveFileNode(base: BaseContext): FileNodeContext | null {
-    
     const isInEditor = this.findClosestWithAttribute(base.targetElement, [
       'data-monaco-editor',
       'data-editor-id'

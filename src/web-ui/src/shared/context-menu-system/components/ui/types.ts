@@ -4,6 +4,7 @@
  * These are lightweight types used by the renderer components.
  */
 import { ReactNode } from 'react';
+import { MenuContext } from '../../types/context.types';
 
 export interface ContextMenuItem {
   id: string;
@@ -13,7 +14,7 @@ export interface ContextMenuItem {
   shortcut?: string;
   separator?: boolean;
   submenu?: ContextMenuItem[];
-  onClick?: (context?: any) => void | Promise<void>;
+  onClick?: (context?: MenuContext) => void | Promise<void>;
 }
 
 export interface ContextMenuPosition {
@@ -33,9 +34,9 @@ export interface ContextMenuProps {
   items: ContextMenuItem[];
   position: ContextMenuPosition;
   visible: boolean;
-  context?: ContextMenuContext;
+  context?: MenuContext;
   onClose: () => void;
-  onItemClick?: (item: ContextMenuItem, context?: ContextMenuContext) => void;
+  onItemClick?: (item: ContextMenuItem, context?: MenuContext) => void;
 }
 
 export interface ContextMenuProviderProps {

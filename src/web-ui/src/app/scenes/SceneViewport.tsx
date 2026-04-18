@@ -35,6 +35,8 @@ const ShellScene      = lazy(() => import('./shell/ShellScene'));
 const WelcomeScene    = lazy(() => import('./welcome/WelcomeScene'));
 const MiniAppScene    = lazy(() => import('./miniapps/MiniAppScene'));
 const PanelViewScene  = lazy(() => import('./panel-view/PanelViewScene'));
+const LibraryScene    = lazy(() => import('./library/LibraryScene'));
+const ExamplesScene   = lazy(() => import('./examples/ExamplesScene'));
 
 
 interface SceneViewportProps {
@@ -135,6 +137,10 @@ function renderScene(
       return <ShellScene isActive={isActive} />;
     case 'panel-view':
       return <PanelViewScene workspacePath={workspacePath} />;
+    case 'library':
+      return <LibraryScene />;
+    case 'examples':
+      return <ExamplesScene />;
     default:
       if (typeof id === 'string' && id.startsWith('miniapp:')) {
         return <MiniAppScene appId={id.slice('miniapp:'.length)} />;

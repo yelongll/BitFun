@@ -22,6 +22,8 @@ import {
   User,
   BarChart3,
   ExternalLink,
+  Library,
+  FolderCode,
 } from 'lucide-react';
 import type { SceneTabDef, SceneTabId } from '../components/SceneBar/types';
 
@@ -168,6 +170,24 @@ export const SCENE_TAB_REGISTRY: SceneTabDef[] = [
     pinned: false,
     fixed: false,
     closable: true,
+    singleton: true,
+    defaultOpen: false,
+  },
+  {
+    id: 'library' as SceneTabId,
+    label: 'Library',
+    labelKey: 'scenes.library',
+    Icon: Library,
+    pinned: false,
+    singleton: true,
+    defaultOpen: false,
+  },
+  {
+    id: 'examples' as SceneTabId,
+    label: 'Examples',
+    labelKey: 'scenes.examples',
+    Icon: FolderCode,
+    pinned: false,
     singleton: true,
     defaultOpen: false,
   },

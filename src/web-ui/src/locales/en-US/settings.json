@@ -6,7 +6,7 @@
     "searchPlaceholder": "Search settings…",
     "searchNoResults": "No matching settings",
     "searchClear": "Clear search",
-    "beta": "Beta",
+    "beta": "预览版",
     "tabDescriptions": {
       "basics": "Language, theme, logging, terminal shell, and launch at login.",
       "models": "AI models, API keys, providers, and proxy.",

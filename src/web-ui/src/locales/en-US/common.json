@@ -801,7 +801,29 @@
     "insights": "Insights",
     "assistant": "Assistant",
     "shell": "Shell",
-    "panelView": "Panel View"
+    "panelView": "Panel View",
+    "library": "Library",
+    "examples": "Examples"
+  },
+  "library": {
+    "subtitle": "Manage your code libraries and resources",
+    "emptyHint": "No library content yet, stay tuned",
+    "searchPlaceholder": "Search libraries...",
+    "filterAll": "All",
+    "filterInstalled": "Installed",
+    "filterRecent": "Recent",
+    "install": "Install",
+    "demo": "Demo"
+  },
+  "examples": {
+    "subtitle": "Kongling Language project examples and templates",
+    "emptyHint": "No examples yet, stay tuned",
+    "searchPlaceholder": "Search examples...",
+    "filterAll": "All",
+    "filterBeginner": "Beginner",
+    "filterAdvanced": "Advanced",
+    "download": "Download",
+    "demo": "Demo"
   },
   "loading": {
     "scenes": "Loading scene"

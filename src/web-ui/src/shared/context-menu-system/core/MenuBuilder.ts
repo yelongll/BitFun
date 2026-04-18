@@ -22,7 +22,6 @@ export class MenuBuilder {
 
    
   async build(providers: IMenuProvider[], context: MenuContext): Promise<MenuItem[]> {
-    
     const itemCollections = await Promise.all(
       providers.map(async (provider) => {
         try {
