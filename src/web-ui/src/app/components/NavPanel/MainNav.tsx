@@ -639,7 +639,7 @@ const MainNav: React.FC<MainNavProps> = ({
       <div className="bitfun-nav-panel__bottom-bar">
         <div className="bitfun-nav-panel__miniapp-footer">
           <MiniAppEntry
-            isActive={activeTabId === 'miniapps' || !!activeMiniAppId}
+            isActive={activeTabId === 'miniapps'}
             activeMiniAppId={activeMiniAppId}
             onOpenMiniApps={() => openScene('miniapps')}
             onOpenMiniApp={(appId) => openScene(`miniapp:${appId}`)}

@@ -1,6 +1,5 @@
 import React from 'react';
 import { FolderCode } from 'lucide-react';
-import { Badge } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 
 interface ExamplesEntryProps {
@@ -33,13 +32,10 @@ const ExamplesEntry: React.FC<ExamplesEntryProps> = ({
         tabIndex={0}
         aria-label={t('scenes.examples')}
       >
-        <span className="bitfun-nav-panel__examples-entry-icon">
-          <FolderCode size={18} />
-        </span>
+        <span className="bitfun-nav-panel__examples-badge">即将上线</span>
         <span className="bitfun-nav-panel__examples-entry-main">
           <span className="bitfun-nav-panel__examples-entry-copy">
             <span className="bitfun-nav-panel__examples-entry-title">{t('scenes.examples')}</span>
-            <Badge variant="neutral" className="bitfun-nav-panel__examples-badge">未上线</Badge>
           </span>
         </span>
       </div>

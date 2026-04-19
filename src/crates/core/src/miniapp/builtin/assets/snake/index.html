@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>贪吃蛇</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-container">
+    <div class="header">
+      <h1>贪吃蛇</h1>
+      <div class="score-board">
+        <div class="score-item">
+          <span class="label">得分</span>
+          <span class="value" id="score">0</span>
+        </div>
+        <div class="score-item">
+          <span class="label">最高分</span>
+          <span class="value" id="highScore">0</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="game-area">
+      <canvas id="gameCanvas"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="overlay-content">
+          <h2 id="overlayTitle">准备开始</h2>
+          <p id="overlayText">点击开始或按空格键</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button class="btn btn-primary" id="startBtn">开始游戏</button>
+      <button class="btn btn-secondary" id="pauseBtn" disabled>暂停</button>
+    </div>
+    
+    <div class="mobile-controls">
+      <div class="control-row">
+        <button class="control-btn" data-dir="up">↑</button>
+      </div>
+      <div class="control-row">
+        <button class="control-btn" data-dir="left">←</button>
+        <button class="control-btn" data-dir="down">↓</button>
+        <button class="control-btn" data-dir="right">→</button>
+      </div>
+    </div>
+    
+    <div class="powerup-legend">
+      <div class="legend-title">道具说明</div>
+      <div class="legend-items">
+        <div class="legend-item"><span class="legend-icon" style="color:#fbbf24">⚡</span> 加速冲刺</div>
+        <div class="legend-item"><span class="legend-icon" style="color:#3b82f6">🛡️</span> 穿墙护盾</div>
+        <div class="legend-item"><span class="legend-icon" style="color:#f59e0b">⭐</span> 双倍分数</div>
+        <div class="legend-item"><span class="legend-icon" style="color:#a855f7">💎</span> 缩短蛇身</div>
+        <div class="legend-item"><span class="legend-icon" style="color:#06b6d4">🧲</span> 磁铁吸引</div>
+      </div>
+    </div>
+    
+    <div class="instructions">
+      <p>方向键 / WASD 控制方向</p>
+      <p>空格键 暂停/继续</p>
+    </div>
+  </div>
+  
+  <script src="ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "id": "builtin-color-tools",
+  "name": "颜色工具",
+  "description": "专业颜色选择器，支持多种格式转换、调色板生成、对比度检查",
+  "icon": "Palette",
+  "category": "utility",
+  "tags": ["工具", "设计", "颜色", "内置"],
+  "version": 1,
+  "created_at": 0,
+  "updated_at": 0,
+  "permissions": {
+    "fs": { "read": ["{appdata}"], "write": ["{appdata}"] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] },
+    "node": { "enabled": false }
+  },
+  "ai_context": null,
+  "i18n": {
+    "locales": {
+      "zh-CN": {
+        "name": "颜色工具",
+        "description": "专业颜色选择器，支持多种格式转换、调色板生成、对比度检查",
+        "tags": ["工具", "设计", "颜色", "内置"]
+      },
+      "en-US": {
+        "name": "Color Tools",
+        "description": "Professional color picker with multiple format conversions, palette generation, and contrast checking",
+        "tags": ["tool", "design", "color", "built-in"]
+      }
+    }
+  }
+}

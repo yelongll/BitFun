@@ -69,6 +69,26 @@ pub const BUILTIN_APPS: &[BuiltinApp] = &[
         worker_js: include_str!("assets/coding-selfie/worker.js"),
         esm_dependencies_json: "[]",
     },
+    BuiltinApp {
+        id: "builtin-snake",
+        version: 6,
+        meta_json: include_str!("assets/snake/meta.json"),
+        html: include_str!("assets/snake/index.html"),
+        css: include_str!("assets/snake/style.css"),
+        ui_js: include_str!("assets/snake/ui.js"),
+        worker_js: include_str!("assets/snake/worker.js"),
+        esm_dependencies_json: "[]",
+    },
+    BuiltinApp {
+        id: "builtin-color-tools",
+        version: 1,
+        meta_json: include_str!("assets/color-tools/meta.json"),
+        html: include_str!("assets/color-tools/index.html"),
+        css: include_str!("assets/color-tools/style.css"),
+        ui_js: include_str!("assets/color-tools/ui.js"),
+        worker_js: include_str!("assets/color-tools/worker.js"),
+        esm_dependencies_json: "[]",
+    },
 ];
 
 /// Seed all built-in MiniApps into the user data directory. Idempotent: skips apps

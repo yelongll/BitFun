@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>颜色工具</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>🎨 颜色工具</h1>
+      <p class="subtitle">专业颜色选择与转换工具</p>
+    </header>
+
+    <div class="main-content">
+      <div class="left-panel">
+        <div class="color-picker-section">
+          <div class="section-title">颜色选择</div>
+          <div class="picker-container">
+            <div class="saturation-brightness-panel" id="sbPanel">
+              <div class="sb-picker" id="sbPicker"></div>
+              <canvas id="sbCanvas"></canvas>
+            </div>
+            <div class="hue-slider-container">
+              <canvas id="hueCanvas"></canvas>
+              <div class="hue-picker" id="huePicker"></div>
+            </div>
+            <div class="alpha-slider-container">
+              <canvas id="alphaCanvas"></canvas>
+              <div class="alpha-picker" id="alphaPicker"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="color-preview-section">
+          <div class="section-title">颜色预览</div>
+          <div class="preview-container">
+            <div class="color-preview" id="colorPreview"></div>
+            <div class="preview-info">
+              <div class="preview-row">
+                <span class="label">新颜色</span>
+                <div class="new-color" id="newColor"></div>
+              </div>
+              <div class="preview-row">
+                <span class="label">旧颜色</span>
+                <div class="old-color" id="oldColor"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-section">
+          <div class="section-title">颜色输入</div>
+          <div class="input-group">
+            <label>HEX</label>
+            <div class="input-with-copy">
+              <input type="text" id="hexInput" placeholder="#000000">
+              <button class="copy-btn" data-target="hexInput" title="复制">📋</button>
+            </div>
+          </div>
+          <div class="input-group">
+            <label>RGB</label>
+            <div class="rgb-inputs">
+              <input type="number" id="rInput" min="0" max="255" placeholder="R">
+              <input type="number" id="gInput" min="0" max="255" placeholder="G">
+              <input type="number" id="bInput" min="0" max="255" placeholder="B">
+            </div>
+          </div>
+          <div class="input-group">
+            <label>HSL</label>
+            <div class="hsl-inputs">
+              <input type="number" id="hInput" min="0" max="360" placeholder="H">
+              <input type="number" id="sInput" min="0" max="100" placeholder="S">
+              <input type="number" id="lInput" min="0" max="100" placeholder="L">
+            </div>
+          </div>
+          <div class="input-group">
+            <label>HSV</label>
+            <div class="hsv-inputs">
+              <input type="number" id="hvInput" min="0" max="360" placeholder="H">
+              <input type="number" id="svInput" min="0" max="100" placeholder="S">
+              <input type="number" id="vInput" min="0" max="100" placeholder="V">
+            </div>
+          </div>
+          <div class="input-group">
+            <label>CMYK</label>
+            <div class="cmyk-inputs">
+              <input type="number" id="cInput" min="0" max="100" placeholder="C">
+              <input type="number" id="mInput" min="0" max="100" placeholder="M">
+              <input type="number" id="yInput" min="0" max="100" placeholder="Y">
+              <input type="number" id="kInput" min="0" max="100" placeholder="K">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="right-panel">
+        <div class="palette-section">
+          <div class="section-title">调色板生成</div>
+          <div class="palette-type-selector">
+            <button class="palette-btn active" data-type="complementary">互补色</button>
+            <button class="palette-btn" data-type="analogous">类似色</button>
+            <button class="palette-btn" data-type="triadic">三角色</button>
+            <button class="palette-btn" data-type="split-complementary">分裂互补</button>
+            <button class="palette-btn" data-type="tetradic">四角色</button>
+            <button class="palette-btn" data-type="monochromatic">单色系</button>
+          </div>
+          <div class="palette-colors" id="paletteColors"></div>
+        </div>
+
+        <div class="contrast-section">
+          <div class="section-title">对比度检查</div>
+          <div class="contrast-checker">
+            <div class="contrast-preview">
+              <div class="contrast-sample" id="contrastSample">
+                <span>Aa</span>
+                <span class="sample-text">示例文本 Sample Text 123</span>
+              </div>
+            </div>
+            <div class="contrast-info">
+              <div class="contrast-row">
+                <span class="label">对比度</span>
+                <span class="value" id="contrastRatio">21:1</span>
+              </div>
+              <div class="contrast-row">
+                <span class="label">WCAG AA</span>
+                <span class="badge pass" id="wcagAA">通过</span>
+              </div>
+              <div class="contrast-row">
+                <span class="label">WCAG AAA</span>
+                <span class="badge pass" id="wcagAAA">通过</span>
+              </div>
+            </div>
+            <div class="contrast-bg-selector">
+              <span>背景色:</span>
+              <input type="color" id="contrastBgColor" value="#ffffff">
+              <input type="text" id="contrastBgHex" value="#ffffff">
+            </div>
+          </div>
+        </div>
+
+        <div class="presets-section">
+          <div class="section-title">预设颜色</div>
+          <div class="preset-categories">
+            <button class="preset-cat-btn active" data-category="material">Material</button>
+            <button class="preset-cat-btn" data-category="tailwind">Tailwind</button>
+            <button class="preset-cat-btn" data-category="css">CSS</button>
+            <button class="preset-cat-btn" data-category="flat">Flat UI</button>
+          </div>
+          <div class="preset-colors" id="presetColors"></div>
+        </div>
+
+        <div class="history-section">
+          <div class="section-title">
+            <span>历史记录</span>
+            <button class="clear-btn" id="clearHistory">清空</button>
+          </div>
+          <div class="history-colors" id="historyColors"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="output-section">
+      <div class="section-title">输出格式</div>
+      <div class="output-formats">
+        <div class="output-group">
+          <label>CSS</label>
+          <div class="output-item">
+            <code id="cssHex">color: #000000;</code>
+            <button class="copy-btn" data-target="cssHex">📋</button>
+          </div>
+          <div class="output-item">
+            <code id="cssRgb">color: rgb(0, 0, 0);</code>
+            <button class="copy-btn" data-target="cssRgb">📋</button>
+          </div>
+          <div class="output-item">
+            <code id="cssHsl">color: hsl(0, 0%, 0%);</code>
+            <button class="copy-btn" data-target="cssHsl">📋</button>
+          </div>
+        </div>
+        <div class="output-group">
+          <label>其他格式</label>
+          <div class="output-item">
+            <code id="formatRgba">rgba(0, 0, 0, 1)</code>
+            <button class="copy-btn" data-target="formatRgba">📋</button>
+          </div>
+          <div class="output-item">
+            <code id="formatHsla">hsla(0, 0%, 0%, 1)</code>
+            <button class="copy-btn" data-target="formatHsla">📋</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js"></script>
+</body>
+</html>

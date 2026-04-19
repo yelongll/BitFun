@@ -1,0 +1,32 @@
+{
+  "id": "builtin-snake",
+  "name": "贪吃蛇",
+  "description": "经典贪吃蛇游戏，控制蛇吃食物变长，避免撞墙和撞到自己。支持键盘和触屏操作。",
+  "icon": "Gamepad2",
+  "category": "game",
+  "tags": ["游戏", "休闲", "内置"],
+  "version": 1,
+  "created_at": 0,
+  "updated_at": 0,
+  "permissions": {
+    "fs": { "read": ["{appdata}"], "write": ["{appdata}"] },
+    "shell": { "allow": [] },
+    "net": { "allow": [] },
+    "node": { "enabled": true, "max_memory_mb": 128, "timeout_ms": 5000 }
+  },
+  "ai_context": null,
+  "i18n": {
+    "locales": {
+      "zh-CN": {
+        "name": "贪吃蛇",
+        "description": "经典贪吃蛇游戏，控制蛇吃食物变长，避免撞墙和撞到自己。支持键盘和触屏操作。",
+        "tags": ["游戏", "休闲", "内置"]
+      },
+      "en-US": {
+        "name": "Snake",
+        "description": "Classic snake game. Control the snake to eat food and grow longer. Avoid hitting walls and yourself.",
+        "tags": ["game", "casual", "built-in"]
+      }
+    }
+  }
+}
