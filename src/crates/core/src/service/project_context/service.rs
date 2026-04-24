@@ -647,7 +647,7 @@ impl ProjectContextService {
 
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
-                BitFunError::service(format!("Failed to create .bitfun directory: {}", e))
+                BitFunError::service(format!("Failed to create .kongling directory: {}", e))
             })?;
         }
 
@@ -664,7 +664,7 @@ impl ProjectContextService {
 
     /// Returns the config file path.
     fn get_config_path(&self, workspace: &Path) -> PathBuf {
-        workspace.join(".bitfun").join(CONFIG_FILE_NAME)
+        workspace.join(".kongling").join(CONFIG_FILE_NAME)
     }
 
     /// Creates a custom category.
@@ -927,7 +927,7 @@ impl ProjectContextService {
 
         let doc_id = uuid::Uuid::new_v4().to_string();
 
-        let target_dir = workspace.join(".bitfun").join("docs").join(&category_id);
+        let target_dir = workspace.join(".kongling").join("docs").join(&category_id);
         let target_file_name = format!("{}.{}", doc_id, Self::get_file_extension(&name));
         let target_path = target_dir.join(&target_file_name);
 

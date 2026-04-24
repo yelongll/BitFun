@@ -15,6 +15,7 @@
       "mcpTools": "MCP servers and tool integrations.",
       "editor": "Editor font, display, and formatting.",
       "lsp": "Language servers and code intelligence.",
+      "designer": "Designer alignment guides and grid settings.",
       "keyboard": "Shortcuts and key bindings."
     },
     "categories": {
@@ -34,6 +35,7 @@
       "agents": "Agents",
       "editor": "Editor",
       "lsp": "LSP",
+      "designer": "Designer",
       "keyboard": "Keyboard"
     }
   },
@@ -534,6 +536,55 @@
       "subtitle": "Customize the app appearance and theme colors",
       "import": "Import Theme",
       "export": "Export Current Theme"
+    }
+  },
+  "designer": {
+    "title": "Designer Settings",
+    "description": "Configure designer behavior and appearance",
+    "loadError": "Failed to load designer config",
+    "saveError": "Failed to save designer config",
+    "alignment": {
+      "title": "Alignment Guides",
+      "lines": {
+        "label": "Alignment Lines",
+        "description": "Show alignment guides when dragging components for precise alignment"
+      },
+      "threshold": {
+        "label": "Alignment Threshold",
+        "description": "Distance in pixels to trigger alignment lines"
+      },
+      "color": {
+        "label": "Alignment Line Color",
+        "description": "Color of the alignment guide lines"
+      },
+      "style": {
+        "label": "Alignment Line Style",
+        "description": "Line style of the alignment guides",
+        "solid": "Solid",
+        "dashed": "Dashed"
+      }
+    },
+    "grid": {
+      "title": "Grid Settings",
+      "show": {
+        "label": "Show Grid",
+        "description": "Display grid on the design canvas"
+      },
+      "size": {
+        "label": "Grid Size",
+        "description": "Set the grid size in pixels"
+      },
+      "snapToGrid": {
+        "label": "Snap to Grid",
+        "description": "Automatically snap components to grid when moving"
+      }
+    },
+    "layout": {
+      "title": "Layout Settings",
+      "spacing": {
+        "label": "Layout Spacing",
+        "description": "Spacing between components during auto layout (pixels)"
+      }
     }
   }
 }

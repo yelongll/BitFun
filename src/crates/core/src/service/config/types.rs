@@ -50,6 +50,9 @@ pub struct GlobalConfig {
     /// Web UI font size preferences (`get_config` / `set_config` path `font`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font: Option<FontPreferenceSnapshot>,
+    /// Designer configuration (alignment, grid, layout settings).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub designer: Option<serde_json::Value>,
     pub version: String,
     #[serde(with = "chrono::serde::ts_milliseconds")]
     pub last_modified: chrono::DateTime<chrono::Utc>,
@@ -616,7 +619,7 @@ impl Default for ModeConfigView {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DebugModeConfig {
-    /// Custom log path (relative to the workspace; default: `.bitfun/debug.log`).
+    /// Custom log path (relative to the workspace; default: `.kongling/debug.log`).
     pub log_path: String,
 
     /// Ingest server port.
@@ -632,7 +635,7 @@ pub struct DebugModeConfig {
 impl Default for DebugModeConfig {
     fn default() -> Self {
         Self {
-            log_path: ".bitfun/debug.log".to_string(),
+            log_path: ".kongling/debug.log".to_string(),
             ingest_port: 7242,
             enabled_languages: Vec::new(),
             language_templates: Self::default_language_templates(),
@@ -657,8 +660,8 @@ impl DebugModeConfig {
             region_start: "// #region agent log".to_string(),
             region_end: "// #endregion".to_string(),
             notes: vec![
-                "Send logs to the ingest server via HTTP POST.".to_string(),
-                "{DATA} must be replaced with a JavaScript object expression.".to_string(),
+                "通过 HTTP POST 发送日志到摄取服务器。.".to_string(),
+                "{DATA} 必须替换为 JavaScript JSON 对象表达式。".to_string(),
             ],
         });
 
@@ -1125,6 +1128,7 @@ impl Default for GlobalConfig {
             mcp_servers: None,
             themes: Some(ThemesConfig::default()),
             font: None,
+            designer: None,
             version: "1.0.0".to_string(),
             last_modified: chrono::Utc::now(),
         }

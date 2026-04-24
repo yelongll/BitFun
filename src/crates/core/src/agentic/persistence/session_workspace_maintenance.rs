@@ -239,7 +239,7 @@ mod tests {
             .expect("metadata should save");
 
         let runtime_context = runtime_service.context_for_local_workspace(workspace.path());
-        let legacy_sessions_root = workspace.path().join(".bitfun").join("sessions");
+        let legacy_sessions_root = workspace.path().join(".kongling").join("sessions");
         std::fs::create_dir_all(&legacy_sessions_root).expect("legacy sessions root should exist");
         std::fs::rename(
             runtime_context.sessions_dir.join(&legacy_hidden.session_id),

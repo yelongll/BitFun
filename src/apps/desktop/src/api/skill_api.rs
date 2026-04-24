@@ -743,7 +743,7 @@ pub async fn add_skill(
                         .to_string(),
                 );
             }
-            workspace_root.join(".bitfun").join("skills")
+            workspace_root.join(".kongling").join("skills")
         } else {
             return Err("No workspace open, cannot add project-level Skill".to_string());
         }

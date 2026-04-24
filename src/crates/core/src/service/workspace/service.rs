@@ -49,7 +49,7 @@ pub struct WorkspaceCreateOptions {
     pub tags: Vec<String>,
     /// See [`crate::service::workspace::manager::WorkspaceOpenOptions::remote_connection_id`].
     pub remote_connection_id: Option<String>,
-    /// SSH `host` from connection config; used for `~/.bitfun/remote_ssh/...` and stable remote ids.
+    /// SSH `host` from connection config; used for `~/.kongling/remote_ssh/...` and stable remote ids.
     pub remote_ssh_host: Option<String>,
     /// Deterministic id for [`WorkspaceKind::Remote`] (host + remote path hash).
     pub stable_workspace_id: Option<String>,
@@ -558,7 +558,7 @@ impl WorkspaceService {
     /// `metadata["sshHost"]` for a remote workspace matching `connection_id` and normalized remote root.
     ///
     /// Used when session APIs receive `remote_connection_id` but the client omitted `remote_ssh_host`:
-    /// session files live under `~/.bitfun/remote_ssh/{sshHost}/...`, not the legacy per-connection tree.
+    /// session files live under `~/.kongling/remote_ssh/{sshHost}/...`, not the legacy per-connection tree.
     /// This reads only persisted workspace records (no filesystem guessing, no DNS).
     pub async fn remote_ssh_host_for_remote_workspace(
         &self,
@@ -1924,7 +1924,7 @@ mod tests {
         let second_runtime = persistence_manager
             .runtime_service()
             .context_for_local_workspace(&second_workspace_root);
-        let legacy_sessions_root = second_workspace_root.join(".bitfun").join("sessions");
+        let legacy_sessions_root = second_workspace_root.join(".kongling").join("sessions");
         std::fs::create_dir_all(&legacy_sessions_root)
             .expect("legacy sessions root should be created");
         std::fs::rename(

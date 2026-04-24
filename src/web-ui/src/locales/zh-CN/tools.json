@@ -303,6 +303,7 @@
     "sortBySize": "按大小",
     "sortByType": "按类型",
     "compressionTooltip": "压缩路径: {{compressed}}\n完整路径: {{full}}",
+    "openInBrowser": "在浏览器中打开",
     "errors": {
       "loadTreeFailed": "加载文件树失败",
       "loadTreeFailedWithMessage": "加载文件树失败: {{message}}"

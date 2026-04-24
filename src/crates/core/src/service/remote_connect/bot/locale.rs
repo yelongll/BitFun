@@ -171,7 +171,7 @@ pub struct BotStrings {
 
 const STRINGS_ZH: BotStrings = BotStrings {
     welcome: "\
-欢迎使用 BitFun。
+欢迎使用 空灵语言。
 
 请在 BitFun 桌面端打开 Remote Connect 面板，复制 6 位配对码并发送到这里完成连接。",
     paired_success: "配对成功，BitFun 已连接。",

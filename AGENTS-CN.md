@@ -100,7 +100,7 @@ SessionManager → Session → DialogTurn → ModelRound
 
 ### 会话持久化
 
-位置：`.bitfun/sessions/{session_id}/`
+位置：`.kongling/sessions/{session_id}/`
 
 ### 工具开发
 

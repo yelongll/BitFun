@@ -107,9 +107,9 @@ fn derive_walk_root(search_path_abs: &Path, pattern: &str) -> (PathBuf, String) 
 }
 
 fn resolve_glob_config(pattern: &str) -> (bool, bool) {
-    let is_whitelisted = pattern.starts_with(".bitfun")
-        || pattern.contains("/.bitfun")
-        || pattern.contains("\\.bitfun");
+    let is_whitelisted = pattern.starts_with(".kongling")
+        || pattern.contains("/.kongling")
+        || pattern.contains("\\.kongling");
 
     let apply_gitignore = !is_whitelisted;
     let ignore_hidden_files = !is_whitelisted;

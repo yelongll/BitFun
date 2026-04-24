@@ -235,7 +235,7 @@ fn ensure_trailing_slash(url: &str) -> String {
 
 fn sync_buf_path(bot_account_id: &str) -> PathBuf {
     let base = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
-    base.join(".bitfun")
+    base.join(".kongling")
         .join("weixin")
         .join(format!("{bot_account_id}_get_updates_buf.txt"))
 }
@@ -254,7 +254,7 @@ fn save_sync_buf(bot_account_id: &str, buf: &str) {
         let _ = std::fs::create_dir_all(parent);
     }
     if let Err(e) = std::fs::write(&p, buf) {
-        warn!("weixin: failed to save sync buf {}: {e}", p.display());
+        warn!("微信: 保存同步缓冲区失败 {}: {e}", p.display());
     }
 }
 

@@ -569,13 +569,13 @@ const LEGACY_BOT_PERSISTENCE_FILENAME: &str = "bot_connections.json";
 
 pub fn bot_persistence_path() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|home| {
-        home.join(".bitfun")
+        home.join(".kongling")
             .join(REMOTE_CONNECT_PERSISTENCE_FILENAME)
     })
 }
 
 fn legacy_bot_persistence_path() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|home| home.join(".bitfun").join(LEGACY_BOT_PERSISTENCE_FILENAME))
+    dirs::home_dir().map(|home| home.join(".kongling").join(LEGACY_BOT_PERSISTENCE_FILENAME))
 }
 
 pub fn load_bot_persistence() -> BotPersistenceData {
@@ -605,7 +605,7 @@ pub fn save_bot_persistence(data: &BotPersistenceData) {
     }
     if let Ok(json) = serde_json::to_string_pretty(data) {
         if let Err(e) = std::fs::write(&path, json) {
-            log::error!("Failed to save bot persistence: {e}");
+            log::error!("微信: 保存机器人持久失败: {e}");
         }
     }
 }
@@ -678,7 +678,7 @@ mod tests {
     #[test]
     fn extracts_relative_computer_links_when_workspace_root_is_known() {
         let (base, workspace, _report) = make_temp_workspace();
-        let text = "Download [deck](computer://artifacts/report.pptx)";
+        let text = "下载 [deck](computer://artifacts/report.pptx)";
 
         let paths = extract_downloadable_file_paths(text, Some(&workspace));
 

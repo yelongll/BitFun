@@ -1,0 +1,225 @@
+@use '../../../component-library/styles/tokens.scss' as *;
+@use './registry/CustomComponentManagerPanel.scss';
+
+.designer-panel__search {
+  display: flex;
+  align-items: center;
+  gap: $size-gap-2;
+  padding: $size-gap-2 $size-gap-3;
+  margin: $size-gap-1 $size-gap-2;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: $size-radius-base;
+
+  svg {
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+  }
+
+  input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-primary);
+    outline: none;
+
+    &::placeholder {
+      color: var(--color-text-tertiary);
+    }
+  }
+}
+
+.designer-panel__search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  border-radius: $size-radius-sm;
+
+  &:hover {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+  }
+}
+
+.designer-panel__header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.designer-panel__view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: $size-radius-sm;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all $motion-fast $easing-standard;
+
+  svg {
+    color: currentColor;
+  }
+
+  &:hover {
+    background: var(--element-bg-soft);
+    color: var(--color-text-primary);
+  }
+
+  &.is-active {
+    background: var(--color-accent-500);
+    color: white !important;
+
+    svg {
+      color: white !important;
+    }
+  }
+}
+
+.designer-component-group {
+  margin-bottom: $size-gap-1;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: $size-gap-2;
+    padding: $size-gap-2 $size-gap-3;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    user-select: none;
+    background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+    border-radius: $size-radius-sm;
+    margin: $size-gap-1;
+    transition: all $motion-fast $easing-standard;
+
+    svg {
+      color: var(--color-accent-500);
+      flex-shrink: 0;
+    }
+
+    &:hover {
+      background: linear-gradient(135deg, var(--element-bg-soft) 0%, var(--color-bg-secondary) 100%);
+    }
+  }
+
+  &__items {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: $size-gap-1;
+    padding: $size-gap-1 $size-gap-2 $size-gap-2;
+
+    &--list {
+      grid-template-columns: 1fr;
+    }
+
+    &--icon {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+}
+
+.designer-component-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $size-gap-1;
+  padding: $size-gap-3 $size-gap-2;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: $size-radius-base;
+  cursor: grab;
+  transition: all $motion-fast $easing-standard;
+  min-height: 64px;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    color: var(--color-accent-500);
+    padding: 6px;
+    background: var(--element-bg-soft);
+    border-radius: $size-radius-sm;
+    transition: all $motion-fast $easing-standard;
+  }
+
+  span {
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  &:hover {
+    background: var(--element-bg-soft);
+    border-color: var(--color-accent-400);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+    svg {
+      background: var(--color-accent-500);
+      color: white;
+    }
+
+    span {
+      color: var(--color-text-primary);
+    }
+  }
+
+  &:active {
+    cursor: grabbing;
+    transform: scale(0.98);
+  }
+
+  &--list {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: 36px;
+    padding: $size-gap-2 $size-gap-3;
+
+    svg {
+      width: 16px;
+      height: 16px;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+
+    span {
+      text-align: left;
+    }
+
+    &:hover {
+      transform: translateX(2px);
+    }
+  }
+
+  &--icon {
+    min-height: 40px;
+    min-width: 40px;
+    padding: $size-gap-2;
+
+    svg {
+      width: 18px;
+      height: 18px;
+      padding: 3px;
+    }
+
+    span {
+      display: none;
+    }
+
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+}

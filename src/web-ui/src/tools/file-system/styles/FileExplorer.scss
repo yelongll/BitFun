@@ -429,6 +429,40 @@ $_indent-width: 8px;
   }
 }
 
+.bitfun-file-explorer__open-external-btn {
+  @include mixins.flex-layout(row, center, center, 0);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: $size-radius-sm;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all $motion-fast $easing-standard;
+  flex-shrink: 0;
+  margin-left: auto;
+
+  .bitfun-file-explorer__node-content:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: rgba(var(--color-accent-rgb, 99, 102, 241), 0.15);
+    color: var(--color-accent-500);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 .bitfun-file-explorer__node-children {
   // Indentation is computed in JS via paddingLeft; avoid additional spacing here.
   position: relative;

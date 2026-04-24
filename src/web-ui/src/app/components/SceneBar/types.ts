@@ -24,6 +24,7 @@ export type SceneTabId =
   | 'panel-view'
   | 'library'
   | 'examples'
+  | 'designer'
   | `miniapp:${string}`;
 
 /** Static definition (from registry) for a scene tab type */

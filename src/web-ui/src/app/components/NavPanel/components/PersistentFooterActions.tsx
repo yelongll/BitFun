@@ -16,6 +16,10 @@ import {
   ChevronUp,
   LogIn,
   User,
+  Blocks,
+  Library,
+  FolderCode,
+  AppWindow,
 } from 'lucide-react';
 import { Tooltip, Modal } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
@@ -199,6 +203,27 @@ const PersistentFooterActions: React.FC = () => {
     setUserName('');
   }, []);
 
+  const handleOpenMiniApps = useCallback(() => {
+    openScene('miniapps');
+  }, [openScene]);
+
+  const handleOpenLibrary = useCallback(() => {
+    openScene('library');
+  }, [openScene]);
+
+  const handleOpenExamples = useCallback(() => {
+    openScene('examples');
+  }, [openScene]);
+
+  const handleOpenDesigner = useCallback(() => {
+    openScene('designer');
+  }, [openScene]);
+
+  const isMiniAppsActive = activeTabId === 'miniapps';
+  const isLibraryActive = activeTabId === 'library';
+  const isExamplesActive = activeTabId === 'examples';
+  const isDesignerActive = activeTabId === 'designer';
+
   return (
     <>
       <div className="bitfun-nav-panel__footer">
@@ -233,6 +258,50 @@ const PersistentFooterActions: React.FC = () => {
               </button>
             </Tooltip>
           )}
+
+          <Tooltip content={t('scenes.miniApps')} placement="right">
+            <button
+              type="button"
+              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${isMiniAppsActive ? ' is-active' : ''}`}
+              aria-label={t('scenes.miniApps')}
+              onClick={handleOpenMiniApps}
+            >
+              <Blocks size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
+
+          <Tooltip content={t('scenes.library')} placement="right">
+            <button
+              type="button"
+              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${isLibraryActive ? ' is-active' : ''}`}
+              aria-label={t('scenes.library')}
+              onClick={handleOpenLibrary}
+            >
+              <Library size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
+
+          <Tooltip content={t('scenes.examples')} placement="right">
+            <button
+              type="button"
+              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${isExamplesActive ? ' is-active' : ''}`}
+              aria-label={t('scenes.examples')}
+              onClick={handleOpenExamples}
+            >
+              <FolderCode size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
+
+          <Tooltip content={t('scenes.designer')} placement="right">
+            <button
+              type="button"
+              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${isDesignerActive ? ' is-active' : ''}`}
+              aria-label={t('scenes.designer')}
+              onClick={handleOpenDesigner}
+            >
+              <AppWindow size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
 
           <div className="bitfun-nav-panel__footer-more-wrap">
             <Tooltip content={t('nav.moreOptions')} placement="right" followCursor disabled={menuOpen}>

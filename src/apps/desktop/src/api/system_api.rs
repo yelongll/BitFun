@@ -7,6 +7,69 @@ use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OpenFileWithDefaultRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenFileWithDefaultResponse {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn open_file_with_default(
+    request: OpenFileWithDefaultRequest,
+) -> Result<OpenFileWithDefaultResponse, String> {
+    let path = std::path::Path::new(&request.path);
+    
+    if !path.exists() {
+        return Ok(OpenFileWithDefaultResponse {
+            success: false,
+            error: Some(format!("File does not exist: {}", request.path)),
+        });
+    }
+
+    let result = match std::env::consts::OS {
+        "macos" => {
+            std::process::Command::new("open")
+                .arg(&request.path)
+                .status()
+                .map_err(|e| format!("Failed to open file: {}", e))
+        }
+        "windows" => {
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", &request.path])
+                .status()
+                .map_err(|e| format!("Failed to open file: {}", e))
+        }
+        _ => {
+            std::process::Command::new("xdg-open")
+                .arg(&request.path)
+                .status()
+                .map_err(|e| format!("Failed to open file: {}", e))
+        }
+    };
+
+    match result {
+        Ok(status) => Ok(OpenFileWithDefaultResponse {
+            success: status.success(),
+            error: if status.success() {
+                None
+            } else {
+                Some(format!("Command exited with code: {:?}", status.code()))
+            },
+        }),
+        Err(e) => Ok(OpenFileWithDefaultResponse {
+            success: false,
+            error: Some(e),
+        }),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemInfoResponse {
     pub platform: String,
     pub arch: String,

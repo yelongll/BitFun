@@ -477,7 +477,7 @@ mod tests {
         let test_root =
             std::env::temp_dir().join(format!("bitfun-runtime-test-{}", Uuid::new_v4()));
         let workspace_root = test_root.join("workspace");
-        let legacy_root = workspace_root.join(".bitfun");
+        let legacy_root = workspace_root.join(".kongling");
         fs::create_dir_all(legacy_root.join("sessions")).expect("legacy sessions should exist");
         fs::write(legacy_root.join("sessions").join("s1.json"), "{}")
             .expect("legacy session file should be written");

@@ -24,7 +24,7 @@ $_nav-collapsed-width: 80px;
   isolation: isolate;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
-  padding: 0 $size-gap-2 $size-gap-2 $size-gap-2;
+  padding: 0 0 $size-gap-2 $size-gap-2;
   gap: $size-gap-2;
 }
 
@@ -108,6 +108,20 @@ $_nav-collapsed-width: 80px;
   background: transparent;
   gap: 0;
   transition: opacity $motion-fast $easing-standard;
+}
+
+.bitfun-workspace-body__scene-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 32px;
+  flex-shrink: 0;
+  padding-right: $size-gap-1;
+  -webkit-app-region: drag;
+}
+
+.bitfun-workspace-body__window-controls {
+  -webkit-app-region: no-drag;
 }
 
 // When nav is collapsed, the floating collapsed-nav (80px wide) overlays

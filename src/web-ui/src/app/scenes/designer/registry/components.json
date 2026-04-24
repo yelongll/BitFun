@@ -1,0 +1,547 @@
+{
+  "components": [
+    {
+      "id": "button",
+      "name": "按钮",
+      "category": "input",
+      "icon": "rectangle-horizontal",
+      "defaultProps": { "text": "按钮" },
+      "defaultSize": { "width": 100, "height": 36 },
+      "properties": [
+        { "key": "props.text", "label": "按钮文本", "type": "text", "defaultValue": "按钮", "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.type", "label": "类型", "type": "select", "defaultValue": "default", "options": [
+          { "label": "默认", "value": "default" },
+          { "label": "主要", "value": "primary" },
+          { "label": "成功", "value": "success" },
+          { "label": "警告", "value": "warning" },
+          { "label": "危险", "value": "danger" }
+        ], "group": "basic" },
+        { "key": "props.size", "label": "尺寸", "type": "select", "defaultValue": "medium", "options": [
+          { "label": "小", "value": "small" },
+          { "label": "中", "value": "medium" },
+          { "label": "大", "value": "large" }
+        ], "group": "basic" }
+      ],
+      "events": [
+        { "type": "onClick", "label": "点击事件", "chineseName": "被单击" }
+      ]
+    },
+    {
+      "id": "input",
+      "name": "输入框",
+      "category": "input",
+      "icon": "text-cursor-input",
+      "defaultProps": { "placeholder": "请输入..." },
+      "defaultSize": { "width": 200, "height": 36 },
+      "properties": [
+        { "key": "props.value", "label": "默认值", "type": "text", "defaultValue": "", "group": "basic" },
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "请输入...", "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.readOnly", "label": "只读", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" },
+        { "type": "onFocus", "label": "获得焦点", "chineseName": "获得焦点" },
+        { "type": "onBlur", "label": "失去焦点", "chineseName": "失去焦点" }
+      ]
+    },
+    {
+      "id": "textarea",
+      "name": "文本框",
+      "category": "input",
+      "icon": "type",
+      "defaultProps": { "placeholder": "请输入..." },
+      "defaultSize": { "width": 200, "height": 100 },
+      "properties": [
+        { "key": "props.value", "label": "默认值", "type": "textarea", "defaultValue": "", "group": "basic" },
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "请输入...", "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.rows", "label": "行数", "type": "number", "defaultValue": 4, "min": 1, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "text",
+      "name": "文本",
+      "category": "basic",
+      "icon": "type",
+      "defaultProps": { "text": "文本" },
+      "defaultSize": { "width": 100, "height": 24 },
+      "properties": [
+        { "key": "props.text", "label": "文本内容", "type": "text", "defaultValue": "文本", "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "heading",
+      "name": "标题",
+      "category": "basic",
+      "icon": "type",
+      "defaultProps": { "text": "标题", "level": 1 },
+      "defaultSize": { "width": 200, "height": 36 },
+      "properties": [
+        { "key": "props.text", "label": "标题内容", "type": "text", "defaultValue": "标题", "group": "basic" },
+        { "key": "props.level", "label": "级别", "type": "select", "defaultValue": 1, "options": [
+          { "label": "H1", "value": 1 },
+          { "label": "H2", "value": 2 },
+          { "label": "H3", "value": 3 },
+          { "label": "H4", "value": 4 },
+          { "label": "H5", "value": 5 },
+          { "label": "H6", "value": 6 }
+        ], "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "image",
+      "name": "图片",
+      "category": "basic",
+      "icon": "image",
+      "defaultProps": {},
+      "defaultSize": { "width": 200, "height": 150 },
+      "properties": [
+        { "key": "props.src", "label": "图片地址", "type": "text", "defaultValue": "", "group": "basic" },
+        { "key": "props.alt", "label": "替代文本", "type": "text", "defaultValue": "", "group": "basic" }
+      ],
+      "events": [
+        { "type": "onClick", "label": "点击事件", "chineseName": "被单击" }
+      ]
+    },
+    {
+      "id": "checkbox",
+      "name": "复选框",
+      "category": "input",
+      "icon": "check-square",
+      "defaultProps": { "label": "复选框" },
+      "defaultSize": { "width": 120, "height": 24 },
+      "properties": [
+        { "key": "props.label", "label": "标签", "type": "text", "defaultValue": "复选框", "group": "basic" },
+        { "key": "props.checked", "label": "选中", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "radio",
+      "name": "单选框",
+      "category": "input",
+      "icon": "circle-dot",
+      "defaultProps": { "label": "单选框" },
+      "defaultSize": { "width": 120, "height": 24 },
+      "properties": [
+        { "key": "props.label", "label": "标签", "type": "text", "defaultValue": "单选框", "group": "basic" },
+        { "key": "props.checked", "label": "选中", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "toggle",
+      "name": "开关",
+      "category": "input",
+      "icon": "toggle-left",
+      "defaultProps": {},
+      "defaultSize": { "width": 48, "height": 24 },
+      "properties": [
+        { "key": "props.checked", "label": "开启", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "select",
+      "name": "下拉框",
+      "category": "input",
+      "icon": "list",
+      "defaultProps": {},
+      "defaultSize": { "width": 200, "height": 36 },
+      "properties": [
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "请选择", "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.options", "label": "选项", "type": "array", "defaultValue": [], "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "slider",
+      "name": "滑块",
+      "category": "input",
+      "icon": "sliders-horizontal",
+      "defaultProps": { "min": 0, "max": 100, "value": 0 },
+      "defaultSize": { "width": 200, "height": 24 },
+      "properties": [
+        { "key": "props.min", "label": "最小值", "type": "number", "defaultValue": 0, "group": "basic" },
+        { "key": "props.max", "label": "最大值", "type": "number", "defaultValue": 100, "group": "basic" },
+        { "key": "props.step", "label": "步长", "type": "number", "defaultValue": 1, "group": "basic" },
+        { "key": "props.value", "label": "当前值", "type": "number", "defaultValue": 0, "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "container",
+      "name": "容器",
+      "category": "layout",
+      "icon": "square",
+      "defaultProps": {},
+      "defaultSize": { "width": 200, "height": 150 },
+      "properties": [],
+      "events": []
+    },
+    {
+      "id": "flex",
+      "name": "弹性布局",
+      "category": "layout",
+      "icon": "layout",
+      "defaultProps": { "display": "flex" },
+      "defaultSize": { "width": 200, "height": 100 },
+      "properties": [
+        { "key": "props.flexDirection", "label": "方向", "type": "select", "defaultValue": "row", "options": [
+          { "label": "水平", "value": "row" },
+          { "label": "垂直", "value": "column" }
+        ], "group": "basic" },
+        { "key": "props.justifyContent", "label": "主轴对齐", "type": "select", "defaultValue": "flex-start", "options": [
+          { "label": "起点", "value": "flex-start" },
+          { "label": "居中", "value": "center" },
+          { "label": "终点", "value": "flex-end" },
+          { "label": "两端", "value": "space-between" },
+          { "label": "均匀", "value": "space-around" }
+        ], "group": "basic" },
+        { "key": "props.alignItems", "label": "交叉轴对齐", "type": "select", "defaultValue": "stretch", "options": [
+          { "label": "拉伸", "value": "stretch" },
+          { "label": "起点", "value": "flex-start" },
+          { "label": "居中", "value": "center" },
+          { "label": "终点", "value": "flex-end" }
+        ], "group": "basic" },
+        { "key": "props.gap", "label": "间距", "type": "number", "defaultValue": 0, "min": 0, "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "divider",
+      "name": "分割线",
+      "category": "basic",
+      "icon": "minus",
+      "defaultProps": {},
+      "defaultSize": { "width": 200, "height": 1 },
+      "properties": [
+        { "key": "props.orientation", "label": "方向", "type": "select", "defaultValue": "horizontal", "options": [
+          { "label": "水平", "value": "horizontal" },
+          { "label": "垂直", "value": "vertical" }
+        ], "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "progress",
+      "name": "进度条",
+      "category": "data",
+      "icon": "sliders-horizontal",
+      "defaultProps": { "value": 50 },
+      "defaultSize": { "width": 200, "height": 8 },
+      "properties": [
+        { "key": "props.value", "label": "当前值", "type": "number", "defaultValue": 50, "min": 0, "max": 100, "group": "basic" },
+        { "key": "props.showInfo", "label": "显示信息", "type": "boolean", "defaultValue": true, "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "link",
+      "name": "链接",
+      "category": "basic",
+      "icon": "link",
+      "defaultProps": { "text": "链接", "href": "#" },
+      "defaultSize": { "width": 100, "height": 24 },
+      "properties": [
+        { "key": "props.text", "label": "链接文本", "type": "text", "defaultValue": "链接", "group": "basic" },
+        { "key": "props.href", "label": "链接地址", "type": "text", "defaultValue": "#", "group": "basic" },
+        { "key": "props.target", "label": "打开方式", "type": "select", "defaultValue": "_self", "options": [
+          { "label": "当前窗口", "value": "_self" },
+          { "label": "新窗口", "value": "_blank" }
+        ], "group": "basic" }
+      ],
+      "events": [
+        { "type": "onClick", "label": "点击事件", "chineseName": "被单击" }
+      ]
+    },
+    {
+      "id": "card",
+      "name": "卡片",
+      "category": "basic",
+      "icon": "square",
+      "defaultProps": {},
+      "defaultSize": { "width": 300, "height": 200 },
+      "properties": [
+        { "key": "props.title", "label": "标题", "type": "text", "defaultValue": "", "group": "basic" },
+        { "key": "props.bordered", "label": "边框", "type": "boolean", "defaultValue": true, "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "alert",
+      "name": "提示框",
+      "category": "feedback",
+      "icon": "alert-circle",
+      "defaultProps": { "text": "提示信息", "type": "info" },
+      "defaultSize": { "width": 300, "height": 48 },
+      "properties": [
+        { "key": "props.text", "label": "提示内容", "type": "textarea", "defaultValue": "提示信息", "group": "basic" },
+        { "key": "props.type", "label": "类型", "type": "select", "defaultValue": "info", "options": [
+          { "label": "信息", "value": "info" },
+          { "label": "成功", "value": "success" },
+          { "label": "警告", "value": "warning" },
+          { "label": "错误", "value": "error" }
+        ], "group": "basic" },
+        { "key": "props.showIcon", "label": "显示图标", "type": "boolean", "defaultValue": true, "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "table",
+      "name": "表格",
+      "category": "data",
+      "icon": "table",
+      "defaultProps": {},
+      "defaultSize": { "width": 400, "height": 200 },
+      "properties": [
+        { "key": "props.columns", "label": "列配置", "type": "array", "defaultValue": [], "group": "basic" },
+        { "key": "props.dataSource", "label": "数据源", "type": "array", "defaultValue": [], "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "list",
+      "name": "列表",
+      "category": "data",
+      "icon": "list",
+      "defaultProps": {},
+      "defaultSize": { "width": 200, "height": 150 },
+      "properties": [
+        { "key": "props.dataSource", "label": "数据源", "type": "array", "defaultValue": [], "group": "basic" }
+      ],
+      "events": [
+        { "type": "onClick", "label": "点击事件", "chineseName": "被单击" }
+      ]
+    },
+    {
+      "id": "search-input",
+      "name": "搜索输入框",
+      "category": "custom",
+      "icon": "search",
+      "baseComponent": "input",
+      "defaultProps": { "placeholder": "搜索...", "allowClear": true },
+      "defaultSize": { "width": 240, "height": 36 },
+      "properties": [
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "搜索...", "group": "basic" },
+        { "key": "props.allowClear", "label": "允许清除", "type": "boolean", "defaultValue": true, "group": "basic" },
+        { "key": "props.loading", "label": "加载状态", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onSearch", "label": "搜索事件", "chineseName": "搜索" },
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "password-input",
+      "name": "密码输入框",
+      "category": "custom",
+      "icon": "key",
+      "baseComponent": "input",
+      "defaultProps": { "placeholder": "请输入密码", "showToggle": true },
+      "defaultSize": { "width": 200, "height": 36 },
+      "properties": [
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "请输入密码", "group": "basic" },
+        { "key": "props.showToggle", "label": "显示切换按钮", "type": "boolean", "defaultValue": true, "group": "basic" },
+        { "key": "props.maxLength", "label": "最大长度", "type": "number", "defaultValue": 32, "min": 1, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "number-input",
+      "name": "数字输入框",
+      "category": "custom",
+      "icon": "hash",
+      "baseComponent": "input",
+      "defaultProps": { "value": 0, "min": 0, "max": 100, "step": 1 },
+      "defaultSize": { "width": 120, "height": 36 },
+      "properties": [
+        { "key": "props.value", "label": "当前值", "type": "number", "defaultValue": 0, "group": "basic" },
+        { "key": "props.min", "label": "最小值", "type": "number", "defaultValue": 0, "group": "basic" },
+        { "key": "props.max", "label": "最大值", "type": "number", "defaultValue": 100, "group": "basic" },
+        { "key": "props.step", "label": "步长", "type": "number", "defaultValue": 1, "min": 1, "group": "basic" },
+        { "key": "props.precision", "label": "精度", "type": "number", "defaultValue": 0, "min": 0, "max": 10, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "值变化", "chineseName": "值变化" }
+      ]
+    },
+    {
+      "id": "color-picker",
+      "name": "颜色选择器",
+      "category": "custom",
+      "icon": "palette",
+      "baseComponent": "input",
+      "defaultProps": { "value": "#1890ff", "showText": false },
+      "defaultSize": { "width": 80, "height": 36 },
+      "properties": [
+        { "key": "props.value", "label": "默认颜色", "type": "color", "defaultValue": "#1890ff", "group": "basic" },
+        { "key": "props.showText", "label": "显示颜色值", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "颜色变化", "chineseName": "颜色变化" }
+      ]
+    },
+    {
+      "id": "rate",
+      "name": "评分组件",
+      "category": "custom",
+      "icon": "thumbs-up",
+      "baseComponent": "slider",
+      "defaultProps": { "value": 0, "max": 5, "allowHalf": false },
+      "defaultSize": { "width": 150, "height": 24 },
+      "properties": [
+        { "key": "props.value", "label": "当前值", "type": "number", "defaultValue": 0, "min": 0, "group": "basic" },
+        { "key": "props.max", "label": "最大星数", "type": "number", "defaultValue": 5, "min": 1, "max": 10, "group": "basic" },
+        { "key": "props.allowHalf", "label": "允许半星", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.disabled", "label": "只读", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "评分变化", "chineseName": "评分变化" }
+      ]
+    },
+    {
+      "id": "date-picker",
+      "name": "日期选择器",
+      "category": "custom",
+      "icon": "calendar",
+      "baseComponent": "input",
+      "defaultProps": { "placeholder": "请选择日期", "format": "YYYY-MM-DD" },
+      "defaultSize": { "width": 200, "height": 36 },
+      "properties": [
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "请选择日期", "group": "basic" },
+        { "key": "props.format", "label": "日期格式", "type": "select", "defaultValue": "YYYY-MM-DD", "options": [
+          { "label": "年-月-日", "value": "YYYY-MM-DD" },
+          { "label": "年/月/日", "value": "YYYY/MM/DD" },
+          { "label": "月-日-年", "value": "MM-DD-YYYY" }
+        ], "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "日期变化", "chineseName": "日期变化" }
+      ]
+    },
+    {
+      "id": "time-picker",
+      "name": "时间选择器",
+      "category": "custom",
+      "icon": "clock",
+      "baseComponent": "input",
+      "defaultProps": { "placeholder": "请选择时间", "format": "HH:mm:ss" },
+      "defaultSize": { "width": 160, "height": 36 },
+      "properties": [
+        { "key": "props.placeholder", "label": "占位符", "type": "text", "defaultValue": "请选择时间", "group": "basic" },
+        { "key": "props.format", "label": "时间格式", "type": "select", "defaultValue": "HH:mm:ss", "options": [
+          { "label": "时:分:秒", "value": "HH:mm:ss" },
+          { "label": "时:分", "value": "HH:mm" }
+        ], "group": "basic" },
+        { "key": "props.disabled", "label": "禁用", "type": "boolean", "defaultValue": false, "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "时间变化", "chineseName": "时间变化" }
+      ]
+    },
+    {
+      "id": "file-upload",
+      "name": "文件上传",
+      "category": "custom",
+      "icon": "file-text",
+      "baseComponent": "button",
+      "defaultProps": { "accept": "*", "multiple": false, "maxSize": 10 },
+      "defaultSize": { "width": 200, "height": 80 },
+      "properties": [
+        { "key": "props.accept", "label": "文件类型", "type": "text", "defaultValue": "*", "placeholder": "如: .jpg,.png,.pdf", "group": "basic" },
+        { "key": "props.multiple", "label": "允许多选", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.maxSize", "label": "最大大小(MB)", "type": "number", "defaultValue": 10, "min": 1, "group": "basic" },
+        { "key": "props.text", "label": "上传文字", "type": "text", "defaultValue": "点击或拖拽上传", "group": "basic" }
+      ],
+      "events": [
+        { "type": "onChange", "label": "文件变化", "chineseName": "文件变化" },
+        { "type": "onSuccess", "label": "上传成功", "chineseName": "上传成功" },
+        { "type": "onError", "label": "上传失败", "chineseName": "上传失败" }
+      ]
+    },
+    {
+      "id": "avatar",
+      "name": "头像",
+      "category": "custom",
+      "icon": "user",
+      "baseComponent": "image",
+      "defaultProps": { "size": 48, "shape": "circle" },
+      "defaultSize": { "width": 48, "height": 48 },
+      "properties": [
+        { "key": "props.src", "label": "图片地址", "type": "text", "defaultValue": "", "group": "basic" },
+        { "key": "props.size", "label": "尺寸", "type": "number", "defaultValue": 48, "min": 16, "max": 200, "group": "basic" },
+        { "key": "props.shape", "label": "形状", "type": "select", "defaultValue": "circle", "options": [
+          { "label": "圆形", "value": "circle" },
+          { "label": "方形", "value": "square" }
+        ], "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "badge",
+      "name": "徽标",
+      "category": "custom",
+      "icon": "badge",
+      "baseComponent": "text",
+      "defaultProps": { "count": 0, "showZero": false, "color": "#ff4d4f" },
+      "defaultSize": { "width": 40, "height": 20 },
+      "properties": [
+        { "key": "props.count", "label": "数字", "type": "number", "defaultValue": 0, "min": 0, "group": "basic" },
+        { "key": "props.showZero", "label": "显示零", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.color", "label": "颜色", "type": "color", "defaultValue": "#ff4d4f", "group": "basic" },
+        { "key": "props.text", "label": "自定义文字", "type": "text", "defaultValue": "", "group": "basic" }
+      ],
+      "events": []
+    },
+    {
+      "id": "tag",
+      "name": "标签",
+      "category": "custom",
+      "icon": "badge",
+      "baseComponent": "text",
+      "defaultProps": { "text": "标签", "closable": false, "color": "default" },
+      "defaultSize": { "width": 60, "height": 24 },
+      "properties": [
+        { "key": "props.text", "label": "文字", "type": "text", "defaultValue": "标签", "group": "basic" },
+        { "key": "props.closable", "label": "可关闭", "type": "boolean", "defaultValue": false, "group": "basic" },
+        { "key": "props.color", "label": "颜色", "type": "select", "defaultValue": "default", "options": [
+          { "label": "默认", "value": "default" },
+          { "label": "成功", "value": "success" },
+          { "label": "警告", "value": "warning" },
+          { "label": "错误", "value": "error" },
+          { "label": "信息", "value": "info" }
+        ], "group": "basic" }
+      ],
+      "events": [
+        { "type": "onClose", "label": "关闭事件", "chineseName": "被关闭" }
+      ]
+    }
+  ]
+}

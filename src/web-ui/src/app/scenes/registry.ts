@@ -24,6 +24,7 @@ import {
   ExternalLink,
   Library,
   FolderCode,
+  Palette,
 } from 'lucide-react';
 import type { SceneTabDef, SceneTabId } from '../components/SceneBar/types';
 
@@ -187,6 +188,15 @@ export const SCENE_TAB_REGISTRY: SceneTabDef[] = [
     label: 'Examples',
     labelKey: 'scenes.examples',
     Icon: FolderCode,
+    pinned: false,
+    singleton: true,
+    defaultOpen: false,
+  },
+  {
+    id: 'designer' as SceneTabId,
+    label: 'Designer',
+    labelKey: 'scenes.designer',
+    Icon: Palette,
     pinned: false,
     singleton: true,
     defaultOpen: false,

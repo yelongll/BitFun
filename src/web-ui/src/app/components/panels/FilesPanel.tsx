@@ -20,7 +20,9 @@ import type { FileSystemNode } from '@/tools/file-system/types';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { useNotification } from '@/shared/notification-system';
 import { InputDialog, CubeLoading } from '@/component-library';
-import { openFileInBestTarget } from '@/shared/utils/tabUtils';
+import { openFileInBestTarget, createTab } from '@/shared/utils/tabUtils';
+import { enqueuePendingTab } from '@/shared/services/pendingTabQueue';
+import { useSceneStore } from '@/app/stores/sceneStore';
 import { PanelHeader } from './base';
 import { createLogger } from '@/shared/utils/logger';
 import {
@@ -675,11 +677,34 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     
     const selectedNode = findNode(fileTree, filePath);
     if (selectedNode && !selectedNode.isDirectory) {
-      openFileInBestTarget({
-        filePath,
-        fileName,
-        workspacePath,
-      }, { source: 'project-nav' });
+      if (fileName.endsWith('.设计')) {
+        const { activeTabId, openTabs, openScene } = useSceneStore.getState();
+        const targetSceneId = 'file-viewer';
+        const sceneJustOpened = targetSceneId !== activeTabId && !openTabs.some(t => t.id === targetSceneId);
+        
+        openScene(targetSceneId);
+        
+        const eventDetail = {
+          type: 'designer',
+          title: fileName,
+          data: { filePath },
+          metadata: { filePath, fileName, duplicateCheckKey: filePath },
+          checkDuplicate: true,
+          duplicateCheckKey: filePath
+        };
+        
+        if (sceneJustOpened) {
+          enqueuePendingTab('project', eventDetail);
+        } else {
+          window.dispatchEvent(new CustomEvent('project-create-tab', { detail: eventDetail }));
+        }
+      } else {
+        openFileInBestTarget({
+          filePath,
+          fileName,
+          workspacePath,
+        }, { source: 'project-nav' });
+      }
     }
   }, [selectFile, onFileSelect, workspacePath, fileTree, findNode]);
 

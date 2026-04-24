@@ -1,0 +1,76 @@
+{
+  "id": "rich-text-editor",
+  "name": "富文本编辑器",
+  "category": "custom",
+  "icon": "code",
+  "defaultProps": {
+    "placeholder": "请输入内容...",
+    "maxLength": 5000,
+    "showCount": true
+  },
+  "defaultSize": {
+    "width": 400,
+    "height": 200
+  },
+  "properties": [
+    {
+      "key": "props.placeholder",
+      "label": "占位符",
+      "type": "text",
+      "defaultValue": "请输入内容...",
+      "group": "basic"
+    },
+    {
+      "key": "props.maxLength",
+      "label": "最大长度",
+      "type": "number",
+      "defaultValue": 5000,
+      "min": 100,
+      "max": 50000,
+      "group": "basic"
+    },
+    {
+      "key": "props.showCount",
+      "label": "显示字数",
+      "type": "boolean",
+      "defaultValue": true,
+      "group": "basic"
+    },
+    {
+      "key": "props.readOnly",
+      "label": "只读",
+      "type": "boolean",
+      "defaultValue": false,
+      "group": "basic"
+    },
+    {
+      "key": "props.toolbar",
+      "label": "工具栏",
+      "type": "select",
+      "defaultValue": "full",
+      "options": [
+        { "label": "完整", "value": "full" },
+        { "label": "简洁", "value": "simple" },
+        { "label": "无", "value": "none" }
+      ],
+      "group": "basic"
+    }
+  ],
+  "events": [
+    {
+      "type": "onChange",
+      "label": "内容变化",
+      "chineseName": "内容变化"
+    },
+    {
+      "type": "onFocus",
+      "label": "获得焦点",
+      "chineseName": "获得焦点"
+    },
+    {
+      "type": "onBlur",
+      "label": "失去焦点",
+      "chineseName": "失去焦点"
+    }
+  ]
+}

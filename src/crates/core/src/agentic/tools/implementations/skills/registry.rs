@@ -29,7 +29,7 @@ const PROJECT_PREFIX: &str = "project";
 
 /// Project-level skill roots under a workspace.
 const PROJECT_SKILL_SLOTS: &[(&str, &str, &str)] = &[
-    (".bitfun", "skills", "bitfun"),
+    (".kongling", "skills", "bitfun"),
     (".claude", "skills", "claude"),
     (".codex", "skills", "codex"),
     (".cursor", "skills", "cursor"),

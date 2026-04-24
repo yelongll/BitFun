@@ -107,8 +107,8 @@ impl IngestServerManager {
         *state.is_running.write().await = true;
 
         let addr = listener.local_addr()?;
-        info!("Debug Log Ingest Server started on http://{}", addr);
-        info!("Debug logs will be written to: <workspace>/.bitfun/debug.log");
+        info!("调试日志摄取服务器已启动于 http://{}", addr);
+        info!("调试日志将写入到: <workspace>/.kongling/debug.log");
 
         let state_clone = state.clone();
         tokio::spawn(async move {

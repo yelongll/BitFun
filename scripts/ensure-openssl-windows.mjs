@@ -18,7 +18,7 @@ const LOG = '[bitfun-openssl]';
 // Keep in sync with $Version in scripts/ci/setup-openssl-windows.ps1.
 export const OPENSSL_VERSION = '3.5.5';
 const OPENSSL_URL = `https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-${OPENSSL_VERSION}.zip`;
-export const CACHE_ROOT = join(ROOT, '.bitfun', 'cache', `firedaemon-openssl-${OPENSSL_VERSION}`);
+export const CACHE_ROOT = join(ROOT, '.kongling', 'cache', `firedaemon-openssl-${OPENSSL_VERSION}`);
 
 function libcryptoPath(opensslDir) {
   return join(opensslDir, 'lib', 'libcrypto.lib');

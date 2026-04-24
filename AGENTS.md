@@ -100,7 +100,7 @@ SessionManager → Session → DialogTurn → ModelRound
 
 ### Session Persistence
 
-Location: `.bitfun/sessions/{session_id}/`
+Location: `.kongling/sessions/{session_id}/`
 
 ### Tool Development
 

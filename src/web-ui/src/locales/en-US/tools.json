@@ -303,6 +303,7 @@
     "sortBySize": "By Size",
     "sortByType": "By Type",
     "compressionTooltip": "Compressed path: {{compressed}}\nFull path: {{full}}",
+    "openInBrowser": "Open in Browser",
     "errors": {
       "loadTreeFailed": "Failed to load file tree",
       "loadTreeFailedWithMessage": "Failed to load file tree: {{message}}"

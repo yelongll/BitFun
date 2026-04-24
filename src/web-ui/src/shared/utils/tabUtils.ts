@@ -50,6 +50,8 @@ export function createTab(options: TabCreationOptions): void {
   const eventName =
     mode === 'project' ? 'project-create-tab' : mode === 'git' ? 'git-create-tab' : 'agent-create-tab';
 
+  console.log('createTab dispatching event:', eventName, options);
+
   const createTabEvent = new CustomEvent(eventName, {
     detail: {
       type,
@@ -63,6 +65,7 @@ export function createTab(options: TabCreationOptions): void {
   });
 
   window.dispatchEvent(createTabEvent);
+  console.log('createTab event dispatched');
 }
 
  

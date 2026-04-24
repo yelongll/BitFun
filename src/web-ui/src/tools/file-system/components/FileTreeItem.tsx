@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, ChevronDown, FolderOpen, FileText, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, FolderOpen, FileText, Loader2, ExternalLink } from 'lucide-react';
 import { Input } from '../../../component-library/components/Input';
 import { dragManager } from '../../../shared/services/DragManager';
 import { fileTreeDragSource } from '../../../shared/context-system/drag-drop/FileTreeDragSource';
@@ -7,6 +7,7 @@ import { useI18n } from '@/infrastructure/i18n';
 import { FileSystemNode } from '../types';
 import { getFileIcon, getFileIconClass } from '../utils/fileIcons';
 import { getCompressionTooltip } from '../utils/pathCompression';
+import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
 
 interface RenameInputProps {
   node: FileSystemNode;
@@ -120,6 +121,20 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
   const tooltip = isCompressed ? getCompressionTooltip(node as any) : node.path;
   const isRenaming = renamingPath === node.path;
 
+  const isHtmlFile = !node.isDirectory && /\.(html?|htm)$/i.test(node.name);
+
+  const handleOpenInBrowser = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      const result = await systemAPI.openFileWithDefault(node.path);
+      if (!result.success && result.error) {
+        console.error('Failed to open HTML file:', result.error);
+      }
+    } catch (error) {
+      console.error('Failed to open HTML file:', error);
+    }
+  };
+
   const handleClick = (event: React.MouseEvent) => {
     if (event.button !== 0) {
       return;
@@ -217,6 +232,16 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
         <span className={`bitfun-file-explorer__node-name ${isCompressed ? 'bitfun-file-explorer__compressed-path' : ''}`}>
           {node.name}
         </span>
+      )}
+
+      {isHtmlFile && (
+        <button
+          className="bitfun-file-explorer__open-external-btn"
+          onClick={handleOpenInBrowser}
+          title={t('fileTree.openInBrowser')}
+        >
+          <ExternalLink size={14} />
+        </button>
       )}
 
       {renderActions ? (

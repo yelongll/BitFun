@@ -74,7 +74,7 @@ impl TerminalState {
     fn get_scripts_dir() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("bitfun")
+            .join("kongling")
             .join("temp")
             .join("scripts")
     }

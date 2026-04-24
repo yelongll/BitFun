@@ -61,6 +61,7 @@ tests/e2e/reports/
 
 # BitFun sandbox data - auto managed
 .bitfun/
+.kongling/cache/
 .cursor
 .cursor/rules/no-cargo.mdc
 

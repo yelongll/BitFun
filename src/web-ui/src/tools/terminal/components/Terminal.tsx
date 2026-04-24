@@ -683,6 +683,33 @@ const Terminal = forwardRef<TerminalRef, TerminalProps>(({
     };
   }, [isReady, forceRefresh, options.theme]);
 
+  const handlePaste = useCallback(async (e: ClipboardEvent) => {
+    e.preventDefault();
+    
+    const text = e.clipboardData?.getData('text');
+    if (!text) return;
+
+    if (onPasteRef.current) {
+      const allowed = await onPasteRef.current(text);
+      if (!allowed) {
+        return;
+      }
+    }
+
+    terminalRef.current?.focus();
+    onDataRef.current?.(text);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('paste', handlePaste);
+    return () => {
+      container.removeEventListener('paste', handlePaste);
+    };
+  }, [handlePaste]);
+
   return (
     <div 
       className={`bitfun-terminal ${className}`}
@@ -692,6 +719,7 @@ const Terminal = forwardRef<TerminalRef, TerminalProps>(({
       <div 
         ref={containerRef} 
         className="bitfun-terminal__container"
+        tabIndex={0}
       />
     </div>
   );

@@ -254,45 +254,39 @@ export const useTabLifecycle = (options: UseTabLifecycleOptions = {}): UseTabLif
         metadata: { ...metadata, duplicateCheckKey },
       };
 
-      // If split view is enabled, switch to vertical split first (top/bottom)
-      if (enableSplitView && layout.splitMode === 'none') {
-        setSplitMode('vertical');
+      const store = canvasStoreApi.getState();
+      const currentLayout = store.layout;
+      const currentActiveGroupId = store.activeGroupId;
+      
+      if (enableSplitView && currentLayout.splitMode === 'none') {
+        store.setSplitMode('vertical');
       }
       
-      // Check duplicates
       if (checkDuplicate && duplicateCheckKey) {
-        const existing = findTabByMetadata({ duplicateCheckKey });
+        const existing = store.findTabByMetadata({ duplicateCheckKey });
         if (existing) {
           const hasJumpInfo = data?.jumpToRange || data?.jumpToLine || data?.jumpToColumn;
 
           if (replaceExisting || hasJumpInfo) {
-            // Update content
-            updateTabContent(existing.tab.id, existing.groupId, content);
+            store.updateTabContent(existing.tab.id, existing.groupId, content);
           }
           
-          // Switch to existing tab
-          switchToTab(existing.tab.id, existing.groupId);
+          store.switchToTab(existing.tab.id, existing.groupId);
           
-          // Trigger right panel expansion
           window.dispatchEvent(new CustomEvent(TAB_EVENTS.EXPAND_RIGHT_PANEL));
           return;
         }
       }
       
-      // Determine target group: use specified group when split enabled, otherwise active group
-      const groupId = (enableSplitView && targetGroup) ? targetGroup : (targetGroup || activeGroupId);
+      const groupId = (enableSplitView && targetGroup) ? targetGroup : (targetGroup || currentActiveGroupId);
 
-      // Open all tabs in active state by default (no preview replacement)
-      addTab(content, 'active', groupId);
+      store.addTab(content, 'active', groupId);
       
-      // Trigger right panel expansion
       window.dispatchEvent(new CustomEvent(TAB_EVENTS.EXPAND_RIGHT_PANEL));
     };
 
     window.addEventListener(eventName, handleCreateTab as EventListener);
 
-    // Drain any tab events that were enqueued before this listener was
-    // registered (happens when the scene was just mounted for the first time).
     const pendingMode = mode === 'project' ? 'project' : mode === 'git' ? 'git' : 'agent';
     const pending = drainPendingTabs(pendingMode);
     pending.forEach(detail => handleCreateTab({ detail } as CustomEvent<CreateTabEventDetail>));
@@ -300,7 +294,7 @@ export const useTabLifecycle = (options: UseTabLifecycleOptions = {}): UseTabLif
     return () => {
       window.removeEventListener(eventName, handleCreateTab as EventListener);
     };
-  }, [mode, findTabByMetadata, updateTabContent, switchToTab, addTab, activeGroupId, layout.splitMode, setSplitMode]);
+  }, [mode, canvasStoreApi]);
 
   return {
     openPreview,

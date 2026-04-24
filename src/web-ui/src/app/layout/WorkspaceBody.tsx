@@ -16,6 +16,7 @@ import { NavBar } from '../components/NavBar';
 import NavPanel from '../components/NavPanel/NavPanel';
 import { SceneBar } from '../components/SceneBar';
 import { SceneViewport } from '../scenes';
+import { WindowControls } from '@/component-library';
 import { useApp } from '../hooks/useApp';
 import './WorkspaceBody.scss';
 
@@ -132,14 +133,21 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
         />
       )}
 
-      {/* Right: scene tab bar + scene content */}
+      {/* Right: window controls + scene tab bar + scene content */}
       <div className="bitfun-workspace-body__scene-area">
-        <SceneBar
-          onMinimize={onMinimize}
-          onMaximize={onMaximize}
-          onClose={onClose}
-          isMaximized={isMaximized}
-        />
+        <div className="bitfun-workspace-body__scene-header">
+          {onMinimize && onMaximize && onClose && (
+            <div className="bitfun-workspace-body__window-controls">
+              <WindowControls
+                onMinimize={onMinimize}
+                onMaximize={onMaximize}
+                onClose={onClose}
+                isMaximized={isMaximized}
+              />
+            </div>
+          )}
+        </div>
+        <SceneBar />
         <SceneViewport
           workspacePath={currentWorkspace?.rootPath}
           isEntering={isEntering}

@@ -78,6 +78,12 @@ const BtwSessionPanel = React.lazy(() =>
   }))
 );
 
+const DesignerPanel = React.lazy(() =>
+  import('@/app/scenes/designer/DesignerScene').then(module => ({
+    default: module.default
+  }))
+);
+
 // CodePreview, ChartRenderer and CodeNode removed - visualization features disabled
 import { 
   FlexiblePanelProps
@@ -789,6 +795,13 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
               widgetId={content.data?.widgetId}
               widgetCode={content.data?.widgetCode}
             />
+          </React.Suspense>
+        );
+
+      case 'designer':
+        return (
+          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading designer...</div>}>
+            <DesignerPanel filePath={content.data?.filePath} />
           </React.Suspense>
         );
 

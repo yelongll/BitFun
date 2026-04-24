@@ -3,7 +3,7 @@ Analyze this BitFun usage data and suggest improvements.
 ## BITFUN FEATURES REFERENCE (pick from these for features_to_try):
 
 1. **Skills**: Create reusable prompt templates as markdown files that run with a single button or command.
-   - How to use: Create `.bitfun/skills/commit/SKILL.md` with instructions. Then trigger it from the Skills panel.
+   - How to use: Create `.kongling/skills/commit/SKILL.md` with instructions. Then trigger it from the Skills panel.
    - Good for: repetitive workflows - commit messages, code reviews, testing, deployment, or complex multi-step workflows
    - Example SKILL.md content:
      ```markdown
@@ -16,9 +16,9 @@ Analyze this BitFun usage data and suggest improvements.
    - Authoring new skills: Invoke the built-in `writing-skills` skill for guidance on creating well-structured skill files.
 
 2. **SubAgents (Task Agents)**: Custom agents you define for specific domains or tasks. SubAgents run in parallel and return results to the parent agent.
-   - How to use: Create agents in `.bitfun/agents/` with custom prompts and tool configurations.
+   - How to use: Create agents in `.kongling/agents/` with custom prompts and tool configurations.
    - Good for: domain-specific tasks, parallel exploration, focused code review
-   - Example agent config (`.bitfun/agents/security-reviewer/agent.json`):
+   - Example agent config (`.kongling/agents/security-reviewer/agent.json`):
      ```json
      {
        "name": "Security Reviewer",

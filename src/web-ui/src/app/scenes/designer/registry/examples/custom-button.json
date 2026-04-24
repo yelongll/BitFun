@@ -1,0 +1,80 @@
+{
+  "id": "my-custom-button",
+  "name": "我的按钮",
+  "category": "custom",
+  "icon": "rectangle-horizontal",
+  "defaultProps": {
+    "text": "自定义按钮",
+    "variant": "primary"
+  },
+  "defaultSize": {
+    "width": 120,
+    "height": 40
+  },
+  "properties": [
+    {
+      "key": "props.text",
+      "label": "按钮文本",
+      "type": "text",
+      "defaultValue": "自定义按钮",
+      "group": "basic"
+    },
+    {
+      "key": "props.variant",
+      "label": "变体",
+      "type": "select",
+      "defaultValue": "primary",
+      "options": [
+        { "label": "主要", "value": "primary" },
+        { "label": "次要", "value": "secondary" },
+        { "label": "轮廓", "value": "outline" }
+      ],
+      "group": "basic"
+    },
+    {
+      "key": "props.size",
+      "label": "尺寸",
+      "type": "select",
+      "defaultValue": "medium",
+      "options": [
+        { "label": "小", "value": "small" },
+        { "label": "中", "value": "medium" },
+        { "label": "大", "value": "large" }
+      ],
+      "group": "basic"
+    },
+    {
+      "key": "props.disabled",
+      "label": "禁用",
+      "type": "boolean",
+      "defaultValue": false,
+      "group": "basic"
+    }
+  ],
+  "events": [
+    {
+      "type": "onClick",
+      "label": "点击事件",
+      "chineseName": "被单击"
+    }
+  ],
+  "tabs": [
+    {
+      "id": "basic",
+      "label": "基础",
+      "propertyKeys": [
+        "props.text",
+        "props.variant",
+        "props.size",
+        "props.disabled"
+      ]
+    },
+    {
+      "id": "events",
+      "label": "事件",
+      "propertyKeys": [
+        "events.onClick"
+      ]
+    }
+  ]
+}

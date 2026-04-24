@@ -72,7 +72,7 @@ impl IsolationManager {
                 .any(|&forbidden| file_name_str.starts_with(forbidden))
             {
                 return Err(SnapshotError::GitIsolationFailure(format!(
-                    "Found Git-related file in .bitfun directory: {}",
+                    "在 .kongling 目录中发现 Git 相关文件: {}",
                     file_name_str
                 )));
             }

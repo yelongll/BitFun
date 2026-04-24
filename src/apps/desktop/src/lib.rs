@@ -634,6 +634,7 @@ pub async fn run() {
             api::terminal_api::terminal_get_history,
             get_system_info,
             send_system_notification,
+            open_file_with_default,
             check_command_exists,
             check_commands_exist,
             run_system_command,

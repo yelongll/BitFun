@@ -20,9 +20,6 @@ import { useSceneManager } from '../../hooks/useSceneManager';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import type { SceneTabId } from '../SceneBar/types';
 import SectionHeader from './components/SectionHeader';
-import MiniAppEntry from './components/MiniAppEntry';
-import LibraryEntry from './components/LibraryEntry';
-import ExamplesEntry from './components/ExamplesEntry';
 import WorkspaceListSection from './sections/workspaces/WorkspaceListSection';
 import SessionsSection from './sections/sessions/SessionsSection';
 import { useSceneStore } from '../../stores/sceneStore';
@@ -87,11 +84,6 @@ const MainNav: React.FC<MainNavProps> = ({
     switchWorkspace,
     setActiveWorkspace,
   } = useWorkspaceContext();
-
-  const activeMiniAppId = useMemo(
-    () => (typeof activeTabId === 'string' && activeTabId.startsWith('miniapp:') ? activeTabId.slice('miniapp:'.length) : null),
-    [activeTabId]
-  );
 
   // Section expand state
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -633,30 +625,6 @@ const MainNav: React.FC<MainNavProps> = ({
           </div>
         </div>
 
-      </div>
-
-      {/* ── Bottom: MiniApp & Library & Examples ───────────────────────── */}
-      <div className="bitfun-nav-panel__bottom-bar">
-        <div className="bitfun-nav-panel__miniapp-footer">
-          <MiniAppEntry
-            isActive={activeTabId === 'miniapps'}
-            activeMiniAppId={activeMiniAppId}
-            onOpenMiniApps={() => openScene('miniapps')}
-            onOpenMiniApp={(appId) => openScene(`miniapp:${appId}`)}
-          />
-        </div>
-        <div className="bitfun-nav-panel__library-entry-wrap">
-          <LibraryEntry
-            isActive={activeTabId === 'library'}
-            onOpenLibrary={() => openScene('library')}
-          />
-        </div>
-        <div className="bitfun-nav-panel__examples-entry-wrap">
-          <ExamplesEntry
-            isActive={activeTabId === 'examples'}
-            onOpenExamples={() => openScene('examples')}
-          />
-        </div>
       </div>
 
       {workspaceMenuPortal}

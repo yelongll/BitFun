@@ -13,9 +13,9 @@ pub struct SubagentDirEntry {
     pub kind: CustomSubagentKind,
 }
 
-/// Project subagent directory names (relative to workspace root, each item is in [".bitfun", "agents"] format)
+/// Project subagent directory names (relative to workspace root, each item is in [".kongling", "agents"] format)
 const PROJECT_AGENT_SUBDIRS: &[(&str, &str)] = &[
-    (".bitfun", "agents"),
+    (".kongling", "agents"),
     (".claude", "agents"),
     (".cursor", "agents"),
     (".codex", "agents"),
@@ -55,8 +55,8 @@ impl CustomSubagentLoader {
         // User subagents: ~/.claude/agents, ~/.cursor/agents, ~/.codex/agents
         if let Some(home) = dirs::home_dir() {
             for (parent, sub) in PROJECT_AGENT_SUBDIRS {
-                if *parent == ".bitfun" {
-                    continue; // bitfun user path already handled by path_manager
+                if *parent == ".kongling" {
+                    continue; // kongling user path already handled by path_manager
                 }
                 let p = home.join(parent).join(sub);
                 if p.exists() && p.is_dir() {

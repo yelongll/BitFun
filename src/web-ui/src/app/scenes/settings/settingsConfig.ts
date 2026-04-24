@@ -13,6 +13,7 @@ export type ConfigTab =
   | 'mcp-tools'
   // | 'lsp' // temporarily hidden from config center
   | 'editor'
+  | 'designer'
   | 'keyboard';
 
 export interface ConfigTabDef {
@@ -148,6 +149,20 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
           'line number',
           'format',
           'save',
+        ],
+      },
+      {
+        id: 'designer',
+        labelKey: 'configCenter.tabs.designer',
+        descriptionKey: 'configCenter.tabDescriptions.designer',
+        keywords: [
+          'designer',
+          'alignment',
+          'grid',
+          'snap',
+          '辅助线',
+          '网格',
+          '对齐',
         ],
       },
       // LSP / language server settings — temporarily hidden from nav

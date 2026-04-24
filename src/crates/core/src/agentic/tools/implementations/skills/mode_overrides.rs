@@ -106,7 +106,7 @@ pub async fn set_user_mode_skill_state(
 
 pub fn project_mode_skills_path_for_remote(remote_root: &str) -> String {
     format!(
-        "{}/.bitfun/config/{}",
+        "{}/.kongling/config/{}",
         remote_root.trim_end_matches('/'),
         PROJECT_MODE_SKILLS_FILE_NAME
     )
@@ -126,7 +126,7 @@ fn mode_skills_object_mut(document: &mut Value) -> BitFunResult<&mut Map<String,
 
     document
         .as_object_mut()
-        .ok_or_else(|| BitFunError::config("Project mode skills must be a JSON object".to_string()))
+        .ok_or_else(|| BitFunError::config(" 项目模式技能必须是一个 JSON 对象".to_string()))
 }
 
 fn mode_skills_object(document: &Value) -> Option<&Map<String, Value>> {

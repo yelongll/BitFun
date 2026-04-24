@@ -1445,7 +1445,7 @@ $_section-header-height: 24px;
 
 .bitfun-nav-panel__footer {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-shrink: 0;
   padding: $size-gap-1 $size-gap-2 0;
@@ -1455,12 +1455,15 @@ $_section-header-height: 24px;
 .bitfun-nav-panel__footer-left {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: $size-gap-1;
+  max-width: 100%;
 }
 
 .bitfun-nav-panel__footer-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: $size-gap-1;
 }
 

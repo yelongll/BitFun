@@ -99,12 +99,12 @@ impl CliConfig {
         let config_dir = if cfg!(target_os = "windows") {
             dirs::config_dir()
                 .ok_or_else(|| anyhow::anyhow!("Cannot find config directory"))?
-                .join("bitfun")
+                .join("kongling")
         } else {
             dirs::home_dir()
                 .ok_or_else(|| anyhow::anyhow!("Cannot find home directory"))?
                 .join(".config")
-                .join("bitfun")
+                .join("kongling")
         };
 
         Ok(config_dir.join("config.toml"))
@@ -146,12 +146,12 @@ impl CliConfig {
         let config_dir = if cfg!(target_os = "windows") {
             dirs::config_dir()
                 .ok_or_else(|| anyhow::anyhow!("Cannot find config directory"))?
-                .join("bitfun")
+                .join("kongling")
         } else {
             dirs::home_dir()
                 .ok_or_else(|| anyhow::anyhow!("Cannot find home directory"))?
                 .join(".config")
-                .join("bitfun")
+                .join("kongling")
         };
 
         fs::create_dir_all(&config_dir)?;

@@ -492,7 +492,7 @@ impl ChatMode {
                 chat_view.add_message(
                     "system".to_string(),
                     format!(
-                        "Session auto-saved to: ~/.config/bitfun/sessions/{}.json",
+                        "Session auto-saved to: ~/.config/kongling/sessions/{}.json",
                         chat_view.session.id
                     ),
                 );

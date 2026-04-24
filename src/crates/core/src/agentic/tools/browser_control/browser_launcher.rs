@@ -493,7 +493,7 @@ impl BrowserLauncher {
     <key>CFBundleExecutable</key>
     <string>launch</string>
     <key>CFBundleIdentifier</key>
-    <string>com.bitfun.browser-debug-launcher</string>
+    <string>com.kongling.browser-debug-launcher</string>
 </dict>
 </plist>"#,
             app_name

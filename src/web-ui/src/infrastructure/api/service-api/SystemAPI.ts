@@ -53,6 +53,17 @@ export class SystemAPI {
     }
   }
 
+  async openFileWithDefault(path: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await api.invoke('open_file_with_default', {
+        request: { path }
+      });
+    } catch (error) {
+      log.error('Failed to open file with default app', { path, error });
+      throw createTauriCommandError('open_file_with_default', error, { path });
+    }
+  }
+
    
   async showInFolder(path: string): Promise<void> {
     try {

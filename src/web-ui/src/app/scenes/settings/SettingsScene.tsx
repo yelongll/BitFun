@@ -15,6 +15,7 @@ import AIRulesMemoryConfig from '../../../infrastructure/config/components/AIRul
 import McpToolsConfig from '../../../infrastructure/config/components/McpToolsConfig';
 import EditorConfig from '../../../infrastructure/config/components/EditorConfig';
 import BasicsConfig from '../../../infrastructure/config/components/BasicsConfig';
+import DesignerConfig from '../../../infrastructure/config/components/DesignerConfig';
 
 const KeyboardShortcutsTab = lazy(() => import('./components/KeyboardShortcutsTab'));
 
@@ -42,6 +43,7 @@ const SettingsScene: React.FC = () => {
     case 'ai-context':       Content = AIRulesMemoryConfig; break;
     case 'mcp-tools':        Content = McpToolsConfig;      break;
     case 'editor':           Content = EditorConfig;         break;
+    case 'designer':         Content = DesignerConfig;       break;
   }
 
   return (

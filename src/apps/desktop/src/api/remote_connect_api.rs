@@ -154,12 +154,12 @@ fn detect_from_exe() -> Option<String> {
     candidates.push(exe_dir.join("resources/mobile-web"));
 
     if cfg!(target_os = "linux") {
-        candidates.push(exe_dir.join("../lib/bitfun/mobile-web/dist"));
-        candidates.push(exe_dir.join("../lib/bitfun/mobile-web"));
-        candidates.push(exe_dir.join("../share/bitfun/mobile-web/dist"));
-        candidates.push(exe_dir.join("../share/bitfun/mobile-web"));
-        candidates.push(exe_dir.join("../share/com.bitfun.desktop/mobile-web/dist"));
-        candidates.push(exe_dir.join("../share/com.bitfun.desktop/mobile-web"));
+        candidates.push(exe_dir.join("../lib/kongling/mobile-web/dist"));
+        candidates.push(exe_dir.join("../lib/kongling/mobile-web"));
+        candidates.push(exe_dir.join("../share/kongling/mobile-web/dist"));
+        candidates.push(exe_dir.join("../share/kongling/mobile-web"));
+        candidates.push(exe_dir.join("../share/com.kongling.desktop/mobile-web/dist"));
+        candidates.push(exe_dir.join("../share/com.kongling.desktop/mobile-web"));
     }
 
     check_candidates(&candidates, "exe-relative")

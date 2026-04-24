@@ -37,6 +37,7 @@ const MiniAppScene    = lazy(() => import('./miniapps/MiniAppScene'));
 const PanelViewScene  = lazy(() => import('./panel-view/PanelViewScene'));
 const LibraryScene    = lazy(() => import('./library/LibraryScene'));
 const ExamplesScene   = lazy(() => import('./examples/ExamplesScene'));
+const DesignerScene   = lazy(() => import('./designer/DesignerScene'));
 
 
 interface SceneViewportProps {
@@ -141,6 +142,8 @@ function renderScene(
       return <LibraryScene />;
     case 'examples':
       return <ExamplesScene />;
+    case 'designer':
+      return <DesignerScene />;
     default:
       if (typeof id === 'string' && id.startsWith('miniapp:')) {
         return <MiniAppScene appId={id.slice('miniapp:'.length)} />;

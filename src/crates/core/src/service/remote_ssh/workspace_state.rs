@@ -269,7 +269,7 @@ pub fn remote_workspace_stable_id(ssh_host: &str, remote_root_norm: &str) -> Str
 
 /// When a remote scope has `connection_id` but no resolvable SSH host, we must not read/write the
 /// legacy per-connection tree (it is not the same layout as `remote_ssh/{host}/.../sessions`).
-/// This returns a dedicated stub under `~/.bitfun/remote_ssh/_unresolved/.../sessions` that is
+/// This returns a dedicated stub under `~/.kongling/remote_ssh/_unresolved/.../sessions` that is
 /// usually absent, so session listing is empty until host can be resolved.
 pub fn unresolved_remote_session_storage_dir(
     connection_id: &str,
@@ -423,7 +423,7 @@ impl RemoteWorkspaceStateManager {
         path: &str,
         preferred_connection_id: Option<&str>,
     ) -> Option<RemoteWorkspaceEntry> {
-        // Assistant sessions use client-local paths under ~/.bitfun/personal_assistant.
+        // Assistant sessions use client-local paths under ~/.kongling/personal_assistant.
         // A registered remote root of `/` matches every absolute path; without an explicit
         // `remote_connection_id`, those paths must not be treated as SSH workspaces.
         let is_local_assistant_path =
@@ -565,7 +565,7 @@ impl RemoteWorkspaceStateManager {
 
     // ── Session storage ────────────────────────────────────────────
 
-    /// Local mirror directory for persisted sessions (`~/.bitfun/remote_ssh/.../sessions`).
+    /// Local mirror directory for persisted sessions (`~/.kongling/remote_ssh/.../sessions`).
     pub fn get_remote_session_mirror_path(
         &self,
         ssh_host: &str,

@@ -35,7 +35,7 @@ static DEFAULT_LOG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
 
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".bitfun")
+        .join(".kongling")
         .join("debug.log")
 });
 
