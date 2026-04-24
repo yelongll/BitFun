@@ -185,24 +185,40 @@ impl AppState {
             uptime_seconds: 0,
         }));
 
-        let initial_workspace_path = workspace_service
-            .get_current_workspace()
-            .await
-            .map(|workspace| workspace.root_path);
+        let initial_workspace = workspace_service.get_current_workspace().await;
+        let initial_workspace_path = initial_workspace
+            .as_ref()
+            .map(|workspace| workspace.root_path.clone());
 
         if let Some(workspace_path) = initial_workspace_path.clone() {
-            if let Err(e) =
-                bitfun_core::service::snapshot::initialize_snapshot_manager_for_workspace(
-                    workspace_path.clone(),
-                    None,
-                )
-                .await
-            {
-                log::warn!(
-                    "Failed to restore snapshot system on startup: path={}, error={}",
-                    workspace_path.display(),
-                    e
+            let skip_startup_snapshot_restore = initial_workspace
+                .as_ref()
+                .map(|workspace| {
+                    matches!(
+                        workspace.workspace_kind,
+                        bitfun_core::service::workspace::WorkspaceKind::Remote
+                    )
+                })
+                .unwrap_or(false);
+            if skip_startup_snapshot_restore {
+                log::debug!(
+                    "Skipping snapshot restore on startup for remote workspace: path={}",
+                    workspace_path.display()
                 );
+            } else {
+                if let Err(e) =
+                    bitfun_core::service::snapshot::initialize_snapshot_manager_for_workspace(
+                        workspace_path.clone(),
+                        None,
+                    )
+                    .await
+                {
+                    log::warn!(
+                        "Failed to restore snapshot system on startup: path={}, error={}",
+                        workspace_path.display(),
+                        e
+                    );
+                }
             }
             if let Err(e) = ai_rules_service.set_workspace(workspace_path).await {
                 log::warn!("Failed to restore AI rules workspace on startup: {}", e);
@@ -238,6 +254,15 @@ impl AppState {
         // Load persisted remote workspaces (may be multiple)
         match manager.load_remote_workspace().await {
             Ok(_) => {
+                if let Err(e) = manager
+                    .prune_remote_workspaces_without_saved_connections()
+                    .await
+                {
+                    log::warn!(
+                        "Failed to prune stale persisted remote workspaces on startup: {}",
+                        e
+                    );
+                }
                 let workspaces = manager.get_remote_workspaces().await;
                 if !workspaces.is_empty() {
                     log::info!("Loaded {} persisted remote workspace(s)", workspaces.len());
@@ -522,8 +547,12 @@ fn resolve_worker_host_path() -> Option<std::path::PathBuf> {
         if let Some(exe_dir) = exe.parent() {
             candidates.push(exe_dir.join("resources").join("worker_host.js"));
             if let Some(parent) = exe_dir.parent() {
-                candidates
-                    .push(parent.join("Resources").join("resources").join("worker_host.js"));
+                candidates.push(
+                    parent
+                        .join("Resources")
+                        .join("resources")
+                        .join("worker_host.js"),
+                );
                 candidates.push(parent.join("Resources").join("worker_host.js"));
                 if let Some(bin_name) = exe.file_name().and_then(|s| s.to_str()) {
                     candidates.push(

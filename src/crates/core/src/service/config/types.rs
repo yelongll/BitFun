@@ -460,8 +460,7 @@ impl AIConfig {
         self.models
             .iter()
             .find(|m| {
-                m.enabled
-                    && (m.id == model_ref || m.name == model_ref || m.model_name == model_ref)
+                m.enabled && (m.id == model_ref || m.name == model_ref || m.model_name == model_ref)
             })
             .map(|m| m.id.clone())
     }
@@ -484,10 +483,7 @@ impl AIConfig {
     /// Returns the id of the first enabled model, if any. Used as a final
     /// fallback when a configured default points to a disabled / missing model.
     pub fn first_enabled_model_id(&self) -> Option<String> {
-        self.models
-            .iter()
-            .find(|m| m.enabled)
-            .map(|m| m.id.clone())
+        self.models.iter().find(|m| m.enabled).map(|m| m.id.clone())
     }
 
     /// Resolves a model selector value.
@@ -1191,7 +1187,7 @@ impl Default for AIExperienceConfig {
             enable_session_title_generation: true,
             enable_welcome_panel_ai_analysis: false,
             enable_visual_mode: false,
-            enable_agent_companion: false,
+            enable_agent_companion: true,
         }
     }
 }

@@ -3,21 +3,29 @@
 //! Routes requests by `domain` to the appropriate backend:
 //!   desktop  → ComputerUseHost (existing)
 //!   browser  → CDP-based browser control (new)
-//!   app      → SelfControl (existing front-end service)
 //!   terminal → TerminalApi (existing)
 //!   system   → OS-level utilities (open_app, run_script, etc.)
 
 use crate::agentic::tools::browser_control::actions::BrowserActions;
 use crate::agentic::tools::browser_control::browser_launcher::{
-    BrowserLauncher, LaunchResult, DEFAULT_CDP_PORT,
+    BrowserKind, BrowserLauncher, LaunchResult, DEFAULT_CDP_PORT,
 };
 use crate::agentic::tools::browser_control::cdp_client::CdpClient;
 use crate::agentic::tools::browser_control::session_registry::{
     BrowserSession, BrowserSessionRegistry,
 };
+use crate::agentic::tools::computer_use_capability::computer_use_desktop_available;
+use crate::agentic::tools::computer_use_host::{
+    AppClickParams, AppSelector, AppWaitPredicate, ClickTarget, ComputerUseForegroundApplication,
+    ComputerUseHostRef, InteractiveClickParams, InteractiveScrollParams, InteractiveTypeTextParams,
+    InteractiveViewOpts, VisualClickParams, VisualMarkViewOpts,
+};
 use crate::agentic::tools::framework::{
     Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
+use crate::service::config::global::GlobalConfigManager;
+use crate::service::config::types::AIConfig;
+use crate::util::elapsed_ms_u64;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -32,6 +40,55 @@ use super::control_hub::{err_response, ControlHubError, ErrorCode};
 /// in-flight `wait` / lifecycle subscriptions.
 static BROWSER_SESSIONS: std::sync::OnceLock<Arc<BrowserSessionRegistry>> =
     std::sync::OnceLock::new();
+
+/// Per-PID consecutive-failure tracker for the AX-first `app_*` actions.
+/// Key = target PID, value = `(target_signature, before_digest, count)`.
+/// When the same `(action,target)` lands on an unchanged digest twice in a
+/// row the dispatcher injects an `app_state.loop_warning` so the model is
+/// forced off the failing path on its **next** turn (`/Screenshot policy/
+/// Mandatory screenshot moments` in `claw_mode.md`).
+static APP_LOOP_TRACKER: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<i32, (String, String, u32)>>,
+> = std::sync::OnceLock::new();
+
+fn loop_tracker_observe(
+    pid: Option<i32>,
+    action: &str,
+    target_sig: &str,
+    before_digest: &str,
+    after_digest: &str,
+) -> Option<String> {
+    let pid = pid?;
+    // A digest change means the action mutated the tree — that is real
+    // progress and resets the streak even if the model picks the same
+    // target name on purpose (e.g. clicking "Next" repeatedly).
+    let progressed = before_digest != after_digest;
+    let sig = format!("{action}:{target_sig}");
+    let mut guard = APP_LOOP_TRACKER
+        .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .ok()?;
+    let entry = guard
+        .entry(pid)
+        .or_insert_with(|| (String::new(), String::new(), 0));
+    if progressed {
+        *entry = (sig, after_digest.to_string(), 1);
+        return None;
+    }
+    if entry.0 == sig && entry.1 == before_digest {
+        entry.2 = entry.2.saturating_add(1);
+    } else {
+        *entry = (sig, before_digest.to_string(), 1);
+    }
+    if entry.2 >= 2 {
+        Some(format!(
+            "Detected {} consecutive `{}` calls on the same target ({}) without any AX tree mutation (digest unchanged). The target is almost certainly invisible / disabled / in a Canvas-WebGL surface that AX cannot describe. NEXT TURN you MUST: (1) run `desktop.screenshot {{ screenshot_window: false }}` to see the full display, (2) switch tactic — different `node_idx`, different `ocr_text` needle, or a keyboard shortcut. Do NOT retry this same target a third time.",
+            entry.2, action, target_sig
+        ))
+    } else {
+        None
+    }
+}
 
 fn browser_sessions() -> Arc<BrowserSessionRegistry> {
     BROWSER_SESSIONS
@@ -52,6 +109,417 @@ impl ControlHubTool {
         Self
     }
 
+    fn browser_connect_mode_from_params(params: &Value) -> &'static str {
+        match params.get("mode").and_then(|v| v.as_str()) {
+            Some("headless") => "headless",
+            Some("default") => "default",
+            _ => "default",
+        }
+    }
+
+    fn default_browser_connect_hints(kind: &BrowserKind, port: u16) -> Vec<String> {
+        let exe = BrowserLauncher::browser_executable(kind);
+        vec![
+            "For login/cookies/extensions, use the user's default browser via CDP — never fall back to desktop mouse/keyboard automation.".to_string(),
+            format!(
+                "If CDP is not ready, restart the browser with the test port enabled: \"{}\" --remote-debugging-port={}",
+                exe, port
+            ),
+            "After the browser is listening on the test port, use browser.connect / snapshot / click / fill to drive the DOM directly.".to_string(),
+        ]
+    }
+
+    fn headless_browser_connect_hints(port: u16) -> Vec<String> {
+        vec![
+            "For project Web UI testing that does not depend on user login state, use the dedicated headless browser flow instead of the user's browser.".to_string(),
+            format!(
+                "Start or attach a headless test browser on the test port {} and then drive it through browser DOM actions only.",
+                port
+            ),
+            "Do not switch to desktop mouse/keyboard browser control in headless mode.".to_string(),
+        ]
+    }
+
+    fn desktop_browser_guard_error(
+        action: &str,
+        foreground: Option<&ComputerUseForegroundApplication>,
+    ) -> ControlHubError {
+        let app_name = foreground
+            .and_then(|app| app.name.as_deref())
+            .unwrap_or("a web browser");
+        ControlHubError::new(
+            ErrorCode::GuardRejected,
+            format!(
+                "desktop.{} is blocked while {} is frontmost. Use ControlHub domain=\"browser\" for all browser interaction; desktop mouse/keyboard browser control is forbidden.",
+                action, app_name
+            ),
+        )
+        .with_hints([
+            "Use browser.connect to attach via the test port, then drive the page with snapshot/click/fill/press_key",
+            "For login/cookies/extensions, guide the user to start their default browser with the test port enabled before calling browser.connect",
+            "For isolated project Web UI testing, use the headless browser flow instead of desktop automation",
+        ])
+    }
+
+    fn is_probably_browser_app(foreground: &ComputerUseForegroundApplication) -> bool {
+        let name = foreground
+            .name
+            .as_deref()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let bundle = foreground
+            .bundle_id
+            .as_deref()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+
+        const NAME_HINTS: &[&str] = &[
+            "chrome",
+            "chromium",
+            "edge",
+            "brave",
+            "arc",
+            "firefox",
+            "safari",
+            "browser",
+            "浏览器",
+        ];
+        const BUNDLE_HINTS: &[&str] = &[
+            "chrome", "chromium", "edge", "brave", "arc", "firefox", "safari", "browser",
+        ];
+
+        NAME_HINTS.iter().any(|hint| name.contains(hint))
+            || BUNDLE_HINTS.iter().any(|hint| bundle.contains(hint))
+    }
+
+    async fn desktop_action_targets_browser(
+        &self,
+        action: &str,
+        context: &ToolUseContext,
+    ) -> Option<ControlHubError> {
+        let guarded_actions = [
+            "click",
+            "click_target",
+            "click_element",
+            "move_to_target",
+            "mouse_move",
+            "pointer_move_rel",
+            "scroll",
+            "drag",
+            "key_chord",
+            "type_text",
+            "paste",
+            "locate",
+            "move_to_text",
+        ];
+        if !guarded_actions.contains(&action) {
+            return None;
+        }
+        let host = context.computer_use_host.as_ref()?;
+        let snapshot = host.computer_use_session_snapshot().await;
+        let foreground = snapshot.foreground_application.as_ref()?;
+        if Self::is_probably_browser_app(foreground) {
+            return Some(Self::desktop_browser_guard_error(action, Some(foreground)));
+        }
+        None
+    }
+
+    async fn desktop_domain_enabled() -> bool {
+        if !computer_use_desktop_available() {
+            return false;
+        }
+        let Ok(service) = GlobalConfigManager::get_service().await else {
+            return false;
+        };
+        let ai: AIConfig = service.get_config(Some("ai")).await.unwrap_or_default();
+        ai.computer_use_enabled
+    }
+
+    fn description_text(desktop_enabled: bool) -> String {
+        let desktop_domain_doc = if desktop_enabled {
+            r#"### domain: "desktop"  (Computer Use — only available in the BitFun desktop app)
+
+#### desktop (AX-first, recommended for third-party apps)
+- New Codex-style flow that targets a specific application by name / bundle
+  id / pid and drives it through its Accessibility (AX) tree instead of the
+  global mouse + screenshot loop. Strongly preferred whenever:
+  * you need to drive an app that is NOT in the user's foreground, OR
+  * you must not steal the user's mouse / keyboard focus, OR
+  * the target widget has a stable AX role / title / identifier (most native
+    macOS / AppKit / Catalyst / SwiftUI / Electron-with-AX-on apps qualify).
+- Capability gating (read first, ALWAYS): `meta.capabilities` returns
+  `domains.desktop.supports_ax_tree`, `domains.desktop.supports_background_input`,
+  `domains.desktop.supports_interactive_view`, and
+  `domains.desktop.supports_visual_mark_view`.
+  AX tree and background input both `false` → the host cannot do AX-first yet;
+  fall back to the legacy screenshot/click flow below. Background input
+  `false` while AX tree `true` → AX *reads* work but writes will steal focus;
+  tell the user.
+- Actions (all under `domain: "desktop"`):
+  * `list_apps { include_hidden? }` → ranked `[{ name, bundle_id?, pid,
+    is_running, last_used_ms?, launch_count? }]`. Use this to resolve a
+    fuzzy user phrase ("微信" / "WeChat" / "Cursor") to a concrete
+    `AppSelector` before any other AX call.
+  * `get_app_state { app: <AppSelector>, max_depth?, focus_window_only? }`
+    → `{ app, window_title?, tree_text, nodes:[AxNode], digest, captured_at_ms }`.
+    `tree_text` is the human-readable indent dump (Codex parity); `nodes` is
+    the structured array with stable `idx` you pass to subsequent actions.
+    `digest` is a sha1 of the tree — use it to detect "did anything change?"
+    cheaply without re-diffing.
+  * `app_click { app, target: { kind:"node_idx", idx } | { kind:"image_xy", x, y, screenshot_id? } | { kind:"image_grid", x0, y0, width, height, rows, cols, row, col, intersections?, screenshot_id? } | { kind:"visual_grid", rows, cols, row, col, intersections? } | { kind:"screen_xy", x, y },
+                 click_count?, mouse_button?, modifier_keys?, wait_ms_after? }` → returns the
+    fresh `AppStateSnapshot` after the click. Prefer `node_idx` over
+    coordinate targets whenever the target appears in `nodes`. For Canvas /
+    SVG / WebGL/custom-drawn surfaces, prefer `image_xy`: x/y are pixels in
+    the screenshot attached to the latest `get_app_state` / `app_click`.
+    Always pass `screenshot_id` from `app_state.screenshot_meta` when present
+    so the host maps against the exact frame you clicked from.
+    For board/grid/canvas controls, prefer `image_grid` over raw `image_xy`:
+    specify the board rectangle in screenshot pixels and a zero-based
+    `row`/`col`; set `intersections:true` for Go/Gomoku-style line
+    intersections and `false`/omit it for cell centers.
+    If the grid rectangle is not known, use `visual_grid`: the host captures
+    the app, detects the regular visual grid from pixels, then clicks the
+    requested zero-based row/col using the same captured coordinate basis.
+    For games / animated WebViews, pass `wait_ms_after` (e.g. 300–600) so the
+    returned screenshot captures the settled board.
+  * `build_visual_mark_view { app, opts?: { max_points?, region?, include_grid? } }`
+    → returns a numbered screenshot grid for arbitrary visual targets that
+    AX/OCR cannot name (Canvas, games, maps, drawings, icon-only panels).
+    Use this after `get_app_state` / `build_interactive_view` does not expose
+    the target. Pass `region` in screenshot pixels to refine into a smaller
+    area on the next attempt.
+  * `visual_click { app, i, before_view_digest?, click_count?, mouse_button?, wait_ms_after?, return_view? }`
+    → clicks the numbered visual mark using the exact screenshot coordinate
+    basis from the marked view, then returns fresh app state.
+  * `app_type_text { app, text, focus?: ClickTarget }` — focuses the optional
+    target first, then types. Honors IME / emoji / CJK via paste-style
+    injection where the host supports it.
+  * `app_scroll { app, focus?: ClickTarget, dx, dy }` — pixel deltas inside
+    the focused scroll container; use negative `dy` to scroll content up.
+  * `app_key_chord { app, keys:["command","shift","p"], focus_idx? }` — sends
+    a chord to the app *without* surfacing a global key event; modifier
+    names match the legacy `key_chord` (command/control/option|alt/shift).
+  * `app_wait_for { app, predicate, timeout_ms?, poll_ms? }` where
+    `predicate` is one of `{ kind:"digest_changed", prev_digest }`,
+    `{ kind:"title_contains", needle }`,
+    `{ kind:"role_enabled", role, title? }`, `{ kind:"node_enabled", idx }`.
+    This is the AX equivalent of the `wait` + re-screenshot loop and is
+    REQUIRED between actions when the next step depends on a state change.
+- Selector shape: `{ pid }` is most precise (always survives renames);
+  `{ bundle_id }` is next-best (survives localization); `{ name }` matches
+  on the localized window/app name. Combine fields and the host picks the
+  strongest match. Unresolved selector → `error.code = APP_NOT_FOUND`.
+- Stale node refs (e.g. you cached `idx=42` from a snapshot, then the app
+  re-rendered) → `error.code = AX_NODE_STALE`. Always re-call
+  `get_app_state` and re-resolve by role/title/identifier — never carry an
+  `idx` across user-visible mutations without `app_wait_for`.
+- If `supports_background_input` is `false` and the host still cannot
+  silently inject into the target, AX-first writes return
+  `error.code = BACKGROUND_INPUT_UNAVAILABLE` with a hint pointing at the
+  legacy foreground click; don't retry without a strategy change.
+- Envelope additions for AX-first results: each successful response embeds
+  `target_app`, `app_state` (text dump), `app_state_nodes` (structured),
+  `before_digest` (the digest seen *before* the action), `after_digest` (the
+  digest *after*), and `background_input: bool` so the agent can verify the
+  action landed without stealing focus.
+
+#### desktop (legacy screenshot + global pointer)
+- screenshot, click_target, move_to_target, click, click_element, mouse_move,
+  pointer_move_rel, scroll, drag, key_chord, type_text, paste, wait, locate,
+  move_to_text.
+- **`click_target` / `move_to_target`** — preferred mouse primitive for
+  common "click/move to this visible thing" requests. One call resolves the
+  target by AX (`node_idx`, text/role/title/identifier filters, or
+  `target_text`) first, OCR second (`target_text` / `text_query`), and
+  explicit global `x`/`y` last. This collapses the old locate → move →
+  guarded-click round-trip into a single authoritative action.
+- **`screenshot`** — exactly two possible outputs: the focused application
+  window (default, via Accessibility) OR the full display (fallback when
+  AX cannot resolve the window). No crop / quadrant / mouse-centered
+  options exist anymore. Old crop parameters (`screenshot_crop_center_x/y`,
+  `screenshot_navigate_quadrant`, `screenshot_reset_navigation`,
+  `screenshot_implicit_center`, `point_crop_half_extent_native`) are
+  silently ignored. The only param that still has meaning is
+  `screenshot_window: true` — and it just reaffirms the default; you
+  rarely need to pass it.
+- **`paste { text, clear_first?, submit?, submit_keys? }`** — STRONGLY PREFER
+  this over `type_text` for any non-trivial input (CJK, emoji, multi-line,
+  contact names, message bodies, anything > ~15 chars). Internally does
+  `clipboard_set` + cmd/ctrl+v, optionally cmd/ctrl+a first to replace
+  existing content, and optionally Return after to submit. Collapses the
+  canonical "type a name into search and press enter" / "send a message"
+  sequence into a single tool call AND avoids every IME failure mode that
+  `type_text` is subject to. Use `submit_keys: ["command","return"]` for
+  Slack-style apps where Return inserts a newline.
+- `type_text` is a fallback for short Latin-only text into a focused input
+  where you have no clipboard helper (Linux without wl-clipboard / xclip).
+  In every other case `paste` is faster and more reliable.
+- `key_chord` accepts EITHER `{"keys":["command","v"]}` (canonical) OR a
+  bare `{"keys":"escape"}` / `{"key":"return"}` for single keys; both
+  shapes are coerced. Modifier names: command, control, option/alt, shift.
+- Multi-display routing (FIRST step on multi-monitor setups):
+  * `list_displays` — returns every attached screen with `display_id`,
+    `is_primary`, `is_active`, `has_pointer`, origin/size, and `scale_factor`.
+    Always inspect this list before issuing screen-coordinate actions when
+    `interaction_state.displays` has more than one entry; do NOT assume the
+    cursor is on the screen the user is looking at.
+  * `focus_display` — `{ display_id }` pins ALL subsequent screenshots /
+    clicks / locates to that display until cleared. Pass `{ display_id: null }`
+    (or omit) to fall back to the legacy "screen under the mouse" behavior.
+    Pinning invalidates any cached screenshot, so the next `screenshot` is
+    guaranteed to come from the chosen display.
+- `interaction_state.displays` and `interaction_state.active_display_id`
+  are present in every desktop tool result and tell you which display the
+  next action will target. If that does not match the user's intent,
+  either call `desktop.focus_display` BEFORE the next `screenshot` / `click`,
+  OR pass `display_id: <id>` directly inside the next action's params —
+  every desktop action accepts it as a one-shot pin equivalent (sticky:
+  the pin persists for follow-up actions until you set `display_id: null`).
+- Single-display setup (most users): you do NOT need `list_displays` /
+  `focus_display`. Just call `screenshot` / `click_element` / etc.
+  directly — `interaction_state.displays.length === 1` is your signal.
+"#
+        } else {
+            r#"### domain: "desktop"
+- Not available in this session because Computer Use is disabled.
+- Do not attempt mouse, keyboard, OCR, display, or external desktop app control actions.
+- To enable these actions, turn on the `computer use` setting in session configuration and use the BitFun desktop app.
+"#
+        };
+
+        format!(
+            r#"ControlHub — the SOLE control entry point for everything the agent can drive.
+
+You will not find a separate `ComputerUse` tool: every desktop, browser,
+terminal-signalling and system action is reachable through this one tool
+via `{{ domain, action, params }}`.
+
+## Decision tree — which domain do I use?
+
+1. The user wants to drive a website / web app in their *real* browser
+   (preserving cookies, login, extensions)?
+   → **domain: "browser"** (drives the user's default Chromium-family browser via CDP)
+
+2. The user wants to operate another desktop application
+   (third-party app windows, OS dialogs, system-wide keyboard / mouse, accessibility)?
+   → **domain: "desktop"** (Computer Use: screenshot, click, key_chord, locate, ...)
+
+3. The user wants to launch an app, run a shell / AppleScript, or query OS info?
+   → **domain: "system"**
+
+4. The user wants to signal an existing terminal session
+   (kill, send SIGINT) — *not* run new commands; for that use the `Bash` tool?
+   → **domain: "terminal"**
+
+If you are unsure between two domains: prefer the smallest blast radius
+(`browser` < `desktop` < `system`).
+
+## Unified response envelope
+
+Every call returns a JSON object with a stable shape:
+
+  // success
+  {{ "ok": true,  "domain": "...", "action": "...", "data": {{ ... }} }}
+  // failure (still delivered as a normal tool result, NOT an exception)
+  {{ "ok": false, "domain": "...", "action": "...",
+    "error": {{ "code": "STALE_REF" | "NOT_FOUND" | "AMBIGUOUS" | "GUARD_REJECTED"
+                       | "WRONG_DISPLAY" | "WRONG_TAB" | "INVALID_PARAMS"
+                       | "PERMISSION_DENIED" | "TIMEOUT" | "NOT_AVAILABLE"
+                       | "MISSING_SESSION" | "FRONTEND_ERROR" | "INTERNAL"
+                       | "APP_NOT_FOUND" | "AX_NODE_STALE" | "AX_IDX_STALE"
+                       | "AX_IDX_NOT_SUPPORTED" | "DESKTOP_COORD_OUT_OF_DISPLAY"
+                       | "BACKGROUND_INPUT_UNAVAILABLE",
+               "message": "...", "hints": [ "...next step..." ] }} }}
+
+Branch on `ok` and on `error.code` deterministically. Never scrape the English `message`
+for control flow.
+
+## Domains and actions
+
+### domain: "browser"  (DOM/CDP-only browser control; never use desktop mouse/keyboard for browser interaction)
+- Two browser modes:
+  * `connect {{ mode: "headless" }}` — attach to a headless test browser on the test port for project Web UI testing that does **not** depend on user login state.
+  * `connect {{ mode: "default" }}` (default) — attach to the user's default browser via CDP for flows that require login state, cookies, extensions, or the user's real profile.
+- In **all** browser cases, control the page through DOM/CDP actions only. Do **not** use `domain: "desktop"` mouse/keyboard actions to drive a browser.
+- connect, navigate, snapshot, click, fill, type, select, press_key, scroll, wait,
+  get_text, get_url, get_title, screenshot, evaluate, close, list_pages, tab_query,
+  switch_page, list_sessions.
+- Fast path (target a known tab in ONE call):
+  * `connect {{ target_url? , target_title? , activate? }}` finds the first
+    open tab whose URL / title contains the substring, registers it as the
+    default session AND brings it to the front. Use this instead of
+    `connect` → `list_pages` → `switch_page` for the common
+    "drive my Gmail / GitHub PR / docs tab" flow. If the filter matches no
+    tab you get `error.code = WRONG_TAB` (no silent fallback).
+- Tab routing:
+  * `list_pages` returns every page/tab the browser exposes; each entry
+    carries `is_default_session` so you can tell which one ControlHub will
+    drive next without an extra `list_sessions` round-trip.
+  * `tab_query` (`{{ url_contains?, title_contains?, only_pages?, limit? }}`)
+    is the preferred filter when you need to inspect candidates before
+    committing to one.
+  * `switch_page` (`{{ page_id, activate? }}`) sets the default CDP session
+    AND, by default, calls `Page.bringToFront` so the user actually sees
+    the tab being driven. Pass `activate: false` to keep the operation
+    invisible (e.g. background scraping).
+- Workflow: connect → navigate → snapshot (returns @e1, @e2 ... refs) → click/fill using refs.
+- `snapshot` now traverses **open shadow roots** and **same-origin iframes**;
+  each element entry includes `scope` (`document`/`shadow`/`iframe`) and
+  `frame_path` so you can tell where in the DOM tree it lives. Pass
+  `with_backend_node_ids: true` to also receive a stable
+  `backend_node_id` per element (CDP DOM id, survives re-renders).
+- Take a fresh snapshot after any DOM mutation; stale refs return `error.code = STALE_REF`.
+
+{desktop_domain_doc}
+### domain: "terminal"
+- list_sessions, kill (`terminal_session_id`), interrupt (`terminal_session_id`).
+  Use the `Bash` tool to *run* commands; this domain only signals existing sessions.
+- Fast path: if there is exactly ONE live terminal session, you may omit
+  `terminal_session_id` and ControlHub will target it automatically. With
+  zero live sessions you get `error.code = MISSING_SESSION`; with multiple
+  you get `AMBIGUOUS` plus the candidate ids in `error.hints`. Otherwise
+  call `list_sessions` first.
+
+### domain: "system"
+- open_app (`app_name`), open_url (`url`), open_file (`path`, `app?`),
+  clipboard_get (`max_bytes?`), clipboard_set (`text`),
+  run_script (`script`, `script_type` = applescript|shell, optional
+  `timeout_ms` ≤ 5 min, `max_output_bytes` ≤ 256 KB), get_os_info.
+- `open_url` is the right tool when the goal is "show this URL to the user"
+  (no CDP, no driving). Use `domain: "browser"` only when you actually need
+  to interact with the page.
+- `open_file` opens a local file with its default handler (or an explicit
+  `app` on macOS) — high-frequency for "open this PDF / picture / spreadsheet".
+- `clipboard_get` / `clipboard_set` are the universal cross-app bridge:
+  the cheapest way to move text between apps that you'd otherwise have to
+  drive separately. `clipboard_get` returns `{{ text, byte_length, truncated }}`;
+  `clipboard_set {{ text }}` is the inverse. On Linux this requires
+  wl-clipboard / xclip / xsel; missing-helper failures return `NOT_AVAILABLE`.
+- `run_script` enforces the timeout and truncates large stdout/stderr; on
+  timeout it returns `error.code = TIMEOUT` and the child process is killed.
+  `get_os_info` includes `os`, `arch`, `os_version`, `hostname`.
+
+### domain: "meta"  (introspection — call this BEFORE long control flows)
+- `capabilities` — returns `{{ domains: {{ desktop, browser, terminal, system, meta }},
+  host: {{ os, arch }}, schema_version }}`. Use it to confirm which domains are
+  actually wired up on this runtime instead of guessing from the description.
+- `route_hint` (`{{ intent }}`) — heuristic mapping of a free-form user intent
+  ("把 BitFun 默认模型改成 Kimi") to a ranked list of candidate domains so the
+  model has a sanity check before it commits to one. Always confirm with
+  `meta.capabilities` and the domain docs; this is only a hint.
+
+## Workflow tips
+1. For cross-domain workflows (browser data → desktop paste, system launch → browser attach),
+   call actions sequentially and verify each step's `ok` field before chaining.
+2. After any UI mutation, re-acquire state (browser: snapshot, desktop: screenshot)
+   before the next action.
+3. When the model is the only one driving inputs, `wait` 200–500 ms after a click that
+   triggers an animation before re-observing."#,
+            desktop_domain_doc = desktop_domain_doc,
+        )
+    }
+
     async fn dispatch(
         &self,
         domain: &str,
@@ -60,14 +528,28 @@ impl ControlHubTool {
         context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>> {
         match domain {
-            "desktop" => self.handle_desktop(action, params, context).await,
+            "desktop" => {
+                if !Self::desktop_domain_enabled().await {
+                    return Ok(err_response(
+                        "desktop",
+                        action,
+                        ControlHubError::new(
+                            ErrorCode::NotAvailable,
+                            "Computer Use is disabled for this session.",
+                        )
+                        .with_hint(
+                            "Enable computer use in session settings to expose desktop control actions.",
+                        ),
+                    ));
+                }
+                self.handle_desktop(action, params, context).await
+            }
             "browser" => self.handle_browser(action, params).await,
-            "app" => self.handle_app(action, params, context).await,
             "terminal" => self.handle_terminal(action, params, context).await,
             "system" => self.handle_system(action, params, context).await,
             "meta" => self.handle_meta(action, params, context).await,
             other => Err(BitFunError::tool(format!(
-                "Unknown domain: '{}'. Valid domains: desktop, browser, app, terminal, system, meta",
+                "Unknown domain: '{}'. Valid domains: desktop, browser, terminal, system, meta",
                 other
             ))),
         }
@@ -79,8 +561,7 @@ impl ControlHubTool {
     // tells the agent (a) which domains are actually wired up on this host
     // and (b) which domain it should pick for a given free-form intent.
     // Without this, the model has to guess from the description and may
-    // attempt e.g. `domain:"app"` on a host where the SelfControl bridge
-    // is not registered, and only learn the truth from a runtime error.
+    // pick an unavailable domain, only learning the truth from a runtime error.
 
     async fn handle_meta(
         &self,
@@ -90,15 +571,13 @@ impl ControlHubTool {
     ) -> BitFunResult<Vec<ToolResult>> {
         match action {
             "capabilities" => {
-                let desktop_available = context.computer_use_host.is_some();
-                // `app` (SelfControl bridge) and `terminal` (TerminalApi) are
-                // both delivered through global registries rather than fields
-                // on the context, so we can't be 100% sure here without
-                // round-tripping. We report "likely available iff desktop is
-                // available" because both bridges only exist in BitFun's
-                // desktop runtime; the actual call will surface a clean
-                // FRONTEND_ERROR / NOT_AVAILABLE if the bridge is offline.
-                let likely_app_available = desktop_available;
+                let desktop_available = Self::desktop_domain_enabled().await;
+                // `terminal` (TerminalApi) is delivered through a global
+                // registry rather than a field on the context, so we can't be
+                // 100% sure here without round-tripping. We report "likely
+                // available iff desktop is available" because that bridge only
+                // exists in BitFun's desktop runtime; the actual call will
+                // surface a clean error if the bridge is offline.
                 let likely_terminal_available = desktop_available;
                 let browser_default = browser_sessions().default_id().await;
                 let browser_session_count = browser_sessions().list().await.len();
@@ -141,12 +620,35 @@ impl ControlHubTool {
                 #[cfg(target_os = "linux")]
                 let (display_server, desktop_env) = linux_session_info();
                 #[cfg(not(target_os = "linux"))]
-                let (display_server, desktop_env): (Option<String>, Option<String>) =
-                    (None, None);
+                let (display_server, desktop_env): (
+                    Option<String>,
+                    Option<String>,
+                ) = (None, None);
+
+                let desktop_host = context.computer_use_host.as_ref();
+                let desktop_ax_tree = desktop_host
+                    .map(|host| host.supports_ax_tree())
+                    .unwrap_or(false);
+                let desktop_background_input = desktop_host
+                    .map(|host| host.supports_background_input())
+                    .unwrap_or(false);
+                let desktop_interactive_view = desktop_host
+                    .map(|host| host.supports_interactive_view())
+                    .unwrap_or(false);
+                let desktop_visual_mark_view = desktop_host
+                    .map(|host| host.supports_visual_mark_view())
+                    .unwrap_or(false);
 
                 let body = json!({
                     "domains": {
-                        "desktop":  { "available": desktop_available, "reason": if desktop_available { Value::Null } else { json!("Only available in the BitFun desktop app") } },
+                        "desktop":  {
+                            "available": desktop_available,
+                            "reason": if desktop_available { Value::Null } else { json!("Only available in the BitFun desktop app") },
+                            "supports_ax_tree": desktop_ax_tree,
+                            "supports_background_input": desktop_background_input,
+                            "supports_interactive_view": desktop_interactive_view,
+                            "supports_visual_mark_view": desktop_visual_mark_view,
+                        },
                         "browser":  {
                             "available": true,
                             "default_session_id": browser_default,
@@ -154,7 +656,6 @@ impl ControlHubTool {
                             "default_browser": browser_kind,
                             "cdp_supported": browser_cdp_supported,
                         },
-                        "app":      { "available": likely_app_available, "reason": if likely_app_available { Value::Null } else { json!("BitFun front-end (SelfControl bridge) is only wired up in the desktop app") } },
                         "terminal": { "available": likely_terminal_available, "reason": if likely_terminal_available { Value::Null } else { json!("TerminalApi is only available in contexts that registered it") } },
                         "system":   {
                             "available": true,
@@ -195,33 +696,68 @@ impl ControlHubTool {
                     s.push((domain, score, why));
                 };
 
-                let app_kw = ["bitfun", "settings", "scene", "default model", "primary model", "fast model", "切换模型", "默认模型", "设置", "场景"];
-                let browser_kw = ["http", "https", "url", "browser", "google", "tab", "网页", "浏览器", "网站"];
-                let desktop_kw = ["screenshot", "click on", "window", "dialog", "finder", "vscode", "桌面", "应用窗口", "外部应用"];
+                let browser_kw = [
+                    "http",
+                    "https",
+                    "url",
+                    "browser",
+                    "google",
+                    "tab",
+                    "网页",
+                    "浏览器",
+                    "网站",
+                ];
+                let desktop_kw = [
+                    "screenshot",
+                    "click on",
+                    "window",
+                    "dialog",
+                    "finder",
+                    "vscode",
+                    "桌面",
+                    "应用窗口",
+                    "外部应用",
+                ];
                 let terminal_kw = ["kill terminal", "interrupt", "ctrl+c", "stop process"];
-                let system_kw = ["open ", "applescript", "shell script", "运行脚本", "启动应用", "open app"];
+                let system_kw = [
+                    "open ",
+                    "applescript",
+                    "shell script",
+                    "运行脚本",
+                    "启动应用",
+                    "open app",
+                ];
 
-                for kw in app_kw {
-                    if lower.contains(kw) {
-                        push(&mut suggestions, "app", 90, "Matches BitFun-internal UI keywords");
-                        break;
-                    }
-                }
                 for kw in browser_kw {
                     if lower.contains(kw) {
-                        push(&mut suggestions, "browser", 85, "Matches browser/URL keywords");
+                        push(
+                            &mut suggestions,
+                            "browser",
+                            85,
+                            "Matches browser/URL keywords",
+                        );
                         break;
                     }
                 }
                 for kw in desktop_kw {
                     if lower.contains(kw) {
-                        push(&mut suggestions, "desktop", 75, "Matches third-party desktop window keywords");
+                        push(
+                            &mut suggestions,
+                            "desktop",
+                            75,
+                            "Matches third-party desktop window keywords",
+                        );
                         break;
                     }
                 }
                 for kw in terminal_kw {
                     if lower.contains(kw) {
-                        push(&mut suggestions, "terminal", 80, "Matches terminal-signal keywords");
+                        push(
+                            &mut suggestions,
+                            "terminal",
+                            80,
+                            "Matches terminal-signal keywords",
+                        );
                         break;
                     }
                 }
@@ -377,9 +913,13 @@ impl ControlHubTool {
 
                 let summary = match (clear_first, submit) {
                     (false, false) => format!("Pasted {} chars", text.chars().count()),
-                    (true, false) => format!("Replaced focused field with {} chars", text.chars().count()),
+                    (true, false) => {
+                        format!("Replaced focused field with {} chars", text.chars().count())
+                    }
                     (false, true) => format!("Pasted {} chars and submitted", text.chars().count()),
-                    (true, true) => format!("Replaced + submitted ({} chars)", text.chars().count()),
+                    (true, true) => {
+                        format!("Replaced + submitted ({} chars)", text.chars().count())
+                    }
                 };
                 return Ok(vec![ToolResult::ok(
                     json!({
@@ -395,6 +935,24 @@ impl ControlHubTool {
                 )]);
             }
 
+            // ── AX-first actions (Codex parity) ───────────────────────
+            // These bypass the legacy ComputerUseTool because they
+            // operate on the new typed AppSelector / AxNode envelope.
+            "list_apps"
+            | "get_app_state"
+            | "app_click"
+            | "app_type_text"
+            | "app_scroll"
+            | "app_key_chord"
+            | "app_wait_for"
+            | "build_interactive_view"
+            | "interactive_click"
+            | "interactive_type_text"
+            | "interactive_scroll"
+            | "build_visual_mark_view"
+            | "visual_click" => {
+                return self.handle_desktop_ax(host, action, params).await;
+            }
             "focus_display" => {
                 // Accept `null` (or omitted `display_id`) to clear the pin
                 // and fall back to "screen under the pointer". An explicit
@@ -423,6 +981,10 @@ impl ControlHubTool {
                 )]);
             }
             _ => {}
+        }
+
+        if let Some(err) = self.desktop_action_targets_browser(action, context).await {
+            return Ok(err_response("desktop", action, err));
         }
 
         // UX shortcut: every screen-coordinate action accepts an optional
@@ -457,6 +1019,896 @@ impl ControlHubTool {
         cu_tool.call_impl(&cu_input, context).await
     }
 
+    // ── Desktop AX-first dispatch (Codex parity) ──────────────────────
+    // Routes the seven new app-targeted actions through the typed
+    // `ComputerUseHost` API. Every successful response carries a
+    // unified envelope: `target_app`, `background_input`,
+    // `before_digest` and (for state queries) `app_state` /
+    // `app_state_nodes` so the model can reason about the AX tree
+    // before/after each action without re-querying.
+    async fn handle_desktop_ax(
+        &self,
+        host: &ComputerUseHostRef,
+        action: &str,
+        params: &Value,
+    ) -> BitFunResult<Vec<ToolResult>> {
+        // ── Helpers ─────────────────────────────────────────────────
+        fn parse_selector(v: &Value) -> BitFunResult<AppSelector> {
+            let obj = v.get("app").ok_or_else(|| {
+                BitFunError::tool(
+                    "[INVALID_PARAMS] missing 'app' selector (pid|bundle_id|name)".to_string(),
+                )
+            })?;
+            let sel: AppSelector = serde_json::from_value(obj.clone()).map_err(|e| {
+                BitFunError::tool(format!(
+                    "[INVALID_PARAMS] bad 'app' selector: {} (expect {{pid|bundle_id|name}})",
+                    e
+                ))
+            })?;
+            if sel.pid.is_none() && sel.bundle_id.is_none() && sel.name.is_none() {
+                return Err(BitFunError::tool(
+                    "[INVALID_PARAMS] 'app' must include at least one of pid|bundle_id|name"
+                        .to_string(),
+                ));
+            }
+            Ok(sel)
+        }
+
+        fn parse_click_target(v: &Value) -> BitFunResult<ClickTarget> {
+            if v.get("kind").is_some() {
+                return serde_json::from_value(v.clone()).map_err(|e| {
+                    BitFunError::tool(format!(
+                        "[INVALID_PARAMS] bad ClickTarget: {} (expected {{\"kind\":\"node_idx\",\"idx\":N}}, {{\"kind\":\"image_xy\",\"x\":0,\"y\":0}}, {{\"kind\":\"image_grid\",\"x0\":0,\"y0\":0,\"width\":300,\"height\":300,\"rows\":15,\"cols\":15,\"row\":7,\"col\":7,\"intersections\":true}}, {{\"kind\":\"visual_grid\",\"rows\":15,\"cols\":15,\"row\":7,\"col\":7,\"intersections\":true}}, {{\"kind\":\"screen_xy\",\"x\":0,\"y\":0}}, or {{\"kind\":\"ocr_text\",\"needle\":\"...\"}})",
+                        e
+                    ))
+                });
+            }
+            if let Some(idx) = v.get("node_idx").and_then(|x| x.as_u64()) {
+                return Ok(ClickTarget::NodeIdx { idx: idx as u32 });
+            }
+            if let Some(obj) = v.get("screen_xy") {
+                let x = obj.get("x").and_then(|x| x.as_f64()).ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] screen_xy target requires numeric x".to_string(),
+                    )
+                })?;
+                let y = obj.get("y").and_then(|y| y.as_f64()).ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] screen_xy target requires numeric y".to_string(),
+                    )
+                })?;
+                return Ok(ClickTarget::ScreenXy { x, y });
+            }
+            if let Some(obj) = v.get("image_xy") {
+                let x = obj.get("x").and_then(|x| x.as_i64()).ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] image_xy target requires integer x".to_string(),
+                    )
+                })?;
+                let y = obj.get("y").and_then(|y| y.as_i64()).ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] image_xy target requires integer y".to_string(),
+                    )
+                })?;
+                return Ok(ClickTarget::ImageXy {
+                    x: x as i32,
+                    y: y as i32,
+                    screenshot_id: obj
+                        .get("screenshot_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                });
+            }
+            if let Some(obj) = v.get("image_grid") {
+                let target = json!({
+                    "kind": "image_grid",
+                    "x0": obj.get("x0").cloned().unwrap_or(Value::Null),
+                    "y0": obj.get("y0").cloned().unwrap_or(Value::Null),
+                    "width": obj.get("width").cloned().unwrap_or(Value::Null),
+                    "height": obj.get("height").cloned().unwrap_or(Value::Null),
+                    "rows": obj.get("rows").cloned().unwrap_or(Value::Null),
+                    "cols": obj.get("cols").cloned().unwrap_or(Value::Null),
+                    "row": obj.get("row").cloned().unwrap_or(Value::Null),
+                    "col": obj.get("col").cloned().unwrap_or(Value::Null),
+                    "intersections": obj.get("intersections").cloned().unwrap_or(json!(false)),
+                    "screenshot_id": obj.get("screenshot_id").cloned().unwrap_or(Value::Null),
+                });
+                return serde_json::from_value(target).map_err(|e| {
+                    BitFunError::tool(format!(
+                        "[INVALID_PARAMS] bad image_grid target: {} (need x0,y0,width,height,rows,cols,row,col; optional intersections)",
+                        e
+                    ))
+                });
+            }
+            if let Some(obj) = v.get("visual_grid") {
+                let target = json!({
+                    "kind": "visual_grid",
+                    "rows": obj.get("rows").cloned().unwrap_or(Value::Null),
+                    "cols": obj.get("cols").cloned().unwrap_or(Value::Null),
+                    "row": obj.get("row").cloned().unwrap_or(Value::Null),
+                    "col": obj.get("col").cloned().unwrap_or(Value::Null),
+                    "intersections": obj.get("intersections").cloned().unwrap_or(json!(false)),
+                    "wait_ms_after_detection": obj.get("wait_ms_after_detection").cloned().unwrap_or(Value::Null),
+                });
+                return serde_json::from_value(target).map_err(|e| {
+                    BitFunError::tool(format!(
+                        "[INVALID_PARAMS] bad visual_grid target: {} (need rows,cols,row,col; optional intersections)",
+                        e
+                    ))
+                });
+            }
+            if v.get("x").is_some() || v.get("y").is_some() {
+                let x = v.get("x").and_then(|x| x.as_f64()).ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] screen target requires numeric x".to_string(),
+                    )
+                })?;
+                let y = v.get("y").and_then(|y| y.as_f64()).ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] screen target requires numeric y".to_string(),
+                    )
+                })?;
+                return Ok(ClickTarget::ScreenXy { x, y });
+            }
+            if let Some(ocr) = v.get("ocr_text") {
+                let needle = ocr
+                    .get("needle")
+                    .or_else(|| ocr.get("text"))
+                    .and_then(|x| x.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool(
+                            "[INVALID_PARAMS] ocr_text target requires needle".to_string(),
+                        )
+                    })?;
+                return Ok(ClickTarget::OcrText {
+                    needle: needle.to_string(),
+                });
+            }
+            Err(BitFunError::tool(
+                "[INVALID_PARAMS] unsupported ClickTarget. Use {\"kind\":\"node_idx\",\"idx\":N}, {\"node_idx\":N}, {\"kind\":\"image_xy\",\"x\":0,\"y\":0}, {\"image_xy\":{\"x\":0,\"y\":0}}, {\"kind\":\"image_grid\",\"x0\":0,\"y0\":0,\"width\":300,\"height\":300,\"rows\":15,\"cols\":15,\"row\":7,\"col\":7,\"intersections\":true}, {\"kind\":\"visual_grid\",\"rows\":15,\"cols\":15,\"row\":7,\"col\":7,\"intersections\":true}, {\"kind\":\"screen_xy\",\"x\":0,\"y\":0}, or {\"ocr_text\":{\"needle\":\"...\"}}.".to_string(),
+            ))
+        }
+
+        fn parse_wait_predicate(v: &Value) -> BitFunResult<AppWaitPredicate> {
+            if v.get("kind").is_some() {
+                return serde_json::from_value(v.clone()).map_err(|e| {
+                    BitFunError::tool(format!(
+                        "[INVALID_PARAMS] bad app_wait_for predicate: {}",
+                        e
+                    ))
+                });
+            }
+            if let Some(obj) = v.get("digest_changed") {
+                let prev_digest = obj
+                    .get("prev_digest")
+                    .or_else(|| obj.get("from"))
+                    .and_then(|x| x.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool(
+                            "[INVALID_PARAMS] digest_changed requires prev_digest".to_string(),
+                        )
+                    })?;
+                return Ok(AppWaitPredicate::DigestChanged {
+                    prev_digest: prev_digest.to_string(),
+                });
+            }
+            if let Some(obj) = v.get("title_contains") {
+                let needle = obj
+                    .get("needle")
+                    .or_else(|| obj.get("title"))
+                    .and_then(|x| x.as_str())
+                    .or_else(|| obj.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool(
+                            "[INVALID_PARAMS] title_contains requires needle".to_string(),
+                        )
+                    })?;
+                return Ok(AppWaitPredicate::TitleContains {
+                    needle: needle.to_string(),
+                });
+            }
+            if let Some(obj) = v.get("role_enabled") {
+                let role = obj.get("role").and_then(|x| x.as_str()).ok_or_else(|| {
+                    BitFunError::tool("[INVALID_PARAMS] role_enabled requires role".to_string())
+                })?;
+                return Ok(AppWaitPredicate::RoleEnabled {
+                    role: role.to_string(),
+                });
+            }
+            if let Some(obj) = v.get("node_enabled") {
+                let idx = obj
+                    .get("idx")
+                    .and_then(|x| x.as_u64())
+                    .or_else(|| obj.as_u64())
+                    .ok_or_else(|| {
+                        BitFunError::tool("[INVALID_PARAMS] node_enabled requires idx".to_string())
+                    })?;
+                return Ok(AppWaitPredicate::NodeEnabled { idx: idx as u32 });
+            }
+            Err(BitFunError::tool(
+                "[INVALID_PARAMS] unsupported app_wait_for predicate. Use {\"kind\":\"digest_changed\",\"prev_digest\":\"...\"} or shorthand {\"digest_changed\":{\"prev_digest\":\"...\"}}.".to_string(),
+            ))
+        }
+
+        fn parse_keys(v: &Value) -> Vec<String> {
+            match v.get("keys").or_else(|| v.get("key")) {
+                Some(Value::Array(arr)) => arr
+                    .iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect(),
+                Some(Value::String(s)) => vec![s.to_string()],
+                _ => Vec::new(),
+            }
+        }
+
+        // Build the JSON view of an AppStateSnapshot for the model. Excludes
+        // the heavy `screenshot` payload (it is attached out-of-band as a
+        // multimodal image, not as base64 inside the JSON tree, to keep token
+        // budgets under control and let the provider deliver it as `image_url`).
+        fn snap_state_json(
+            snap: &crate::agentic::tools::computer_use_host::AppStateSnapshot,
+        ) -> serde_json::Value {
+            let mut v = json!({
+                "app": snap.app,
+                "window_title": snap.window_title,
+                "digest": snap.digest,
+                "captured_at_ms": snap.captured_at_ms,
+                "tree_text": snap.tree_text,
+                "has_screenshot": snap.screenshot.is_some(),
+            });
+            if let Some(shot) = snap.screenshot.as_ref() {
+                if let Some(obj) = v.as_object_mut() {
+                    let meta: serde_json::Value = json!({
+                        "image_width": shot.image_width,
+                        "image_height": shot.image_height,
+                        "screenshot_id": shot.screenshot_id,
+                        "native_width": shot.native_width,
+                        "native_height": shot.native_height,
+                        "vision_scale": shot.vision_scale,
+                        "mime_type": shot.mime_type,
+                        "image_content_rect": shot.image_content_rect,
+                        "image_global_bounds": shot.image_global_bounds,
+                            "coordinate_hint": "For visual surfaces, click pixels in this attached image with app_click target {kind:\"image_xy\", x, y, screenshot_id}. For known boards/grids/canvases, prefer {kind:\"image_grid\", x0, y0, width, height, rows, cols, row, col, intersections, screenshot_id}. If the grid rectangle is unknown, use {kind:\"visual_grid\", rows, cols, row, col, intersections}; the host detects the grid from app pixels.",
+                        });
+                    obj.insert("screenshot_meta".to_string(), meta);
+                }
+            }
+            v
+        }
+
+        // Helper: build a `ToolResult` that *also* carries the focused-window
+        // screenshot as an Anthropic-style multimodal image attachment. When
+        // the host couldn't (or chose not to) capture, fall back to a regular
+        // text-only `ToolResult::ok`.
+        fn snap_result(
+            data: serde_json::Value,
+            summary: Option<String>,
+            snap: &crate::agentic::tools::computer_use_host::AppStateSnapshot,
+        ) -> ToolResult {
+            use base64::Engine as _;
+            if let Some(shot) = snap.screenshot.as_ref() {
+                let attach = crate::util::types::ToolImageAttachment {
+                    mime_type: shot.mime_type.clone(),
+                    data_base64: base64::engine::general_purpose::STANDARD.encode(&shot.bytes),
+                };
+                ToolResult::ok_with_images(data, summary, vec![attach])
+            } else {
+                ToolResult::ok(data, summary)
+            }
+        }
+
+        // Build a JSON view of an InteractiveView that excludes the heavy
+        // `screenshot.bytes` payload (the JPEG is attached out-of-band as a
+        // multimodal image attachment, not as base64 inside the tree).
+        fn build_interactive_view_json(
+            view: &crate::agentic::tools::computer_use_host::InteractiveView,
+        ) -> serde_json::Value {
+            let mut v = json!({
+                "app": view.app,
+                "window_title": view.window_title,
+                "digest": view.digest,
+                "captured_at_ms": view.captured_at_ms,
+                "elements": view.elements,
+                "tree_text": view.tree_text,
+                "loop_warning": view.loop_warning,
+                "has_screenshot": view.screenshot.is_some(),
+            });
+            if let Some(shot) = view.screenshot.as_ref() {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.insert(
+                        "screenshot_meta".to_string(),
+                        json!({
+                            "image_width": shot.image_width,
+                            "image_height": shot.image_height,
+                            "screenshot_id": shot.screenshot_id,
+                            "native_width": shot.native_width,
+                            "native_height": shot.native_height,
+                            "vision_scale": shot.vision_scale,
+                            "mime_type": shot.mime_type,
+                            "image_content_rect": shot.image_content_rect,
+                            "image_global_bounds": shot.image_global_bounds,
+                            "coordinate_hint": "Numbered overlays are in JPEG image-pixel space. Reference elements via their `i` index using interactive_click / interactive_type_text / interactive_scroll. For pointer-only fallback, pass screenshot_id with image_xy/image_grid.",
+                        }),
+                    );
+                }
+            }
+            v
+        }
+
+        fn build_visual_mark_view_json(
+            view: &crate::agentic::tools::computer_use_host::VisualMarkView,
+        ) -> serde_json::Value {
+            let mut v = json!({
+                "app": view.app,
+                "window_title": view.window_title,
+                "digest": view.digest,
+                "captured_at_ms": view.captured_at_ms,
+                "marks": view.marks,
+                "has_screenshot": view.screenshot.is_some(),
+            });
+            if let Some(shot) = view.screenshot.as_ref() {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.insert(
+                        "screenshot_meta".to_string(),
+                        json!({
+                            "image_width": shot.image_width,
+                            "image_height": shot.image_height,
+                            "screenshot_id": shot.screenshot_id,
+                            "native_width": shot.native_width,
+                            "native_height": shot.native_height,
+                            "vision_scale": shot.vision_scale,
+                            "mime_type": shot.mime_type,
+                            "image_content_rect": shot.image_content_rect,
+                            "image_global_bounds": shot.image_global_bounds,
+                            "coordinate_hint": "Numbered visual marks are in JPEG image-pixel space. Reference marks via their `i` index using visual_click. To refine a dense area, call build_visual_mark_view again with opts.region in these screenshot pixels.",
+                        }),
+                    );
+                }
+            }
+            v
+        }
+
+        // Build a JSON envelope for interactive_* action results. Includes
+        // the post-action AppStateSnapshot (without screenshot bytes) and,
+        // when present, the rebuilt InteractiveView.
+        fn build_interactive_action_json(
+            app: &crate::agentic::tools::computer_use_host::AppSelector,
+            res: &crate::agentic::tools::computer_use_host::InteractiveActionResult,
+            extras: serde_json::Value,
+        ) -> serde_json::Value {
+            let mut v = json!({
+                "target_app": app,
+                "app_state": snap_state_json(&res.snapshot),
+                "app_state_nodes": res.snapshot.nodes,
+                "loop_warning": res.snapshot.loop_warning,
+                "execution_note": res.execution_note,
+                "interactive_view": res.view.as_ref().map(build_interactive_view_json),
+            });
+            if let (Some(obj), Some(extras_obj)) = (v.as_object_mut(), extras.as_object()) {
+                for (k, val) in extras_obj {
+                    obj.insert(k.clone(), val.clone());
+                }
+            }
+            v
+        }
+
+        fn build_visual_action_json(
+            app: &crate::agentic::tools::computer_use_host::AppSelector,
+            res: &crate::agentic::tools::computer_use_host::VisualActionResult,
+            extras: serde_json::Value,
+        ) -> serde_json::Value {
+            let mut v = json!({
+                "target_app": app,
+                "app_state": snap_state_json(&res.snapshot),
+                "app_state_nodes": res.snapshot.nodes,
+                "loop_warning": res.snapshot.loop_warning,
+                "execution_note": res.execution_note,
+                "visual_mark_view": res.view.as_ref().map(build_visual_mark_view_json),
+            });
+            if let (Some(obj), Some(extras_obj)) = (v.as_object_mut(), extras.as_object()) {
+                for (k, val) in extras_obj {
+                    obj.insert(k.clone(), val.clone());
+                }
+            }
+            v
+        }
+
+        // Attach the InteractiveView's annotated screenshot (if present)
+        // as a multimodal image; otherwise fall back to text-only ok.
+        fn interactive_view_result(
+            data: serde_json::Value,
+            summary: Option<String>,
+            view: &crate::agentic::tools::computer_use_host::InteractiveView,
+        ) -> ToolResult {
+            use base64::Engine as _;
+            if let Some(shot) = view.screenshot.as_ref() {
+                let attach = crate::util::types::ToolImageAttachment {
+                    mime_type: shot.mime_type.clone(),
+                    data_base64: base64::engine::general_purpose::STANDARD.encode(&shot.bytes),
+                };
+                ToolResult::ok_with_images(data, summary, vec![attach])
+            } else {
+                ToolResult::ok(data, summary)
+            }
+        }
+
+        fn visual_mark_view_result(
+            data: serde_json::Value,
+            summary: Option<String>,
+            view: &crate::agentic::tools::computer_use_host::VisualMarkView,
+        ) -> ToolResult {
+            use base64::Engine as _;
+            if let Some(shot) = view.screenshot.as_ref() {
+                let attach = crate::util::types::ToolImageAttachment {
+                    mime_type: shot.mime_type.clone(),
+                    data_base64: base64::engine::general_purpose::STANDARD.encode(&shot.bytes),
+                };
+                ToolResult::ok_with_images(data, summary, vec![attach])
+            } else {
+                ToolResult::ok(data, summary)
+            }
+        }
+
+        // Prefer attaching the rebuilt interactive view's screenshot when
+        // available; otherwise fall back to the post-action snapshot's.
+        fn interactive_action_result(
+            data: serde_json::Value,
+            summary: Option<String>,
+            res: &crate::agentic::tools::computer_use_host::InteractiveActionResult,
+        ) -> ToolResult {
+            use base64::Engine as _;
+            let shot_opt = res
+                .view
+                .as_ref()
+                .and_then(|v| v.screenshot.as_ref())
+                .or(res.snapshot.screenshot.as_ref());
+            if let Some(shot) = shot_opt {
+                let attach = crate::util::types::ToolImageAttachment {
+                    mime_type: shot.mime_type.clone(),
+                    data_base64: base64::engine::general_purpose::STANDARD.encode(&shot.bytes),
+                };
+                ToolResult::ok_with_images(data, summary, vec![attach])
+            } else {
+                ToolResult::ok(data, summary)
+            }
+        }
+
+        fn visual_action_result(
+            data: serde_json::Value,
+            summary: Option<String>,
+            res: &crate::agentic::tools::computer_use_host::VisualActionResult,
+        ) -> ToolResult {
+            use base64::Engine as _;
+            let shot_opt = res
+                .view
+                .as_ref()
+                .and_then(|v| v.screenshot.as_ref())
+                .or(res.snapshot.screenshot.as_ref());
+            if let Some(shot) = shot_opt {
+                let attach = crate::util::types::ToolImageAttachment {
+                    mime_type: shot.mime_type.clone(),
+                    data_base64: base64::engine::general_purpose::STANDARD.encode(&shot.bytes),
+                };
+                ToolResult::ok_with_images(data, summary, vec![attach])
+            } else {
+                ToolResult::ok(data, summary)
+            }
+        }
+
+        let bg = host.supports_background_input();
+        let ax = host.supports_ax_tree();
+
+        match action {
+            "list_apps" => {
+                let include_hidden = params
+                    .get("include_hidden")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or_else(|| {
+                        !params
+                            .get("only_visible")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true)
+                    });
+                let apps = host.list_apps(include_hidden).await?;
+                let n = apps.len();
+                Ok(vec![ToolResult::ok(
+                    json!({
+                        "apps": apps,
+                        "include_hidden": include_hidden,
+                        "background_input": bg,
+                        "ax_tree": ax,
+                    }),
+                    Some(format!("{} app(s) listed", n)),
+                )])
+            }
+            "get_app_state" => {
+                let app = parse_selector(params)?;
+                let max_depth = params
+                    .get("max_depth")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(32) as u32;
+                let focus_window_only = params
+                    .get("focus_window_only")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let snap = host
+                    .get_app_state(app.clone(), max_depth, focus_window_only)
+                    .await?;
+                let summary = format!(
+                    "AX state for {} (digest={}, {} nodes)",
+                    snap.app.name,
+                    &snap.digest[..snap.digest.len().min(12)],
+                    snap.nodes.len()
+                );
+                let data = json!({
+                    "target_app": app,
+                    "background_input": bg,
+                    "ax_tree": ax,
+                    "app_state": snap_state_json(&snap),
+                    "app_state_nodes": snap.nodes,
+                    "before_digest": snap.digest,
+                    "loop_warning": snap.loop_warning,
+                });
+                Ok(vec![snap_result(data, Some(summary), &snap)])
+            }
+            "app_click" => {
+                let app = parse_selector(params)?;
+                let target_v = params.get("target").cloned().ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] app_click requires 'target' ({node_idx|image_xy|screen_xy|ocr_text})"
+                            .to_string(),
+                    )
+                })?;
+                let target = parse_click_target(&target_v)?;
+                let click_count = params
+                    .get("click_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1) as u8;
+                let mouse_button = params
+                    .get("mouse_button")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("left")
+                    .to_string();
+                let modifier_keys: Vec<String> = params
+                    .get("modifier_keys")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let wait_ms_after = params
+                    .get("wait_ms_after")
+                    .or_else(|| params.get("post_click_wait_ms"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v.min(5_000) as u32);
+
+                let before = host
+                    .get_app_state(app.clone(), 8, false)
+                    .await
+                    .ok()
+                    .map(|s| s.digest);
+
+                let mut after = host
+                    .app_click(AppClickParams {
+                        app: app.clone(),
+                        target: target.clone(),
+                        click_count,
+                        mouse_button,
+                        modifier_keys,
+                        wait_ms_after,
+                    })
+                    .await?;
+
+                if after.loop_warning.is_none() {
+                    let target_sig = serde_json::to_string(&target).unwrap_or_default();
+                    after.loop_warning = loop_tracker_observe(
+                        app.pid,
+                        "app_click",
+                        &target_sig,
+                        before.as_deref().unwrap_or(""),
+                        &after.digest,
+                    );
+                }
+
+                let data = json!({
+                    "target_app": app,
+                    "click_target": target,
+                    "background_input": bg,
+                    "before_digest": before,
+                    "app_state": snap_state_json(&after),
+                    "app_state_nodes": after.nodes,
+                    "loop_warning": after.loop_warning,
+                });
+                Ok(vec![snap_result(data, Some("clicked".to_string()), &after)])
+            }
+            "app_type_text" => {
+                let app = parse_selector(params)?;
+                let text = params
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool(
+                            "[INVALID_PARAMS] app_type_text requires 'text'".to_string(),
+                        )
+                    })?
+                    .to_string();
+                let focus: Option<ClickTarget> = match params.get("focus") {
+                    Some(v) if !v.is_null() => Some(parse_click_target(v)?),
+                    _ => None,
+                };
+                let before = host
+                    .get_app_state(app.clone(), 8, false)
+                    .await
+                    .ok()
+                    .map(|s| s.digest);
+                let mut after = host
+                    .app_type_text(app.clone(), &text, focus.clone())
+                    .await?;
+                if after.loop_warning.is_none() {
+                    let target_sig = format!(
+                        "focus={};len={}",
+                        serde_json::to_string(&focus).unwrap_or_default(),
+                        text.chars().count()
+                    );
+                    after.loop_warning = loop_tracker_observe(
+                        app.pid,
+                        "app_type_text",
+                        &target_sig,
+                        before.as_deref().unwrap_or(""),
+                        &after.digest,
+                    );
+                }
+                let data = json!({
+                    "target_app": app,
+                    "background_input": bg,
+                    "char_count": text.chars().count(),
+                    "focus": focus,
+                    "before_digest": before,
+                    "app_state": snap_state_json(&after),
+                    "app_state_nodes": after.nodes,
+                    "loop_warning": after.loop_warning,
+                });
+                Ok(vec![snap_result(
+                    data,
+                    Some(format!("typed {} chars", text.chars().count())),
+                    &after,
+                )])
+            }
+            "app_scroll" => {
+                let app = parse_selector(params)?;
+                let dx = params.get("dx").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                let dy = params.get("dy").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                let focus: Option<ClickTarget> = match params.get("focus") {
+                    Some(v) if !v.is_null() => Some(parse_click_target(v)?),
+                    _ => None,
+                };
+                let after = host.app_scroll(app.clone(), focus.clone(), dx, dy).await?;
+                let data = json!({
+                    "target_app": app,
+                    "background_input": bg,
+                    "dx": dx,
+                    "dy": dy,
+                    "focus": focus,
+                    "app_state": snap_state_json(&after),
+                    "app_state_nodes": after.nodes,
+                    "loop_warning": after.loop_warning,
+                });
+                Ok(vec![snap_result(
+                    data,
+                    Some(format!("scrolled ({},{})", dx, dy)),
+                    &after,
+                )])
+            }
+            "app_key_chord" => {
+                let app = parse_selector(params)?;
+                let keys = parse_keys(params);
+                if keys.is_empty() {
+                    return Err(BitFunError::tool(
+                        "[INVALID_PARAMS] app_key_chord requires non-empty 'keys'".to_string(),
+                    ));
+                }
+                let focus_idx: Option<u32> = params
+                    .get("focus_idx")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as u32);
+                let after = host
+                    .app_key_chord(app.clone(), keys.clone(), focus_idx)
+                    .await?;
+                let data = json!({
+                    "target_app": app,
+                    "background_input": bg,
+                    "keys": keys,
+                    "focus_idx": focus_idx,
+                    "app_state": snap_state_json(&after),
+                    "app_state_nodes": after.nodes,
+                    "loop_warning": after.loop_warning,
+                });
+                Ok(vec![snap_result(
+                    data,
+                    Some("key chord sent".to_string()),
+                    &after,
+                )])
+            }
+            "app_wait_for" => {
+                let app = parse_selector(params)?;
+                let predicate_v = params.get("predicate").cloned().ok_or_else(|| {
+                    BitFunError::tool(
+                        "[INVALID_PARAMS] app_wait_for requires 'predicate'".to_string(),
+                    )
+                })?;
+                let predicate = parse_wait_predicate(&predicate_v)?;
+                let timeout_ms = params
+                    .get("timeout_ms")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(8000) as u32;
+                let poll_ms = params
+                    .get("poll_ms")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(150) as u32;
+                let after = host
+                    .app_wait_for(app.clone(), predicate.clone(), timeout_ms, poll_ms)
+                    .await?;
+                let data = json!({
+                    "target_app": app,
+                    "background_input": bg,
+                    "predicate": predicate,
+                    "app_state": snap_state_json(&after),
+                    "app_state_nodes": after.nodes,
+                    "loop_warning": after.loop_warning,
+                });
+                Ok(vec![snap_result(
+                    data,
+                    Some("predicate satisfied".to_string()),
+                    &after,
+                )])
+            }
+            "build_interactive_view" => {
+                let app = parse_selector(params)?;
+                let opts: InteractiveViewOpts = match params.get("opts") {
+                    Some(v) if !v.is_null() => serde_json::from_value(v.clone()).map_err(|e| {
+                        BitFunError::tool(format!(
+                            "[INVALID_PARAMS] build_interactive_view 'opts' invalid: {}",
+                            e
+                        ))
+                    })?,
+                    _ => InteractiveViewOpts::default(),
+                };
+                let view = host.build_interactive_view(app.clone(), opts).await?;
+                let view_json = build_interactive_view_json(&view);
+                let summary = format!(
+                    "interactive view for {} ({} elements, digest={})",
+                    view.app.name,
+                    view.elements.len(),
+                    &view.digest[..view.digest.len().min(12)]
+                );
+                Ok(vec![interactive_view_result(
+                    view_json,
+                    Some(summary),
+                    &view,
+                )])
+            }
+            "interactive_click" => {
+                let app = parse_selector(params)?;
+                let p: InteractiveClickParams =
+                    serde_json::from_value(params.clone()).map_err(|e| {
+                        BitFunError::tool(format!(
+                            "[INVALID_PARAMS] interactive_click params invalid: {}",
+                            e
+                        ))
+                    })?;
+                let i = p.i;
+                let res = host.interactive_click(app.clone(), p).await?;
+                let data = build_interactive_action_json(
+                    &app,
+                    &res,
+                    json!({ "i": i, "action": "interactive_click" }),
+                );
+                let summary = format!("interactive_click i={}", i);
+                Ok(vec![interactive_action_result(data, Some(summary), &res)])
+            }
+            "build_visual_mark_view" => {
+                let app = parse_selector(params)?;
+                let opts: VisualMarkViewOpts = match params.get("opts") {
+                    Some(v) if !v.is_null() => serde_json::from_value(v.clone()).map_err(|e| {
+                        BitFunError::tool(format!(
+                            "[INVALID_PARAMS] build_visual_mark_view 'opts' invalid: {}",
+                            e
+                        ))
+                    })?,
+                    _ => VisualMarkViewOpts::default(),
+                };
+                let view = host.build_visual_mark_view(app.clone(), opts).await?;
+                let view_json = build_visual_mark_view_json(&view);
+                let summary = format!(
+                    "visual mark view for {} ({} marks, digest={})",
+                    view.app.name,
+                    view.marks.len(),
+                    &view.digest[..view.digest.len().min(12)]
+                );
+                Ok(vec![visual_mark_view_result(
+                    view_json,
+                    Some(summary),
+                    &view,
+                )])
+            }
+            "visual_click" => {
+                let app = parse_selector(params)?;
+                let p: VisualClickParams = serde_json::from_value(params.clone()).map_err(|e| {
+                    BitFunError::tool(format!(
+                        "[INVALID_PARAMS] visual_click params invalid: {}",
+                        e
+                    ))
+                })?;
+                let i = p.i;
+                let res = host.visual_click(app.clone(), p).await?;
+                let data = build_visual_action_json(
+                    &app,
+                    &res,
+                    json!({ "i": i, "action": "visual_click" }),
+                );
+                let summary = format!("visual_click i={}", i);
+                Ok(vec![visual_action_result(data, Some(summary), &res)])
+            }
+            "interactive_type_text" => {
+                let app = parse_selector(params)?;
+                let p: InteractiveTypeTextParams =
+                    serde_json::from_value(params.clone()).map_err(|e| {
+                        BitFunError::tool(format!(
+                            "[INVALID_PARAMS] interactive_type_text params invalid: {}",
+                            e
+                        ))
+                    })?;
+                let i = p.i;
+                let text_len = p.text.chars().count();
+                let res = host.interactive_type_text(app.clone(), p).await?;
+                let data = build_interactive_action_json(
+                    &app,
+                    &res,
+                    json!({
+                        "i": i,
+                        "action": "interactive_type_text",
+                        "text_chars": text_len,
+                    }),
+                );
+                let summary = match i {
+                    Some(idx) => format!("interactive_type_text i={} ({} chars)", idx, text_len),
+                    None => format!("interactive_type_text focused ({} chars)", text_len),
+                };
+                Ok(vec![interactive_action_result(data, Some(summary), &res)])
+            }
+            "interactive_scroll" => {
+                let app = parse_selector(params)?;
+                let p: InteractiveScrollParams =
+                    serde_json::from_value(params.clone()).map_err(|e| {
+                        BitFunError::tool(format!(
+                            "[INVALID_PARAMS] interactive_scroll params invalid: {}",
+                            e
+                        ))
+                    })?;
+                let (i, dx, dy) = (p.i, p.dx, p.dy);
+                let res = host.interactive_scroll(app.clone(), p).await?;
+                let data = build_interactive_action_json(
+                    &app,
+                    &res,
+                    json!({
+                        "i": i,
+                        "dx": dx,
+                        "dy": dy,
+                        "action": "interactive_scroll",
+                    }),
+                );
+                let summary = format!("interactive_scroll i={:?} dx={} dy={}", i, dx, dy);
+                Ok(vec![interactive_action_result(data, Some(summary), &res)])
+            }
+            other => Err(BitFunError::tool(format!(
+                "[INTERNAL] handle_desktop_ax called with unknown action: {}",
+                other
+            ))),
+        }
+    }
+
     // ── Browser domain ─────────────────────────────────────────────────
 
     async fn handle_browser(&self, action: &str, params: &Value) -> BitFunResult<Vec<ToolResult>> {
@@ -473,12 +1925,32 @@ impl ControlHubTool {
 
         match action {
             "connect" => {
+                let mode = Self::browser_connect_mode_from_params(params);
                 let kind = BrowserLauncher::detect_default_browser()?;
-                let user_data_dir = params
-                    .get("user_data_dir")
-                    .and_then(|v| v.as_str());
-                let launch_result =
-                    BrowserLauncher::launch_with_cdp_opts(&kind, port, user_data_dir).await?;
+
+                if mode == "headless" {
+                    if !BrowserLauncher::is_cdp_available(port).await {
+                        return Ok(err_response(
+                            "browser",
+                            "connect",
+                            ControlHubError::new(
+                                ErrorCode::NotAvailable,
+                                format!(
+                                    "Headless browser test port {} is not available. Start the dedicated headless browser first, then connect via ControlHub browser actions.",
+                                    port
+                                ),
+                            )
+                            .with_hints(Self::headless_browser_connect_hints(port)),
+                        ));
+                    }
+                }
+
+                let user_data_dir = params.get("user_data_dir").and_then(|v| v.as_str());
+                let launch_result = if mode == "headless" {
+                    LaunchResult::AlreadyConnected
+                } else {
+                    BrowserLauncher::launch_with_cdp_opts(&kind, port, user_data_dir).await?
+                };
 
                 // UX shortcut: a frequent flow is "drive my Gmail tab" /
                 // "drive the GitHub PR I'm looking at". Without `target_*`
@@ -504,6 +1976,11 @@ impl ControlHubTool {
                 match &launch_result {
                     LaunchResult::AlreadyConnected | LaunchResult::Launched => {
                         let pages = CdpClient::list_pages(port).await?;
+                        let connected_browser = if mode == "headless" {
+                            "Headless test browser".to_string()
+                        } else {
+                            kind.to_string()
+                        };
 
                         // Selection: explicit target_* > first real page > first.
                         let matched_by_target = if target_url.is_some() || target_title.is_some() {
@@ -592,7 +2069,8 @@ impl ControlHubTool {
 
                         let mut result = json!({
                             "success": true,
-                            "browser": kind.to_string(),
+                            "browser": connected_browser,
+                            "browser_mode": mode,
                             "browser_version": version.browser,
                             "port": port,
                             "session_id": session.session_id,
@@ -600,36 +2078,46 @@ impl ControlHubTool {
                             "page_title": page.title,
                             "matched_by_target": targeted,
                             "activated": activated,
-                            "status": if matches!(launch_result, LaunchResult::AlreadyConnected) { "already_connected" } else { "launched" },
+                            "status": if mode == "headless" {
+                                "attached"
+                            } else if matches!(launch_result, LaunchResult::AlreadyConnected) {
+                                "already_connected"
+                            } else {
+                                "launched"
+                            },
                         });
                         if let Some(w) = activate_warning {
                             result["warning"] = json!(w);
                         }
                         let summary = if targeted {
                             format!(
-                                "Connected to {} (session {}, page '{}')",
-                                kind, session.session_id, page.title
+                                "Connected to {} via DOM/CDP (session {}, page '{}')",
+                                connected_browser, session.session_id, page.title
                             )
                         } else {
                             format!(
-                                "Connected to {} on CDP port {} (session {})",
-                                kind, port, session.session_id
+                                "Connected to {} on test port {} via DOM/CDP (session {})",
+                                connected_browser, port, session.session_id
                             )
                         };
                         Ok(vec![ToolResult::ok(result, Some(summary))])
                     }
-                    LaunchResult::LaunchedButCdpNotReady { message, .. } => {
-                        Ok(vec![ToolResult::ok(
-                            json!({ "success": false, "status": "cdp_not_ready", "message": message }),
-                            Some(message.clone()),
-                        )])
-                    }
-                    LaunchResult::BrowserRunningWithoutCdp { instructions, .. } => {
-                        Ok(vec![ToolResult::ok(
-                            json!({ "success": false, "status": "needs_restart", "instructions": instructions }),
-                            Some(instructions.clone()),
-                        )])
-                    }
+                    LaunchResult::LaunchedButCdpNotReady { message, .. } => Ok(err_response(
+                        "browser",
+                        "connect",
+                        ControlHubError::new(ErrorCode::Timeout, message.clone())
+                            .with_hints(Self::default_browser_connect_hints(&kind, port)),
+                    )),
+                    LaunchResult::BrowserRunningWithoutCdp { instructions, .. } => Ok(err_response(
+                        "browser",
+                        "connect",
+                        ControlHubError::new(
+                            ErrorCode::NotAvailable,
+                            "The user's default browser is running without the test port enabled.",
+                        )
+                        .with_hint(instructions)
+                        .with_hints(Self::default_browser_connect_hints(&kind, port)),
+                    )),
                 }
             }
 
@@ -750,16 +2238,12 @@ impl ControlHubTool {
                     registry.get(Some(page_id)).await?
                 } else {
                     let pages = CdpClient::list_pages(port).await?;
-                    let page = pages
-                        .iter()
-                        .find(|p| p.id == page_id)
-                        .ok_or_else(|| BitFunError::tool(format!("Page '{}' not found", page_id)))?;
-                    let ws_url = page
-                        .web_socket_debugger_url
-                        .as_ref()
-                        .ok_or_else(|| {
-                            BitFunError::tool("Page has no WebSocket URL".to_string())
-                        })?;
+                    let page = pages.iter().find(|p| p.id == page_id).ok_or_else(|| {
+                        BitFunError::tool(format!("Page '{}' not found", page_id))
+                    })?;
+                    let ws_url = page.web_socket_debugger_url.as_ref().ok_or_else(|| {
+                        BitFunError::tool("Page has no WebSocket URL".to_string())
+                    })?;
                     let client = CdpClient::connect(ws_url).await?;
                     let session = BrowserSession {
                         session_id: page.id.clone(),
@@ -802,7 +2286,11 @@ impl ControlHubTool {
                     Some(format!(
                         "Switched to page {} ({})",
                         page_id,
-                        if activated { "brought to front" } else { "background" }
+                        if activated {
+                            "brought to front"
+                        } else {
+                            "background"
+                        }
                     )),
                 )])
             }
@@ -1082,288 +2570,6 @@ impl ControlHubTool {
         }
     }
 
-    // ── App domain (SelfControl) ───────────────────────────────────────
-
-    async fn handle_app(
-        &self,
-        action: &str,
-        params: &Value,
-        context: &ToolUseContext,
-    ) -> BitFunResult<Vec<ToolResult>> {
-        // Discoverability shortcut: `execute_task` accepts a fixed catalog
-        // of named recipes ("set_primary_model" etc.). The model needs to
-        // know that catalog without first triggering the frontend's
-        // unknown-task error path. Returning it from a pure-Rust action
-        // means zero round-trip and the catalog stays in sync with what
-        // the frontend actually accepts (kept in sync via the e2e test).
-        if action == "list_tasks" {
-            let tasks = json!([
-                {
-                    "name": "set_primary_model",
-                    "description": "Set the primary (main) model for the active session.",
-                    "params": { "modelQuery": "fuzzy match on model display name or id" },
-                },
-                {
-                    "name": "set_fast_model",
-                    "description": "Set the fast/secondary model.",
-                    "params": { "modelQuery": "fuzzy match on model display name or id" },
-                },
-                {
-                    "name": "open_model_settings",
-                    "description": "Open the Settings → Models tab.",
-                    "params": {},
-                },
-                {
-                    "name": "return_to_session",
-                    "description": "Switch back to the chat session scene.",
-                    "params": {},
-                },
-                {
-                    "name": "delete_model",
-                    "description": "Delete a configured model.",
-                    "params": { "modelQuery": "fuzzy match on model display name or id" },
-                },
-                {
-                    "name": "open_miniapp_gallery",
-                    "description": "Open the Mini App gallery scene (lists installed mini-apps).",
-                    "params": {},
-                },
-                {
-                    "name": "open_miniapp",
-                    "description": "Open a specific installed mini-app by its id (use list_miniapps to discover ids).",
-                    "params": { "miniAppId": "id of the mini app to open" },
-                },
-            ]);
-            return Ok(vec![ToolResult::ok(
-                json!({ "tasks": tasks }),
-                Some("7 named tasks available for app.execute_task".to_string()),
-            )]);
-        }
-
-        // ── BitFun self-introspection (no frontend round-trip) ─────────
-        // These actions answer "what does BitFun itself expose?" so the
-        // model never needs to fall back to filesystem-scanning the user's
-        // workspace to guess at the app's own capabilities.
-        if action == "list_miniapps" {
-            let include_runtime = params
-                .get("includeRuntime")
-                .or_else(|| params.get("include_runtime"))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            return Self::handle_list_miniapps(include_runtime).await;
-        }
-        if action == "list_scenes" {
-            return Ok(vec![Self::scenes_tool_result()]);
-        }
-        if action == "list_settings_tabs" {
-            return Ok(vec![Self::settings_tabs_tool_result()]);
-        }
-        if action == "app_self_describe" {
-            return Self::handle_app_self_describe().await;
-        }
-
-        let mut sc_input = params.clone();
-        if let Value::Object(ref mut map) = sc_input {
-            map.insert("action".to_string(), json!(action));
-        }
-        let sc_tool = super::self_control_tool::SelfControlTool::new();
-        sc_tool.call_impl(&sc_input, context).await
-    }
-
-    // ── BitFun self-introspection helpers ─────────────────────────────
-
-    /// Static catalog of scenes the user can navigate to from the BitFun
-    /// shell. Mirrors the entries in
-    /// `src/web-ui/src/app/scenes/registry.ts::SCENE_TAB_REGISTRY`.
-    /// Kept here as a static list so `app.list_scenes` can answer with
-    /// zero frontend round-trip; the e2e suite asserts this list stays
-    /// in sync with the TS registry.
-    fn scene_catalog() -> Vec<(&'static str, &'static str, &'static str)> {
-        vec![
-            ("welcome", "Welcome", "欢迎使用"),
-            ("session", "Session (chat)", "会话"),
-            ("terminal", "Terminal", "终端"),
-            ("git", "Git", "Git"),
-            ("settings", "Settings", "设置"),
-            ("file-viewer", "File Viewer", "文件查看"),
-            ("profile", "Profile", "个人资料"),
-            ("agents", "Agents", "智能体"),
-            ("skills", "Skills", "技能"),
-            ("miniapps", "Mini App Gallery", "小应用"),
-            ("browser", "Browser", "浏览器"),
-            ("mermaid", "Mermaid Editor", "Mermaid 图表"),
-            ("assistant", "Assistant", "助理"),
-            ("insights", "Insights", "洞察"),
-            ("shell", "Shell", "Shell"),
-            ("panel-view", "Panel View", "面板视图"),
-        ]
-    }
-
-    /// Settings tab catalog. Keep in sync with the settings store registry.
-    fn settings_tab_catalog() -> Vec<(&'static str, &'static str)> {
-        vec![
-            ("basics", "Basic preferences (language, theme, etc.)"),
-            ("models", "AI models (add / edit / set defaults / delete)"),
-            ("session-config", "Default session behavior"),
-            ("agents", "Agent management"),
-            ("skills", "Skill packages"),
-            ("tools", "Built-in tools and MCP servers"),
-            ("about", "About BitFun"),
-        ]
-    }
-
-    fn scenes_tool_result() -> ToolResult {
-        let scenes: Vec<Value> = Self::scene_catalog()
-            .into_iter()
-            .map(|(id, label_en, label_zh)| {
-                json!({ "id": id, "labelEn": label_en, "labelZh": label_zh })
-            })
-            .collect();
-        let count = scenes.len();
-        ToolResult::ok(
-            json!({ "scenes": scenes }),
-            Some(format!("{count} scenes available; pass any `id` to action `open_scene`. Mini-app scenes use id `miniapp:<appId>` (see app.list_miniapps).")),
-        )
-    }
-
-    fn settings_tabs_tool_result() -> ToolResult {
-        let tabs: Vec<Value> = Self::settings_tab_catalog()
-            .into_iter()
-            .map(|(id, desc)| json!({ "id": id, "description": desc }))
-            .collect();
-        let count = tabs.len();
-        ToolResult::ok(
-            json!({ "tabs": tabs }),
-            Some(format!(
-                "{count} settings tabs available; pass any `id` to action `open_settings_tab`."
-            )),
-        )
-    }
-
-    async fn handle_list_miniapps(include_runtime: bool) -> BitFunResult<Vec<ToolResult>> {
-        let manager = match crate::miniapp::try_get_global_miniapp_manager() {
-            Some(m) => m,
-            None => {
-                return Ok(vec![ToolResult::ok(
-                    json!({ "miniapps": [], "available": false }),
-                    Some("MiniApp subsystem is not initialized in this build.".to_string()),
-                )]);
-            }
-        };
-
-        let metas = manager
-            .list()
-            .await
-            .map_err(|e| BitFunError::tool(format!("Failed to list mini-apps: {e}")))?;
-
-        let entries: Vec<Value> = metas
-            .iter()
-            .map(|meta| {
-                let mut obj = serde_json::Map::new();
-                obj.insert("id".to_string(), json!(meta.id));
-                obj.insert("name".to_string(), json!(meta.name));
-                obj.insert("description".to_string(), json!(meta.description));
-                obj.insert("icon".to_string(), json!(meta.icon));
-                obj.insert("category".to_string(), json!(meta.category));
-                obj.insert("tags".to_string(), json!(meta.tags));
-                obj.insert("version".to_string(), json!(meta.version));
-                obj.insert("updatedAt".to_string(), json!(meta.updated_at));
-                obj.insert(
-                    "openSceneId".to_string(),
-                    json!(format!("miniapp:{}", meta.id)),
-                );
-                if include_runtime {
-                    obj.insert(
-                        "runtime".to_string(),
-                        json!({
-                            "sourceRevision": meta.runtime.source_revision,
-                            "depsRevision": meta.runtime.deps_revision,
-                            "depsDirty": meta.runtime.deps_dirty,
-                            "workerRestartRequired": meta.runtime.worker_restart_required,
-                        }),
-                    );
-                }
-                Value::Object(obj)
-            })
-            .collect();
-
-        let count = entries.len();
-        let preview: String = metas
-            .iter()
-            .take(5)
-            .map(|m| format!("{} (id={})", m.name, m.id))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let summary = if count == 0 {
-            "No mini-apps installed.".to_string()
-        } else if count <= 5 {
-            format!("{count} mini-app(s) installed: {preview}.")
-        } else {
-            format!("{count} mini-app(s) installed; first 5: {preview}…")
-        };
-
-        Ok(vec![ToolResult::ok(
-            json!({ "miniapps": entries, "count": count, "available": true }),
-            Some(format!(
-                "{summary} To open one: execute_task task=open_miniapp params={{ miniAppId: <id> }}, or open_scene sceneId=miniapp:<id>."
-            )),
-        )])
-    }
-
-    async fn handle_app_self_describe() -> BitFunResult<Vec<ToolResult>> {
-        let scenes: Vec<Value> = Self::scene_catalog()
-            .into_iter()
-            .map(|(id, label_en, label_zh)| {
-                json!({ "id": id, "labelEn": label_en, "labelZh": label_zh })
-            })
-            .collect();
-        let settings_tabs: Vec<Value> = Self::settings_tab_catalog()
-            .into_iter()
-            .map(|(id, desc)| json!({ "id": id, "description": desc }))
-            .collect();
-
-        let (miniapps, miniapp_available, miniapp_count): (Vec<Value>, bool, usize) =
-            match crate::miniapp::try_get_global_miniapp_manager() {
-                Some(manager) => match manager.list().await {
-                    Ok(metas) => {
-                        let count = metas.len();
-                        let entries = metas
-                            .iter()
-                            .map(|m| {
-                                json!({
-                                    "id": m.id,
-                                    "name": m.name,
-                                    "description": m.description,
-                                    "category": m.category,
-                                    "openSceneId": format!("miniapp:{}", m.id),
-                                })
-                            })
-                            .collect::<Vec<_>>();
-                        (entries, true, count)
-                    }
-                    Err(_) => (vec![], true, 0),
-                },
-                None => (vec![], false, 0),
-            };
-
-        let summary = format!(
-            "BitFun self-describe: {} scenes, {} settings tabs, {} mini-app(s) installed.",
-            scenes.len(),
-            settings_tabs.len(),
-            miniapp_count,
-        );
-
-        Ok(vec![ToolResult::ok(
-            json!({
-                "scenes": scenes,
-                "settingsTabs": settings_tabs,
-                "miniapps": miniapps,
-                "miniappSubsystemAvailable": miniapp_available,
-            }),
-            Some(summary),
-        )])
-    }
-
     // ── Terminal domain ────────────────────────────────────────────────
 
     async fn handle_terminal(
@@ -1376,10 +2582,8 @@ impl ControlHubTool {
         // a `terminal_session_id` *before* attempting `kill` / `interrupt`.
         // Previously this required digging through earlier `Bash` results.
         if action == "list_sessions" {
-            let api =
-                crate::service::terminal::api::TerminalApi::from_singleton().map_err(|e| {
-                    BitFunError::tool(format!("TerminalApi unavailable: {}", e))
-                })?;
+            let api = crate::service::terminal::api::TerminalApi::from_singleton()
+                .map_err(|e| BitFunError::tool(format!("TerminalApi unavailable: {}", e)))?;
             let sessions = api
                 .list_sessions()
                 .await
@@ -1408,22 +2612,22 @@ impl ControlHubTool {
         // "Bash launched a long-running command, please interrupt it" and
         // the user has no other terminals open — forcing a `list_sessions`
         // round-trip just to copy the only id back wastes a turn.
-        let resolved_id: String = match params
-            .get("terminal_session_id")
-            .and_then(|v| v.as_str())
-        {
+        let resolved_id: String = match params.get("terminal_session_id").and_then(|v| v.as_str()) {
             Some(s) => s.to_string(),
             None => {
                 let api = crate::service::terminal::api::TerminalApi::from_singleton()
                     .map_err(|e| BitFunError::tool(format!("TerminalApi unavailable: {}", e)))?;
-                let sessions = api.list_sessions().await.map_err(|e| {
-                    BitFunError::tool(format!("list_sessions failed: {}", e))
-                })?;
+                let sessions = api
+                    .list_sessions()
+                    .await
+                    .map_err(|e| BitFunError::tool(format!("list_sessions failed: {}", e)))?;
                 let live: Vec<_> = sessions
                     .iter()
-                    .filter(|s| s.status.eq_ignore_ascii_case("running")
-                        || s.status.eq_ignore_ascii_case("active")
-                        || s.status.eq_ignore_ascii_case("idle"))
+                    .filter(|s| {
+                        s.status.eq_ignore_ascii_case("running")
+                            || s.status.eq_ignore_ascii_case("active")
+                            || s.status.eq_ignore_ascii_case("idle")
+                    })
                     .collect();
                 if live.len() == 1 {
                     live[0].id.clone()
@@ -1882,7 +3086,7 @@ impl ControlHubTool {
                     Ok(Ok(o)) => o,
                 };
 
-                let elapsed_ms = started.elapsed().as_millis() as u64;
+                let elapsed_ms = elapsed_ms_u64(started);
                 let stdout_full = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr_full = String::from_utf8_lossy(&output.stderr).to_string();
                 let (stdout, stdout_truncated) = truncate_with_marker(&stdout_full, max_output_bytes);
@@ -2215,7 +3419,7 @@ fn truncate_with_marker(s: &str, max_bytes: usize) -> (String, bool) {
 }
 
 /// Parse a leading `"[CODE] rest"` prefix produced by the front-end
-/// `SelfControlEventListener` so we can recover the structured `ErrorCode`
+/// front-end error prefix so we can recover the structured `ErrorCode`
 /// in the backend instead of falling back to the heuristic classifier.
 /// Returns `(code, rest_without_prefix)` or `None` if the input is not in
 /// that shape.
@@ -2280,7 +3484,11 @@ fn read_os_version() -> Option<String> {
             .output()
             .ok()?;
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if s.is_empty() { None } else { Some(format!("macOS {}", s)) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(format!("macOS {}", s))
+        }
     }
     #[cfg(target_os = "windows")]
     {
@@ -2289,7 +3497,11 @@ fn read_os_version() -> Option<String> {
             .output()
             .ok()?;
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if s.is_empty() { None } else { Some(s) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     }
     #[cfg(target_os = "linux")]
     {
@@ -2379,7 +3591,11 @@ fn which_exists(name: &str) -> bool {
 /// `script_type='powershell'` produce the same encoding.
 #[cfg(target_os = "windows")]
 fn powershell_invocation(script: &str) -> (String, Vec<String>) {
-    let prog = if which_exists("pwsh") { "pwsh" } else { "powershell" };
+    let prog = if which_exists("pwsh") {
+        "pwsh"
+    } else {
+        "powershell"
+    };
     (
         prog.to_string(),
         vec![
@@ -2421,10 +3637,7 @@ fn linux_clipboard_install_hints() -> Vec<String> {
                 vec!["Install wl-clipboard (Wayland) or xclip/xsel (X11)".to_string()]
             }
         }
-        _ => vec![
-            "Make sure the system clipboard helper is available on this host"
-                .to_string(),
-        ],
+        _ => vec!["Make sure the system clipboard helper is available on this host".to_string()],
     }
 }
 
@@ -2433,7 +3646,9 @@ fn linux_clipboard_install_hints() -> Vec<String> {
 /// either of which may be `None` if the environment doesn't expose it.
 #[cfg(target_os = "linux")]
 fn linux_session_info() -> (Option<String>, Option<String>) {
-    let server = std::env::var("XDG_SESSION_TYPE").ok().filter(|s| !s.is_empty());
+    let server = std::env::var("XDG_SESSION_TYPE")
+        .ok()
+        .filter(|s| !s.is_empty());
     let de = std::env::var("XDG_CURRENT_DESKTOP")
         .ok()
         .or_else(|| std::env::var("DESKTOP_SESSION").ok())
@@ -2469,8 +3684,11 @@ async fn clipboard_read() -> Result<String, String> {
         // PowerShell appends CRLF; trim a single trailing newline so the
         // returned text matches what the user actually copied.
         let mut s = String::from_utf8_lossy(&out.stdout).to_string();
-        if s.ends_with("\r\n") { s.truncate(s.len() - 2); }
-        else if s.ends_with('\n') { s.truncate(s.len() - 1); }
+        if s.ends_with("\r\n") {
+            s.truncate(s.len() - 2);
+        } else if s.ends_with('\n') {
+            s.truncate(s.len() - 1);
+        }
         Ok(s)
     }
     #[cfg(target_os = "linux")]
@@ -2490,11 +3708,7 @@ async fn clipboard_read() -> Result<String, String> {
             ]
         };
         for (bin, args) in candidates {
-            if let Ok(out) = tokio::process::Command::new(bin)
-                .args(*args)
-                .output()
-                .await
-            {
+            if let Ok(out) = tokio::process::Command::new(bin).args(*args).output().await {
                 if out.status.success() {
                     return Ok(String::from_utf8_lossy(&out.stdout).to_string());
                 }
@@ -2594,209 +3808,14 @@ impl Tool for ControlHubTool {
     }
 
     async fn description(&self) -> BitFunResult<String> {
-        Ok(r#"ControlHub — the SOLE control entry point for everything the agent can drive.
+        Ok(Self::description_text(Self::desktop_domain_enabled().await))
+    }
 
-You will not find a separate `ComputerUse` or `SelfControl` tool: every desktop, browser,
-app-self-control, terminal-signalling and system action is reachable through this one tool
-via `{ domain, action, params }`.
-
-## Decision tree — which domain do I use?
-
-1. The user wants to change something inside the BitFun app itself
-   (settings, models, scenes, BitFun's own buttons / forms)?
-   → **domain: "app"**  (operates BitFun's own React UI through the SelfControl bridge)
-
-2. The user wants to drive a website / web app in their *real* browser
-   (preserving cookies, login, extensions)?
-   → **domain: "browser"** (drives the user's default Chromium-family browser via CDP)
-
-3. The user wants to operate another desktop application
-   (third-party app windows, OS dialogs, system-wide keyboard / mouse, accessibility)?
-   → **domain: "desktop"** (Computer Use: screenshot, click, key_chord, locate, ...)
-
-4. The user wants to launch an app, run a shell / AppleScript, or query OS info?
-   → **domain: "system"**
-
-5. The user wants to signal an existing terminal session
-   (kill, send SIGINT) — *not* run new commands; for that use the `Bash` tool?
-   → **domain: "terminal"**
-
-If you are unsure between two domains: prefer the smallest blast radius
-(`app` < `browser` < `desktop` < `system`).
-
-## Unified response envelope
-
-Every call returns a JSON object with a stable shape:
-
-  // success
-  { "ok": true,  "domain": "...", "action": "...", "data": { ... } }
-  // failure (still delivered as a normal tool result, NOT an exception)
-  { "ok": false, "domain": "...", "action": "...",
-    "error": { "code": "STALE_REF" | "NOT_FOUND" | "AMBIGUOUS" | "GUARD_REJECTED"
-                       | "WRONG_DISPLAY" | "WRONG_TAB" | "INVALID_PARAMS"
-                       | "PERMISSION_DENIED" | "TIMEOUT" | "NOT_AVAILABLE"
-                       | "MISSING_SESSION" | "FRONTEND_ERROR" | "INTERNAL",
-               "message": "...", "hints": [ "...next step..." ] } }
-
-Branch on `ok` and on `error.code` deterministically. Never scrape the English `message`
-for control flow.
-
-## Domains and actions
-
-### domain: "browser"  (CDP-driven control of the user's default browser)
-- connect, navigate, snapshot, click, fill, type, select, press_key, scroll, wait,
-  get_text, get_url, get_title, screenshot, evaluate, close, list_pages, tab_query,
-  switch_page, list_sessions.
-- Fast path (target a known tab in ONE call):
-  * `connect { target_url? , target_title? , activate? }` finds the first
-    open tab whose URL / title contains the substring, registers it as the
-    default session AND brings it to the front. Use this instead of
-    `connect` → `list_pages` → `switch_page` for the common
-    "drive my Gmail / GitHub PR / docs tab" flow. If the filter matches no
-    tab you get `error.code = WRONG_TAB` (no silent fallback).
-- Tab routing:
-  * `list_pages` returns every page/tab the browser exposes; each entry
-    carries `is_default_session` so you can tell which one ControlHub will
-    drive next without an extra `list_sessions` round-trip.
-  * `tab_query` (`{ url_contains?, title_contains?, only_pages?, limit? }`)
-    is the preferred filter when you need to inspect candidates before
-    committing to one.
-  * `switch_page` (`{ page_id, activate? }`) sets the default CDP session
-    AND, by default, calls `Page.bringToFront` so the user actually sees
-    the tab being driven. Pass `activate: false` to keep the operation
-    invisible (e.g. background scraping).
-- Workflow: connect → navigate → snapshot (returns @e1, @e2 ... refs) → click/fill using refs.
-- `snapshot` now traverses **open shadow roots** and **same-origin iframes**;
-  each element entry includes `scope` (`document`/`shadow`/`iframe`) and
-  `frame_path` so you can tell where in the DOM tree it lives. Pass
-  `with_backend_node_ids: true` to also receive a stable
-  `backend_node_id` per element (CDP DOM id, survives re-renders).
-- Take a fresh snapshot after any DOM mutation; stale refs return `error.code = STALE_REF`.
-
-### domain: "desktop"  (Computer Use — only available in the BitFun desktop app)
-- screenshot, click, click_element, mouse_move, pointer_move_rel,
-  scroll, drag, key_chord, type_text, paste, wait, locate, move_to_text.
-- **`screenshot`** — exactly two possible outputs: the focused application
-  window (default, via Accessibility) OR the full display (fallback when
-  AX cannot resolve the window). No crop / quadrant / mouse-centered
-  options exist anymore. Old crop parameters (`screenshot_crop_center_x/y`,
-  `screenshot_navigate_quadrant`, `screenshot_reset_navigation`,
-  `screenshot_implicit_center`, `point_crop_half_extent_native`) are
-  silently ignored. The only param that still has meaning is
-  `screenshot_window: true` — and it just reaffirms the default; you
-  rarely need to pass it.
-- **`paste { text, clear_first?, submit?, submit_keys? }`** — STRONGLY PREFER
-  this over `type_text` for any non-trivial input (CJK, emoji, multi-line,
-  contact names, message bodies, anything > ~15 chars). Internally does
-  `clipboard_set` + cmd/ctrl+v, optionally cmd/ctrl+a first to replace
-  existing content, and optionally Return after to submit. Collapses the
-  canonical "type a name into search and press enter" / "send a message"
-  sequence into a single tool call AND avoids every IME failure mode that
-  `type_text` is subject to. Use `submit_keys: ["command","return"]` for
-  Slack-style apps where Return inserts a newline.
-- `type_text` is a fallback for short Latin-only text into a focused input
-  where you have no clipboard helper (Linux without wl-clipboard / xclip).
-  In every other case `paste` is faster and more reliable.
-- `key_chord` accepts EITHER `{"keys":["command","v"]}` (canonical) OR a
-  bare `{"keys":"escape"}` / `{"key":"return"}` for single keys; both
-  shapes are coerced. Modifier names: command, control, option/alt, shift.
-- Multi-display routing (FIRST step on multi-monitor setups):
-  * `list_displays` — returns every attached screen with `display_id`,
-    `is_primary`, `is_active`, `has_pointer`, origin/size, and `scale_factor`.
-    Always inspect this list before issuing screen-coordinate actions when
-    `interaction_state.displays` has more than one entry; do NOT assume the
-    cursor is on the screen the user is looking at.
-  * `focus_display` — `{ display_id }` pins ALL subsequent screenshots /
-    clicks / locates to that display until cleared. Pass `{ display_id: null }`
-    (or omit) to fall back to the legacy "screen under the mouse" behavior.
-    Pinning invalidates any cached screenshot, so the next `screenshot` is
-    guaranteed to come from the chosen display.
-- `interaction_state.displays` and `interaction_state.active_display_id`
-  are present in every desktop tool result and tell you which display the
-  next action will target. If that does not match the user's intent,
-  either call `desktop.focus_display` BEFORE the next `screenshot` / `click`,
-  OR pass `display_id: <id>` directly inside the next action's params —
-  every desktop action accepts it as a one-shot pin equivalent (sticky:
-  the pin persists for follow-up actions until you set `display_id: null`).
-- Single-display setup (most users): you do NOT need `list_displays` /
-  `focus_display`. Just call `screenshot` / `click_element` / etc.
-  directly — `interaction_state.displays.length === 1` is your signal.
-
-### domain: "app"  (BitFun's own GUI via the SelfControl bridge)
-- Introspection (pure-Rust, no UI round-trip — call these BEFORE bash/fs):
-  * `app_self_describe` — one-shot snapshot: `{ scenes, settingsTabs, miniapps, miniappSubsystemAvailable }`. Use this whenever the user asks "what can BitFun do / what's installed / what scenes are there / what mini-apps are available" — DO NOT scan the user's workspace directories looking for app features, those directories are USER files, not BitFun installations.
-  * `list_miniapps { includeRuntime?: bool }` — installed mini-apps with `id / name / description / icon / category / openSceneId`.
-  * `list_scenes` — all scene ids you can pass to `open_scene` (plus dynamic `miniapp:<id>` for installed mini-apps).
-  * `list_settings_tabs` — all tab ids you can pass to `open_settings_tab`.
-  * `list_tasks` — catalog of named recipes for `execute_task`.
-- Navigation / mutation: get_page_state, wait_for_selector, click,
-  click_by_text, input, scroll, open_scene, open_settings_tab, set_config,
-  get_config, list_models, set_default_model, delete_model, execute_task,
-  select_option, wait, press_key, read_text.
-- `get_page_state` supports `{ offset, limit }` pagination (default
-  `offset=0, limit=60`) and returns `pagination` + `webview_id` so you can
-  page through long settings panels and tell which webview produced the
-  response.
-- `wait_for_selector` (`{ selector, timeoutMs?, state? }`) blocks until
-  the element appears (state `'visible'` also waits for a non-zero box).
-  Errors with `code='TIMEOUT'`. Prefer it over a fixed `wait { durationMs }`
-  when the right delay isn't known.
-- For well-known requests, prefer `execute_task` recipes:
-  * "set Kimi as the main model" → `set_primary_model { modelQuery: "kimi" }`
-  * "open the mini app gallery / show me installed mini apps" → first
-    `list_miniapps`, then `execute_task task=open_miniapp_gallery`
-    (or `open_miniapp { miniAppId: "<id>" }` to open a specific one).
-- HARD RULE: when the user asks "BitFun 里有哪些 X" / "what mini-apps /
-  scenes / settings does BitFun have" — answer with `app.app_self_describe`
-  or the targeted `list_*` action. NEVER answer this kind of question by
-  running `Bash` `ls` against the user's workspace; that path is for
-  user files, not BitFun's own catalog.
-
-### domain: "terminal"
-- list_sessions, kill (`terminal_session_id`), interrupt (`terminal_session_id`).
-  Use the `Bash` tool to *run* commands; this domain only signals existing sessions.
-- Fast path: if there is exactly ONE live terminal session, you may omit
-  `terminal_session_id` and ControlHub will target it automatically. With
-  zero live sessions you get `error.code = MISSING_SESSION`; with multiple
-  you get `AMBIGUOUS` plus the candidate ids in `error.hints`. Otherwise
-  call `list_sessions` first.
-
-### domain: "system"
-- open_app (`app_name`), open_url (`url`), open_file (`path`, `app?`),
-  clipboard_get (`max_bytes?`), clipboard_set (`text`),
-  run_script (`script`, `script_type` = applescript|shell, optional
-  `timeout_ms` ≤ 5 min, `max_output_bytes` ≤ 256 KB), get_os_info.
-- `open_url` is the right tool when the goal is "show this URL to the user"
-  (no CDP, no driving). Use `domain: "browser"` only when you actually need
-  to interact with the page.
-- `open_file` opens a local file with its default handler (or an explicit
-  `app` on macOS) — high-frequency for "open this PDF / picture / spreadsheet".
-- `clipboard_get` / `clipboard_set` are the universal cross-app bridge:
-  the cheapest way to move text between apps that you'd otherwise have to
-  drive separately. `clipboard_get` returns `{ text, byte_length, truncated }`;
-  `clipboard_set { text }` is the inverse. On Linux this requires
-  wl-clipboard / xclip / xsel; missing-helper failures return `NOT_AVAILABLE`.
-- `run_script` enforces the timeout and truncates large stdout/stderr; on
-  timeout it returns `error.code = TIMEOUT` and the child process is killed.
-  `get_os_info` includes `os`, `arch`, `os_version`, `hostname`.
-
-### domain: "meta"  (introspection — call this BEFORE long control flows)
-- `capabilities` — returns `{ domains: { desktop, browser, app, terminal, system, meta },
-  host: { os, arch }, schema_version }`. Use it to confirm which domains are
-  actually wired up on this runtime instead of guessing from the description.
-- `route_hint` (`{ intent }`) — heuristic mapping of a free-form user intent
-  ("把 BitFun 默认模型改成 Kimi") to a ranked list of candidate domains so the
-  model has a sanity check before it commits to one. Always confirm with
-  `meta.capabilities` and the domain docs; this is only a hint.
-
-## Workflow tips
-1. For cross-domain workflows (browser data → desktop paste, app config → external nav),
-   call actions sequentially and verify each step's `ok` field before chaining.
-2. After any UI mutation, re-acquire state (browser: snapshot, desktop: screenshot,
-   app: get_page_state) before the next action.
-3. When the model is the only one driving inputs, `wait` 200–500 ms after a click that
-   triggers an animation before re-observing."#
-            .to_string())
+    async fn description_with_context(
+        &self,
+        _context: Option<&ToolUseContext>,
+    ) -> BitFunResult<String> {
+        Ok(Self::description_text(Self::desktop_domain_enabled().await))
     }
 
     fn input_schema(&self) -> Value {
@@ -2805,7 +3824,7 @@ for control flow.
             "properties": {
                 "domain": {
                     "type": "string",
-                    "enum": ["browser", "desktop", "app", "terminal", "system", "meta"],
+                    "enum": ["browser", "desktop", "terminal", "system", "meta"],
                     "description": "The control domain to target."
                 },
                 "action": {
@@ -2900,22 +3919,16 @@ for control flow.
             return Ok(err_response(
                 "?",
                 action,
-                ControlHubError::new(
-                    ErrorCode::InvalidParams,
-                    "Missing required field 'domain'.",
-                )
-                .with_hint("Set domain to one of: app, browser, desktop, terminal, system."),
+                ControlHubError::new(ErrorCode::InvalidParams, "Missing required field 'domain'.")
+                    .with_hint("Set domain to one of: app, browser, desktop, terminal, system."),
             ));
         }
         if action.is_empty() {
             return Ok(err_response(
                 domain,
                 "?",
-                ControlHubError::new(
-                    ErrorCode::InvalidParams,
-                    "Missing required field 'action'.",
-                )
-                .with_hint("Pick a valid action for this domain (see ControlHub description)."),
+                ControlHubError::new(ErrorCode::InvalidParams, "Missing required field 'action'.")
+                    .with_hint("Pick a valid action for this domain (see ControlHub description)."),
             ));
         }
 
@@ -2975,7 +3988,7 @@ fn envelope_wrap_results(domain: &str, action: &str, results: Vec<ToolResult>) -
 fn map_dispatch_error(domain: &str, _action: &str, err: BitFunError) -> ControlHubError {
     let msg = err.to_string();
 
-    // Frontend SelfControl sends back `[CODE] message\nHints: a | b` strings —
+    // Frontend bridges may send back `[CODE] message\nHints: a | b` strings —
     // parse that prefix back into a structured ControlHubError so the model
     // sees the *actual* error code and hints instead of an INTERNAL fallback.
     // `BitFunError::Tool` wraps the message with `"Tool error: "`, so we try
@@ -2985,8 +3998,8 @@ fn map_dispatch_error(domain: &str, _action: &str, err: BitFunError) -> ControlH
         .or_else(|| msg.strip_prefix("Service error: "))
         .or_else(|| msg.strip_prefix("Agent error: "))
         .unwrap_or(msg.as_str());
-    if let Some((code_str, rest)) = parse_bracket_code_prefix(strip_candidate)
-        .or_else(|| parse_bracket_code_prefix(&msg))
+    if let Some((code_str, rest)) =
+        parse_bracket_code_prefix(strip_candidate).or_else(|| parse_bracket_code_prefix(&msg))
     {
         let (message, hints) = parse_hints_suffix(rest);
         let code = ErrorCode::from_str(code_str).unwrap_or(ErrorCode::FrontendError);
@@ -3060,8 +4073,11 @@ mod control_hub_tests {
             .expect_err("unknown domain must error");
         let msg = err.to_string();
         assert!(msg.contains("Unknown domain"), "got: {msg}");
-        for d in ["desktop", "browser", "app", "terminal", "system", "meta"] {
-            assert!(msg.contains(d), "valid domain {d} missing from error: {msg}");
+        for d in ["desktop", "browser", "terminal", "system", "meta"] {
+            assert!(
+                msg.contains(d),
+                "valid domain {d} missing from error: {msg}"
+            );
         }
     }
 
@@ -3075,7 +4091,7 @@ mod control_hub_tests {
             .expect("capabilities should succeed");
         let payload = results.first().expect("one result").content();
         let domains = payload.get("domains").expect("domains present");
-        for d in ["desktop", "browser", "app", "terminal", "system", "meta"] {
+        for d in ["desktop", "browser", "terminal", "system", "meta"] {
             assert!(
                 domains.get(d).is_some(),
                 "domain {d} missing from capabilities payload: {payload}"
@@ -3120,138 +4136,40 @@ mod control_hub_tests {
             .and_then(|v| v.as_array())
             .expect("ranked array");
         assert!(
-            ranked.iter().any(|s| {
-                s.get("domain").and_then(|v| v.as_str()) == Some("browser")
-            }),
+            ranked
+                .iter()
+                .any(|s| { s.get("domain").and_then(|v| v.as_str()) == Some("browser") }),
             "browser must appear in ranked for URL intent: {payload}"
         );
         assert_eq!(
-            payload
-                .get("suggested_domain")
-                .and_then(|v| v.as_str()),
+            payload.get("suggested_domain").and_then(|v| v.as_str()),
             Some("browser")
         );
     }
 
-    #[tokio::test]
-    async fn app_list_scenes_returns_known_scene_ids() {
+    #[test]
+    fn route_hint_does_not_suggest_removed_app_domain() {
         let tool = ControlHubTool::new();
         let ctx = empty_context();
-        let results = tool
-            .dispatch("app", "list_scenes", &json!({}), &ctx)
-            .await
-            .expect("list_scenes should succeed");
-        let payload = results.first().unwrap().content();
-        let arr = payload.get("scenes").and_then(|v| v.as_array()).unwrap();
-        let ids: Vec<&str> = arr
-            .iter()
-            .filter_map(|s| s.get("id").and_then(|v| v.as_str()))
-            .collect();
-        for must_have in ["session", "settings", "miniapps", "welcome"] {
-            assert!(
-                ids.iter().any(|id| *id == must_have),
-                "scene `{must_have}` missing from list_scenes catalog: {ids:?}"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn app_list_settings_tabs_returns_models_tab() {
-        let tool = ControlHubTool::new();
-        let ctx = empty_context();
-        let results = tool
-            .dispatch("app", "list_settings_tabs", &json!({}), &ctx)
-            .await
-            .expect("list_settings_tabs should succeed");
-        let payload = results.first().unwrap().content();
-        let arr = payload.get("tabs").and_then(|v| v.as_array()).unwrap();
-        assert!(arr.iter().any(|t| t.get("id").and_then(|v| v.as_str()) == Some("models")));
-    }
-
-    #[tokio::test]
-    async fn app_list_miniapps_returns_unavailable_when_subsystem_absent() {
-        let tool = ControlHubTool::new();
-        let ctx = empty_context();
-        let results = tool
-            .dispatch("app", "list_miniapps", &json!({}), &ctx)
-            .await
-            .expect("list_miniapps should succeed even without subsystem");
-        let payload = results.first().unwrap().content();
-        // Without a global MiniAppManager the action must succeed-with-empty
-        // and signal availability=false, NOT error out — otherwise the model
-        // would assume the action itself is broken.
-        assert_eq!(
-            payload.get("available").and_then(|v| v.as_bool()),
-            Some(false)
-        );
-        let arr = payload.get("miniapps").and_then(|v| v.as_array()).unwrap();
-        assert!(arr.is_empty());
-    }
-
-    #[tokio::test]
-    async fn app_self_describe_includes_scenes_settings_and_miniapps_keys() {
-        let tool = ControlHubTool::new();
-        let ctx = empty_context();
-        let results = tool
-            .dispatch("app", "app_self_describe", &json!({}), &ctx)
-            .await
-            .expect("app_self_describe should succeed");
-        let payload = results.first().unwrap().content();
-        for key in ["scenes", "settingsTabs", "miniapps", "miniappSubsystemAvailable"] {
-            assert!(
-                payload.get(key).is_some(),
-                "self-describe payload missing `{key}`: {payload}"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn app_list_tasks_includes_open_miniapp_recipes() {
-        let tool = ControlHubTool::new();
-        let ctx = empty_context();
-        let results = tool
-            .dispatch("app", "list_tasks", &json!({}), &ctx)
-            .await
-            .expect("list_tasks should succeed");
-        let payload = results.first().unwrap().content();
-        let names: Vec<String> = payload
-            .get("tasks")
-            .and_then(|v| v.as_array())
-            .unwrap()
-            .iter()
-            .filter_map(|t| t.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
-            .collect();
-        for required in ["open_miniapp_gallery", "open_miniapp", "set_primary_model"] {
-            assert!(
-                names.iter().any(|n| n == required),
-                "task `{required}` missing from execute_task catalog: {names:?}"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn route_hint_picks_app_for_bitfun_intent() {
-        let tool = ControlHubTool::new();
-        let ctx = empty_context();
-        let results = tool
-            .dispatch(
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let results = rt
+            .block_on(tool.dispatch(
                 "meta",
                 "route_hint",
                 &json!({ "intent": "切换 BitFun 默认模型" }),
                 &ctx,
-            )
-            .await
+            ))
             .unwrap();
         let payload = results.first().unwrap().content();
         let arr = payload.get("ranked").and_then(|v| v.as_array()).unwrap();
         assert!(arr
             .iter()
-            .any(|s| s.get("domain").and_then(|v| v.as_str()) == Some("app")));
+            .all(|s| s.get("domain").and_then(|v| v.as_str()) != Some("app")));
     }
 
     #[test]
     fn parse_bracket_code_prefix_extracts_code_and_rest() {
-        // Standard SelfControl frontend shape.
+        // Standard structured frontend error shape.
         let (code, rest) = parse_bracket_code_prefix("[NOT_FOUND] no element matched #x")
             .expect("must parse code");
         assert_eq!(code, "NOT_FOUND");
@@ -3292,7 +4210,7 @@ mod control_hub_tests {
         // of falling back to FRONTEND_ERROR / INTERNAL like the old
         // heuristic-only path did.
         let err = map_dispatch_error(
-            "app",
+            "desktop",
             "click",
             BitFunError::tool(
                 "[AMBIGUOUS] 3 matches for text 'Save'\nHints: pass index | use selector"
@@ -3306,7 +4224,7 @@ mod control_hub_tests {
 
         // Unknown frontend code should fall through to FRONTEND_ERROR.
         let err = map_dispatch_error(
-            "app",
+            "desktop",
             "x",
             BitFunError::tool("[WAT_IS_THIS] ouch".to_string()),
         );
@@ -3338,7 +4256,12 @@ mod control_hub_tests {
             ErrorCode::Timeout
         ));
         assert!(matches!(
-            map_dispatch_error("browser", "click", mk("stale reference, take a fresh snapshot")).code,
+            map_dispatch_error(
+                "browser",
+                "click",
+                mk("stale reference, take a fresh snapshot")
+            )
+            .code,
             ErrorCode::StaleRef
         ));
         // "session ... not found" hits NotFound first (correct: that is what
@@ -3355,44 +4278,109 @@ mod control_hub_tests {
     }
 
     #[tokio::test]
-    async fn description_advertises_paste_as_canonical_text_input() {
-        // Regression guard: the prompt-side guidance and the tool-side
-        // description must both surface `paste` so the model picks it
-        // over `type_text` for CJK / emoji / IM messages.
+    async fn description_advertises_paste_as_canonical_text_input_when_desktop_available() {
+        // The full paste guidance is only embedded when the desktop domain is
+        // available in the current runtime.
+        if !ControlHubTool::desktop_domain_enabled().await {
+            return;
+        }
         let desc = ControlHubTool::new().description().await.unwrap();
         assert!(
             desc.contains("`paste"),
             "description must call out `paste` as a first-class action"
         );
         assert!(
-            desc.contains("PREFER")
-                || desc.contains("prefer")
-                || desc.contains("STRONGLY"),
+            desc.contains("PREFER") || desc.contains("prefer") || desc.contains("STRONGLY"),
             "description must steer the model AWAY from type_text for non-trivial input"
         );
     }
 
     #[tokio::test]
+    async fn description_documents_two_browser_modes_and_forbids_desktop_browser_automation() {
+        let desc = ControlHubTool::new().description().await.unwrap();
+        assert!(
+            desc.contains("Two browser modes"),
+            "description must describe the two browser control modes"
+        );
+        assert!(
+            desc.contains("mode: \"headless\"") && desc.contains("mode: \"default\""),
+            "description must mention both browser connect modes"
+        );
+        assert!(
+            desc.contains(
+                "Do **not** use `domain: \"desktop\"` mouse/keyboard actions to drive a browser."
+            ),
+            "description must explicitly forbid desktop browser automation"
+        );
+    }
+
+    #[tokio::test]
     async fn desktop_paste_without_host_returns_clean_error() {
-        // In `cargo test -p bitfun-core` there is no ComputerUseHost
-        // (desktop runtime not booted). The tool must surface a structured
-        // error rather than panicking, so the model knows desktop control
-        // is unavailable on this transport.
+        // In unit tests there is no ComputerUseHost. Depending on whether the
+        // desktop domain is enabled for this runtime, dispatch either returns a
+        // structured NOT_AVAILABLE result envelope immediately, or reaches the
+        // host check and returns a tool error. Both are acceptable as long as
+        // the failure is clean and non-panicking.
         let tool = ControlHubTool::new();
         let ctx = empty_context();
-        let err = tool
+        let result = tool
             .dispatch(
                 "desktop",
                 "paste",
                 &json!({ "text": "hi", "submit": true }),
                 &ctx,
             )
+            .await;
+
+        match result {
+            Ok(results) => {
+                let payload = results.first().expect("one result").content();
+                assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(false));
+                assert_eq!(
+                    payload
+                        .get("error")
+                        .and_then(|v| v.get("code"))
+                        .and_then(|v| v.as_str()),
+                    Some("NOT_AVAILABLE")
+                );
+            }
+            Err(err) => {
+                assert!(
+                    err.to_string().contains("Desktop control")
+                        || err.to_string().contains("Computer Use"),
+                    "expected desktop availability hint, got: {}",
+                    err
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_connect_headless_requires_existing_test_port() {
+        let tool = ControlHubTool::new();
+        let ctx = empty_context();
+        let results = tool
+            .dispatch(
+                "browser",
+                "connect",
+                &json!({ "mode": "headless", "port": 1 }),
+                &ctx,
+            )
             .await
-            .expect_err("must fail without ComputerUseHost");
+            .expect("dispatch should succeed and return a structured error");
+        let payload: serde_json::Value =
+            serde_json::from_value(results[0].content().clone()).unwrap();
+        assert_eq!(payload["ok"], serde_json::Value::Bool(false));
+        assert_eq!(payload["error"]["code"], "NOT_AVAILABLE");
+        let hints = payload["error"]["hints"]
+            .as_array()
+            .expect("hints should be present");
         assert!(
-            err.to_string().contains("Desktop control"),
-            "expected desktop-host availability hint, got: {}",
-            err
+            hints
+                .iter()
+                .any(|v| v.as_str().unwrap_or("").contains("headless")),
+            "expected headless guidance in hints: {}",
+            payload
         );
     }
 
@@ -3459,9 +4447,7 @@ mod control_hub_tests {
             .and_then(|v| v.as_array())
             .expect("system.script_types missing");
         assert!(
-            script_types
-                .iter()
-                .any(|s| s.as_str() == Some("shell")),
+            script_types.iter().any(|s| s.as_str() == Some("shell")),
             "script_types must include 'shell': {script_types:?}"
         );
         // On macOS we must additionally see applescript.
@@ -3604,10 +4590,7 @@ mod control_hub_tests {
             Some(true),
             "shell run_script payload: {payload}"
         );
-        let out = payload
-            .get("output")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let out = payload.get("output").and_then(|v| v.as_str()).unwrap_or("");
         assert!(
             out.contains("hello-bitfun"),
             "expected stdout to contain 'hello-bitfun', got '{out}'"

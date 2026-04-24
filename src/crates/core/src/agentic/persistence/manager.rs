@@ -12,7 +12,8 @@ use crate::service::remote_ssh::workspace_state::{
 };
 use crate::service::session::{
     DialogTurnData, SessionMetadata, SessionStatus, SessionTranscriptExport,
-    SessionTranscriptExportOptions, SessionTranscriptIndexEntry, ToolItemData, TranscriptLineRange,
+    SessionTranscriptExportOptions, SessionTranscriptIndexEntry, StoredSessionIndexFile,
+    StoredSessionMetadataFile, ToolItemData, TranscriptLineRange, SESSION_STORAGE_SCHEMA_VERSION,
 };
 use crate::service::workspace_runtime::WorkspaceRuntimeService;
 use crate::util::errors::{BitFunError, BitFunResult};
@@ -27,7 +28,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::Mutex;
 
-const SESSION_SCHEMA_VERSION: u32 = 2;
 const TRANSCRIPT_SCHEMA_VERSION: u32 = 1;
 const JSON_WRITE_MAX_RETRIES: usize = 5;
 const JSON_WRITE_RETRY_BASE_DELAY_MS: u64 = 30;
@@ -35,13 +35,6 @@ const SESSION_TRANSCRIPT_PREVIEW_CHAR_LIMIT: usize = 120;
 
 static JSON_FILE_WRITE_LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = OnceLock::new();
 static SESSION_INDEX_LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> = OnceLock::new();
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredSessionMetadataFile {
-    schema_version: u32,
-    #[serde(flatten)]
-    metadata: SessionMetadata,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredDialogTurnFile {
@@ -65,13 +58,6 @@ struct StoredTurnContextSnapshotFile {
     session_id: String,
     turn_index: usize,
     messages: Vec<Message>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredSessionIndex {
-    schema_version: u32,
-    updated_at: u64,
-    sessions: Vec<SessionMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,7 +173,26 @@ impl PersistenceManager {
         &self.runtime_service
     }
 
+    /// Resolve the on-disk sessions directory for `workspace_path`.
+    ///
+    /// For local workspaces this delegates to `PathManager::project_sessions_dir`,
+    /// which slugifies the workspace root under `~/.bitfun/projects/`.
+    ///
+    /// For remote SSH workspaces, callers (notably `desktop_effective_session_storage_path`)
+    /// pass an already-resolved mirror path under `~/.bitfun/remote_ssh/{host}/{path}/sessions`.
+    /// In that case we MUST use the path as-is; otherwise the slug pipeline would treat the
+    /// mirror path as a workspace root and write/read to a bogus
+    /// `~/.bitfun/projects/<slug-of-mirror-path>/sessions/` location.
     fn project_sessions_dir(&self, workspace_path: &Path) -> PathBuf {
+        let remote_mirror_root = PathManager::remote_ssh_mirror_root();
+        if workspace_path.starts_with(&remote_mirror_root) {
+            // Already resolved: either the mirror runtime root, the mirror sessions dir,
+            // or a session sub-dir. Treat the path as the sessions root directly.
+            // (Inputs that already include a trailing `sessions` segment stay correct;
+            // inputs at the mirror runtime root would historically fall back to the
+            // legacy slug, but no current call-site uses that shape.)
+            return workspace_path.to_path_buf();
+        }
         self.path_manager.project_sessions_dir(workspace_path)
     }
 
@@ -610,7 +615,7 @@ impl PersistenceManager {
 
         let workspace_root = resolved_identity
             .as_ref()
-            .map(|identity| identity.workspace_path.clone())
+            .map(|identity| identity.logical_workspace_path().to_string())
             .or_else(|| session.config.workspace_path.clone())
             .or_else(|| existing.and_then(|value| value.workspace_path.clone()))
             .unwrap_or_else(|| workspace_path.to_string_lossy().to_string());
@@ -1230,11 +1235,10 @@ impl PersistenceManager {
             .filter(|metadata| !metadata.should_hide_from_user_lists())
             .collect::<Vec<_>>();
 
-        let index = StoredSessionIndex {
-            schema_version: SESSION_SCHEMA_VERSION,
-            updated_at: Self::system_time_to_unix_ms(SystemTime::now()),
-            sessions: visible_sessions.clone(),
-        };
+        let index = StoredSessionIndexFile::new(
+            Self::system_time_to_unix_ms(SystemTime::now()),
+            visible_sessions.clone(),
+        );
         self.write_json_atomic(&self.index_path(workspace_path), &index)
             .await?;
 
@@ -1248,10 +1252,10 @@ impl PersistenceManager {
     ) -> BitFunResult<()> {
         let index_path = self.index_path(workspace_path);
         let mut index = self
-            .read_json_optional::<StoredSessionIndex>(&index_path)
+            .read_json_optional::<StoredSessionIndexFile>(&index_path)
             .await?
-            .unwrap_or(StoredSessionIndex {
-                schema_version: SESSION_SCHEMA_VERSION,
+            .unwrap_or(StoredSessionIndexFile {
+                schema_version: SESSION_STORAGE_SCHEMA_VERSION,
                 updated_at: 0,
                 sessions: Vec::new(),
             });
@@ -1270,7 +1274,7 @@ impl PersistenceManager {
             .sessions
             .sort_by(|a, b| b.last_active_at.cmp(&a.last_active_at));
         index.updated_at = Self::system_time_to_unix_ms(SystemTime::now());
-        index.schema_version = SESSION_SCHEMA_VERSION;
+        index.schema_version = SESSION_STORAGE_SCHEMA_VERSION;
         self.write_json_atomic(&index_path, &index).await
     }
 
@@ -1281,7 +1285,7 @@ impl PersistenceManager {
     ) -> BitFunResult<()> {
         let index_path = self.index_path(workspace_path);
         let Some(mut index) = self
-            .read_json_optional::<StoredSessionIndex>(&index_path)
+            .read_json_optional::<StoredSessionIndexFile>(&index_path)
             .await?
         else {
             return Ok(());
@@ -1332,7 +1336,7 @@ impl PersistenceManager {
         let _guard = lock.lock().await;
         let index_path = self.index_path(workspace_path);
         if let Some(index) = self
-            .read_json_optional::<StoredSessionIndex>(&index_path)
+            .read_json_optional::<StoredSessionIndexFile>(&index_path)
             .await?
         {
             let has_stale_entry = index.sessions.iter().any(|metadata| {
@@ -1377,10 +1381,7 @@ impl PersistenceManager {
         self.ensure_session_dir(workspace_path, &metadata.session_id)
             .await?;
 
-        let file = StoredSessionMetadataFile {
-            schema_version: SESSION_SCHEMA_VERSION,
-            metadata: metadata.clone(),
-        };
+        let file = StoredSessionMetadataFile::new(metadata.clone());
 
         self.write_json_atomic(
             &self.metadata_path(workspace_path, &metadata.session_id),
@@ -1442,7 +1443,7 @@ impl PersistenceManager {
             .await?;
 
         let snapshot = StoredTurnContextSnapshotFile {
-            schema_version: SESSION_SCHEMA_VERSION,
+            schema_version: SESSION_STORAGE_SCHEMA_VERSION,
             session_id: session_id.to_string(),
             turn_index,
             messages: Self::sanitize_messages_for_persistence(messages),
@@ -1578,7 +1579,7 @@ impl PersistenceManager {
             .await?;
 
         let state = StoredSessionStateFile {
-            schema_version: SESSION_SCHEMA_VERSION,
+            schema_version: SESSION_STORAGE_SCHEMA_VERSION,
             config: session.config.clone(),
             snapshot_session_id: session.snapshot_session_id.clone(),
             compression_state: session.compression_state.clone(),
@@ -1664,7 +1665,7 @@ impl PersistenceManager {
             .load_stored_session_state(workspace_path, session_id)
             .await?
             .unwrap_or(StoredSessionStateFile {
-                schema_version: SESSION_SCHEMA_VERSION,
+                schema_version: SESSION_STORAGE_SCHEMA_VERSION,
                 config: SessionConfig {
                     workspace_path: None,
                     ..Default::default()
@@ -1673,7 +1674,7 @@ impl PersistenceManager {
                 compression_state: CompressionState::default(),
                 runtime_state: SessionState::Idle,
             });
-        stored_state.schema_version = SESSION_SCHEMA_VERSION;
+        stored_state.schema_version = SESSION_STORAGE_SCHEMA_VERSION;
         stored_state.runtime_state = Self::sanitize_runtime_state(state);
         self.save_stored_session_state(workspace_path, session_id, &stored_state)
             .await
@@ -1752,7 +1753,7 @@ impl PersistenceManager {
             .await?;
 
         let file = StoredDialogTurnFile {
-            schema_version: SESSION_SCHEMA_VERSION,
+            schema_version: SESSION_STORAGE_SCHEMA_VERSION,
             turn: turn.clone(),
         };
         self.write_json_atomic(
@@ -2148,6 +2149,7 @@ impl PersistenceManager {
         }
         Ok(())
     }
+
 }
 
 #[cfg(test)]

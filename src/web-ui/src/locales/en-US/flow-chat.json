@@ -107,6 +107,15 @@
     "copyToolInput": "Copy Tool Input",
     "copyToolOutput": "Copy Tool Output"
   },
+  "widgetContextMenu": {
+    "addToInput": "Add selected element to input",
+    "addedToInput": "Selected element added to input",
+    "unknownElement": "element",
+    "displayText": "UI: {{summary}}",
+    "promptSelected": "Selected generative UI element: {{summary}}.",
+    "promptSection": "Section: {{section}}.",
+    "promptFile": "Related file: {{file}}{{line}}."
+  },
   "input": {
     "placeholder": "How can I help you...",
     "placeholderWithContext": "Type a message, or drag and drop files to add context...",
@@ -123,9 +132,8 @@
     "retry": "Retry",
     "addImage": "Add image",
     "maxImagesWarning": "Maximum {{count}} images allowed",
-    "imageAddedSuccess": "Successfully added {{count}} images",
-    "imageAddedSingle": "Added clipboard image: {{name}}",
     "imagePasteFailed": "Image paste failed",
+    "removeImage": "Remove image",
     "largePastePlaceholder": "[Pasted Content {{count}} chars]",
     "messageTooLarge": "Message exceeds the maximum length of {{max}} characters ({{count}} provided).",
     "openWorkspaceFolder": "Open workspace folder",
@@ -162,9 +170,13 @@
     "topP": "Top P",
     "streaming": "Streaming",
     "autoMigrated": {
-      "title": "Model auto-switched",
-      "description": "Session model \"{{previous}}\" is no longer available. Switched to \"{{next}}\".",
-      "reason": "Reason: {{reason}}"
+      "title": "Model switched automatically",
+      "description": "The model previously used by this chat is no longer available. BitFun switched this chat to automatic model selection.",
+      "reasons": {
+        "modelUnavailableOnRestore": "This happened while reopening a previous chat. You can keep going, or choose a model again later.",
+        "modelReconciled": "Your model settings changed recently, so BitFun moved this chat to an available model automatically.",
+        "fallback": "BitFun selected an available model for this chat automatically."
+      }
     }
   },
   "toolbar": {
@@ -332,7 +344,14 @@
     "turnBadge": "Turn {{current}}",
     "btwBackTooltipWithTurn": "Go back to the source session: {{title}} (Turn {{turn}})",
     "btwBackTooltipWithoutTurn": "Go back to the source session: {{title}}",
-    "btwCreateTooltip": "Start a quick side question"
+    "btwCreateTooltip": "Start a quick side question",
+    "searchPlaceholder": "Search messages",
+    "searchResult": "{{current}} / {{total}}",
+    "searchNoResults": "No results",
+    "searchPrevious": "Previous match",
+    "searchNext": "Next match",
+    "searchClose": "Close search",
+    "searchOpen": "Search messages"
   },
   "sessionFilesBadge": {
     "files": "files",
@@ -428,6 +447,27 @@
       "gettingDiff": "Getting diff",
       "preparing": "Preparing diff",
       "failed": "Diff failed"
+    },
+    "generativeUI": {
+      "action": "Generative UI",
+      "streamingPreview": "Streaming preview",
+      "openSource": "Open source",
+      "renderFailed": "Widget rendering failed.",
+      "waitingForContent": "Waiting for widget content...",
+      "saving": "Saving",
+      "unsaved": "Unsaved changes",
+      "saveFailed": "Save failed",
+      "savedToSession": "Saved to session",
+      "saveError": "Failed to save widget source",
+      "saveNow": "Save now",
+      "reset": "Reset",
+      "source": "Source",
+      "empty": "No widget content available.",
+      "workspaceUnavailable": "No workspace is available for this session, so the generated UI source cannot be saved",
+      "openSourceFailed": "Failed to open the generated UI source editor"
+    },
+    "generativeWidget": {
+      "exportFileNamePrefix": "BitFun-Widget"
     },
     "git": {
       "title": "Git",
@@ -535,7 +575,8 @@
       "expandContent": "Expand content",
       "inputParams": "Input Parameters",
       "executionResult": "Execution Result",
-      "viewDetails": "View Details"
+      "viewDetails": "View Details",
+      "interruptedByRestart": "This tool was still running when the app closed last time, so it has been restored as interrupted"
     },
     "askUser": {
       "completed": "Completed",

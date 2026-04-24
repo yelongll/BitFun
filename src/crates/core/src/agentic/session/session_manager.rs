@@ -194,12 +194,12 @@ impl SessionManager {
         if identity.hostname
             == crate::service::remote_ssh::workspace_state::LOCAL_WORKSPACE_SSH_HOST
         {
-            Some(PathBuf::from(identity.workspace_path))
+            Some(PathBuf::from(identity.logical_workspace_path()))
         } else if identity.hostname == "_unresolved" {
             Some(
                 crate::service::remote_ssh::workspace_state::unresolved_remote_session_storage_dir(
                     identity.remote_connection_id.as_deref().unwrap_or_default(),
-                    &identity.workspace_path,
+                    identity.logical_workspace_path(),
                 ),
             )
         } else {
@@ -463,9 +463,7 @@ impl SessionManager {
                 session_id, previous_model_id, reason
             );
 
-            if let Some(coordinator) =
-                crate::agentic::coordination::get_global_coordinator()
-            {
+            if let Some(coordinator) = crate::agentic::coordination::get_global_coordinator() {
                 coordinator
                     .emit_session_model_auto_migrated(
                         &session_id,
@@ -1006,9 +1004,7 @@ impl SessionManager {
                 let previous_model_id = trimmed.to_string();
                 session.config.model_id = Some("auto".to_string());
 
-                if let Some(coordinator) =
-                    crate::agentic::coordination::get_global_coordinator()
-                {
+                if let Some(coordinator) = crate::agentic::coordination::get_global_coordinator() {
                     coordinator
                         .emit_session_model_auto_migrated(
                             session_id,

@@ -5,9 +5,34 @@ use crate::util::errors::{BitFunError, BitFunResult};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::time::Duration;
 
 /// Default CDP debug port.
 pub const DEFAULT_CDP_PORT: u16 = 9222;
+
+/// Windows: suppress the brief console window that flashes when a GUI process
+/// spawns a console subprocess (e.g. `reg.exe`, `tasklist.exe`).
+/// Equivalent to passing `CREATE_NO_WINDOW` (0x08000000) to CreateProcess.
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Build a `Command` that on Windows is configured with `CREATE_NO_WINDOW`
+/// so no console window briefly pops up. On other platforms behaves like
+/// `Command::new`.
+fn silent_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    let cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = cmd;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        cmd
+    }
+}
 
 /// Known browser identifiers and their executable paths per platform.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,7 +100,7 @@ impl BrowserLauncher {
 
     #[cfg(target_os = "macos")]
     fn detect_default_browser_macos() -> BitFunResult<BrowserKind> {
-        let output = Command::new("defaults")
+        let output = silent_command("defaults")
             .args([
                 "read",
                 "com.apple.LaunchServices/com.apple.launchservices.secure",
@@ -118,7 +143,7 @@ impl BrowserLauncher {
 
     #[cfg(target_os = "windows")]
     fn detect_default_browser_windows() -> BitFunResult<BrowserKind> {
-        let output = Command::new("reg")
+        let output = silent_command("reg")
             .args([
                 "query",
                 r"HKEY_CURRENT_USER\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice",
@@ -144,7 +169,7 @@ impl BrowserLauncher {
 
     #[cfg(target_os = "linux")]
     fn detect_default_browser_linux() -> BitFunResult<BrowserKind> {
-        let output = Command::new("xdg-settings")
+        let output = silent_command("xdg-settings")
             .args(["get", "default-web-browser"])
             .output()
             .ok();
@@ -212,23 +237,17 @@ impl BrowserLauncher {
     fn windows_browser_executable(kind: &BrowserKind) -> String {
         let (rel_paths, app_paths_key, fallback_cmd) = match kind {
             BrowserKind::Chrome => (
-                vec![
-                    r"Google\Chrome\Application\chrome.exe",
-                ],
+                vec![r"Google\Chrome\Application\chrome.exe"],
                 Some("chrome.exe"),
                 "chrome.exe",
             ),
             BrowserKind::Edge => (
-                vec![
-                    r"Microsoft\Edge\Application\msedge.exe",
-                ],
+                vec![r"Microsoft\Edge\Application\msedge.exe"],
                 Some("msedge.exe"),
                 "msedge.exe",
             ),
             BrowserKind::Brave => (
-                vec![
-                    r"BraveSoftware\Brave-Browser\Application\brave.exe",
-                ],
+                vec![r"BraveSoftware\Brave-Browser\Application\brave.exe"],
                 Some("brave.exe"),
                 "brave.exe",
             ),
@@ -237,11 +256,7 @@ impl BrowserLauncher {
                 None,
                 "chromium.exe",
             ),
-            BrowserKind::Arc => (
-                vec![r"Arc\Arc.exe"],
-                None,
-                "arc.exe",
-            ),
+            BrowserKind::Arc => (vec![r"Arc\Arc.exe"], None, "arc.exe"),
             BrowserKind::Unknown(name) => return name.clone(),
         };
 
@@ -272,7 +287,7 @@ impl BrowserLauncher {
                     r"{}\Software\Microsoft\Windows\CurrentVersion\App Paths\{}",
                     root, exe_name
                 );
-                let output = Command::new("reg")
+                let output = silent_command("reg")
                     .args(["query", &key, "/ve"])
                     .output()
                     .ok();
@@ -285,13 +300,8 @@ impl BrowserLauncher {
                             if let Some(idx) = lower.find("reg_sz") {
                                 let value = line[idx + "REG_SZ".len()..].trim();
                                 let unquoted = value.trim_matches('"').trim();
-                                if !unquoted.is_empty()
-                                    && std::path::Path::new(unquoted).exists()
-                                {
-                                    debug!(
-                                        "Resolved {} via App Paths: {}",
-                                        exe_name, unquoted
-                                    );
+                                if !unquoted.is_empty() && std::path::Path::new(unquoted).exists() {
+                                    debug!("Resolved {} via App Paths: {}", exe_name, unquoted);
                                     return unquoted.to_string();
                                 }
                             }
@@ -360,7 +370,7 @@ impl BrowserLauncher {
             "Launching {} with CDP on port {} (user_data_dir={:?})",
             kind, port, user_data_dir
         );
-        let result = Command::new(&exe).arg(&flag).args(&extra).spawn();
+        let result = silent_command(&exe).arg(&flag).args(&extra).spawn();
 
         match result {
             Ok(_child) => {
@@ -384,6 +394,106 @@ impl BrowserLauncher {
                 kind, e
             ))),
         }
+    }
+
+    pub async fn restart_with_cdp(kind: &BrowserKind, port: u16) -> BitFunResult<LaunchResult> {
+        Self::terminate_browser(kind)?;
+        Self::wait_for_browser_exit(kind, Duration::from_secs(8)).await?;
+        Self::launch_with_cdp_opts(kind, port, None).await
+    }
+
+    fn terminate_browser(kind: &BrowserKind) -> BitFunResult<()> {
+        #[cfg(target_os = "macos")]
+        {
+            let app_name = match kind {
+                BrowserKind::Chrome => "Google Chrome",
+                BrowserKind::Edge => "Microsoft Edge",
+                BrowserKind::Brave => "Brave Browser",
+                BrowserKind::Arc => "Arc",
+                BrowserKind::Chromium => "Chromium",
+                BrowserKind::Unknown(name) => name.as_str(),
+            };
+            let script = format!(
+                "tell application \"{}\" to quit",
+                app_name.replace('"', "\\\"")
+            );
+            let output = silent_command("osascript")
+                .args(["-e", &script])
+                .output()
+                .map_err(|e| BitFunError::tool(format!("Failed to quit {}: {}", kind, e)))?;
+            if output.status.success() {
+                return Ok(());
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(BitFunError::tool(format!(
+                "Failed to quit {}: {}",
+                kind,
+                stderr.trim()
+            )));
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let process_names: &[&str] = match kind {
+                BrowserKind::Chrome => &["chrome.exe"],
+                BrowserKind::Edge => &["msedge.exe"],
+                BrowserKind::Brave => &["brave.exe"],
+                BrowserKind::Arc => &["arc.exe"],
+                BrowserKind::Chromium => &["chromium.exe", "chrome.exe"],
+                BrowserKind::Unknown(_) => {
+                    return Err(BitFunError::tool(
+                        "Unsupported browser kind for restart on Windows".to_string(),
+                    ))
+                }
+            };
+            for process_name in process_names {
+                let output = silent_command("taskkill")
+                    .args(["/IM", process_name, "/F"])
+                    .output()
+                    .map_err(|e| {
+                        BitFunError::tool(format!("Failed to terminate {}: {}", process_name, e))
+                    })?;
+                let stdout = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+                if output.status.success()
+                    || stdout.contains("no instance")
+                    || stdout.contains("not found")
+                    || stderr.contains("no instance")
+                    || stderr.contains("not found")
+                {
+                    continue;
+                }
+                return Err(BitFunError::tool(format!(
+                    "Failed to terminate {}: {}{}",
+                    process_name,
+                    String::from_utf8_lossy(&output.stdout).trim(),
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )));
+            }
+            return Ok(());
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            let _ = kind;
+            Err(BitFunError::tool(
+                "Browser restart with CDP is not supported on this platform".to_string(),
+            ))
+        }
+    }
+
+    async fn wait_for_browser_exit(kind: &BrowserKind, timeout: Duration) -> BitFunResult<()> {
+        let started = std::time::Instant::now();
+        while Self::is_browser_running(kind) {
+            if started.elapsed() >= timeout {
+                return Err(BitFunError::tool(format!(
+                    "Timed out waiting for {} to exit before restart",
+                    kind
+                )));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        Ok(())
     }
 
     /// Check if a browser process is currently running.
@@ -424,7 +534,7 @@ impl BrowserLauncher {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             for name in &process_names {
-                let output = Command::new("pgrep").args(["-f", name]).output().ok();
+                let output = silent_command("pgrep").args(["-f", name]).output().ok();
                 if let Some(out) = output {
                     if out.status.success() && !out.stdout.is_empty() {
                         return true;
@@ -438,7 +548,7 @@ impl BrowserLauncher {
         {
             for image in &process_names {
                 let filter = format!("IMAGENAME eq {}", image);
-                let output = Command::new("tasklist")
+                let output = silent_command("tasklist")
                     .args(["/FI", &filter, "/NH", "/FO", "CSV"])
                     .output()
                     .ok();
@@ -446,7 +556,10 @@ impl BrowserLauncher {
                     let text = String::from_utf8_lossy(&out.stdout);
                     // tasklist prints "INFO: No tasks ..." when nothing matches;
                     // otherwise the first CSV column contains the image name.
-                    if text.to_ascii_lowercase().contains(&image.to_ascii_lowercase()) {
+                    if text
+                        .to_ascii_lowercase()
+                        .contains(&image.to_ascii_lowercase())
+                    {
                         return true;
                     }
                 }

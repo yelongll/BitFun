@@ -141,17 +141,20 @@ impl ConversationCoordinator {
                 .await
                 .map(|e| e.connection_name)
                 .unwrap_or_else(|| rid.to_string());
-
-            return Some(WorkspaceBinding::new_remote(
+            let binding = WorkspaceBinding::new_remote(
                 None,
                 path_buf,
                 rid.to_string(),
                 connection_name,
                 identity,
-            ));
+            );
+
+            return Some(binding);
         }
 
-        Some(WorkspaceBinding::new(None, path_buf))
+        let binding = WorkspaceBinding::new(None, path_buf);
+
+        Some(binding)
     }
 
     /// Build `WorkspaceServices` from a resolved `WorkspaceBinding`.
@@ -209,7 +212,9 @@ impl ConversationCoordinator {
                 binding.root_path_string(),
             ))
         } else {
-            Some(crate::agentic::workspace::local_workspace_services())
+            Some(crate::agentic::workspace::local_workspace_services(
+                binding.root_path_string(),
+            ))
         }
     }
 
@@ -333,6 +338,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 parent_task_tool_id: None,
                 subagent_session_id: None,
                 status: Some("completed".to_string()),
+                interruption_reason: None,
             }],
             thinking_items: Vec::new(),
             start_time: started_at,
@@ -389,6 +395,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 parent_task_tool_id: None,
                 subagent_session_id: None,
                 status: Some("error".to_string()),
+                interruption_reason: None,
             }],
             thinking_items: Vec::new(),
             start_time: timestamp,
@@ -573,10 +580,13 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         turn_index: usize,
         user_input: &str,
         workspace_path: &str,
+        // Pre-resolved on-disk session storage path (mirror dir for remote workspaces).
+        // When present we use it directly so we never re-resolve without remote SSH info
+        // (which would slugify a raw remote POSIX path under `~/.bitfun/projects/`).
+        resolved_session_storage_path: Option<&std::path::Path>,
         status: crate::service::session::TurnStatus,
         user_message_metadata: Option<serde_json::Value>,
     ) {
-        use crate::agentic::core::SessionConfig;
         use crate::agentic::persistence::PersistenceManager;
         use crate::infrastructure::PathManager;
         use crate::service::session::{
@@ -588,16 +598,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             Err(_) => return,
         };
 
-        let workspace_path_buf = {
-            let binding = Self::build_workspace_binding(&SessionConfig {
-                workspace_path: Some(workspace_path.to_string()),
-                ..Default::default()
-            })
-            .await;
-            binding
-                .as_ref()
-                .map(|b| b.session_storage_path().to_path_buf())
-                .unwrap_or_else(|| std::path::PathBuf::from(workspace_path))
+        let workspace_path_buf = match resolved_session_storage_path {
+            Some(p) => p.to_path_buf(),
+            None => std::path::PathBuf::from(workspace_path),
         };
         let persistence_manager = match PersistenceManager::new(path_manager) {
             Ok(manager) => manager,
@@ -1419,6 +1422,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         let session_workspace_path = session_workspace
             .as_ref()
             .map(|workspace| workspace.root_path_string());
+        // Pre-resolve the on-disk session storage path (mirror dir for remote workspaces)
+        // so the safety-net writer never has to re-resolve without remote_connection_id /
+        // remote_ssh_host (which would silently fall back to a slugified raw remote path).
+        let session_storage_path = session_workspace
+            .as_ref()
+            .map(|workspace| workspace.session_storage_path().to_path_buf());
 
         let execution_context = ExecutionContext {
             session_id: session_id.clone(),
@@ -1481,6 +1490,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         let session_id_clone = session_id.clone();
         let turn_id_clone = turn_id.clone();
         let user_input_for_workspace = wrapped_user_input.clone();
+        let session_storage_path_for_finalize = session_storage_path.clone();
         let effective_agent_type_clone = effective_agent_type.clone();
         let user_message_metadata_clone = user_message_metadata;
         let scheduler_notify_tx = self.scheduler_notify_tx.get().cloned();
@@ -1655,6 +1665,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     turn_index,
                     &user_input_for_workspace,
                     wp,
+                    session_storage_path_for_finalize.as_deref(),
                     status,
                     user_message_metadata_clone,
                 )

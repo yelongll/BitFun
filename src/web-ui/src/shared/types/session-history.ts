@@ -6,6 +6,7 @@
 
 export type SessionKind = 'normal' | 'btw';
 export type PersistedSessionKind = 'standard' | 'subagent';
+export type SessionTitleSource = 'text' | 'i18n';
 
 export interface SessionCustomMetadata extends Record<string, unknown> {
   kind?: SessionKind;
@@ -14,6 +15,9 @@ export interface SessionCustomMetadata extends Record<string, unknown> {
   parentDialogTurnId?: string | null;
   parentTurnIndex?: number | null;
   lastFinishedAt?: number | null;
+  titleSource?: SessionTitleSource | null;
+  titleKey?: string | null;
+  titleParams?: Record<string, unknown> | null;
 }
 
 export interface SessionMetadata {
@@ -87,6 +91,12 @@ export interface TextItemData {
   content: string;
   isStreaming: boolean;
   timestamp: number;
+  status?: string;
+  orderIndex?: number;
+  isMarkdown?: boolean;
+  isSubagentItem?: boolean;
+  parentTaskToolId?: string;
+  subagentSessionId?: string;
 }
 
 export interface ThinkingItemData {
@@ -97,6 +107,9 @@ export interface ThinkingItemData {
   timestamp: number;
   orderIndex?: number;
   status?: string;
+  isSubagentItem?: boolean;
+  parentTaskToolId?: string;
+  subagentSessionId?: string;
 }
 
 export interface ToolItemData {
@@ -108,6 +121,12 @@ export interface ToolItemData {
   startTime: number;
   endTime?: number;
   durationMs?: number;
+  orderIndex?: number;
+  status?: string;
+  interruptionReason?: 'app_restart';
+  isSubagentItem?: boolean;
+  parentTaskToolId?: string;
+  subagentSessionId?: string;
 }
 
 export interface ToolCallData {

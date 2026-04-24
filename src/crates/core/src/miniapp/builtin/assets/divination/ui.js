@@ -10,30 +10,59 @@
 // stored "drawn" state. Visual fields (symbol/tone) are shared.
 
 // ── Cards: shared visuals + per-locale strings ───────────────────────────
+// Hue-balanced palette across 24 cards. Each `tone` is [primary, deep-bg] —
+// primary drives accents (fortune bars, scene tint), deep-bg is the card
+// background gradient endpoint. Hues are spread roughly uniformly around the
+// wheel (red → orange → gold → lime → teal → cyan → blue → indigo → violet
+// → magenta → rose) while still nodding to each card's symbolism.
 const CARD_VISUALS = [
-  { symbol: '✦', tone: ['#5b21b6', '#1e1b4b'] },
-  { symbol: '✶', tone: ['#1e3a8a', '#0c1230'] },
-  { symbol: '✺', tone: ['#9a3412', '#2a0e0a'] },
-  { symbol: '☾', tone: ['#1e293b', '#0f172a'] },
-  { symbol: '☄', tone: ['#4c1d95', '#1f0a3d'] },
-  { symbol: '◆', tone: ['#7f1d1d', '#260a0a'] },
-  { symbol: '∞', tone: ['#065f46', '#04241c'] },
-  { symbol: '✧', tone: ['#0e7490', '#06262e'] },
-  { symbol: '❀', tone: ['#14532d', '#031708'] },
-  { symbol: '⊛', tone: ['#1e40af', '#0a163b'] },
-  { symbol: '✦', tone: ['#92400e', '#2d1305'] },
-  { symbol: '◌', tone: ['#3730a3', '#0f0e2c'] },
-  { symbol: '☼', tone: ['#155e75', '#03222b'] },
-  { symbol: '✉', tone: ['#166534', '#03200d'] },
-  { symbol: '♪', tone: ['#581c87', '#1a0830'] },
-  { symbol: '⚔', tone: ['#9f1239', '#2c0710'] },
+  // 0  命运之轮 — amethyst (270°)
+  { symbol: '✦', tone: ['#6d28d9', '#1a0936'] },
+  // 1  星辰指引 — sapphire (220°)
+  { symbol: '✶', tone: ['#1e3a8a', '#08112e'] },
+  // 2  熔炉之心 — molten orange (18°)
+  { symbol: '✺', tone: ['#c2410c', '#2a0a02'] },
+  // 3  寂静之钟 — slate (215°, low-sat)
+  { symbol: '☾', tone: ['#475569', '#0c121b'] },
+  // 4  银河书简 — deep indigo (250°)
+  { symbol: '☄', tone: ['#4338ca', '#0d0a2e'] },
+  // 5  红宝匠人 — ruby (350°)
+  { symbol: '◆', tone: ['#be123c', '#2c0612'] },
+  // 6  青铜之蛇 — bronze (35°)
+  { symbol: '∞', tone: ['#92400e', '#261105'] },
+  // 7  光之回响 — cyan (188°)
+  { symbol: '✧', tone: ['#0891b2', '#031f29'] },
+  // 8  苔藓低语 — moss (90°)
+  { symbol: '❀', tone: ['#65a30d', '#121e02'] },
+  // 9  星海罗盘 — steel blue (210°)
+  { symbol: '⊛', tone: ['#1d4ed8', '#06163a'] },
+  // 10 黄昏炉火 — amber (28°)
+  { symbol: '✦', tone: ['#b45309', '#2a1106'] },
+  // 11 悬浮之环 — jade (170°)
+  { symbol: '◌', tone: ['#0f766e', '#03221f'] },
+  // 12 镜面湖 — aqua (198°)
+  { symbol: '☼', tone: ['#0369a1', '#031c33'] },
+  // 13 深林信使 — forest (135°)
+  { symbol: '✉', tone: ['#15803d', '#051a0d'] },
+  // 14 夜之提琴 — violet (285°)
+  { symbol: '♪', tone: ['#7e22ce', '#1c0830'] },
+  // 15 黎明铸铁 — crimson (358°)
+  { symbol: '⚔', tone: ['#b91c1c', '#260606'] },
+  // 16 极光之纱 — aurora teal-green (160°)
   { symbol: '✤', tone: ['#0d9488', '#02322f'] },
-  { symbol: '✎', tone: ['#3f3f46', '#101013'] },
-  { symbol: '∽', tone: ['#0369a1', '#021c33'] },
-  { symbol: '♥', tone: ['#86198f', '#2a0833'] },
-  { symbol: '✦', tone: ['#a16207', '#2c1a05'] },
-  { symbol: '✿', tone: ['#be185d', '#310a1f'] },
-  { symbol: '✝', tone: ['#0f766e', '#02211f'] },
+  // 17 羽落之笔 — graphite (220°, near-neutral)
+  { symbol: '✎', tone: ['#52525b', '#0d0d10'] },
+  // 18 潮汐之环 — ocean (235°)
+  { symbol: '∽', tone: ['#1e40af', '#08123a'] },
+  // 19 紫晶圣杯 — magenta (305°)
+  { symbol: '♥', tone: ['#a21caf', '#2a072d'] },
+  // 20 金色齿轮 — gold (45°)
+  { symbol: '✦', tone: ['#a16207', '#2a1805'] },
+  // 21 晨曦之翼 — rose (335°)
+  { symbol: '✿', tone: ['#be185d', '#2c0a1c'] },
+  // 22 寒星之刃 — frost steel-cyan (200°, low-sat)
+  { symbol: '✝', tone: ['#0e7490', '#03161c'] },
+  // 23 月光石阶 — midnight (245°)
   { symbol: '☽', tone: ['#312e81', '#0a0928'] },
 ];
 
@@ -184,6 +213,153 @@ const CARD_STRINGS = {
       '把大目标拆到 30 分钟以内，再开始动手。',
     ] },
   ],
+  'zh-TW': [
+    { name: '命運之輪', tag: '機緣', keyword: '流轉 · 節奏', quotes: [
+      '每個 commit 都在改變命運的曲率，今天值得一次推送。',
+      '齒輪自有其轉法，你只需在對的時刻按下回車。',
+      '今日屬於"先動起來再說"，方向會自己浮現。',
+      '昨天卡住的事，換個時間點再試，常常就通了。',
+    ] },
+    { name: '星辰指引', tag: '希望', keyword: '遠方 · 靈感', quotes: [
+      '當你卡住時，抬頭看看 documentation 之外的世界。',
+      '把眼光放遠一檔，眼前的死結就成了路標。',
+      '今天值得收藏一篇與日常項目無關的好文。',
+      '相信那個讓你心動的"小副業"念頭，它在為你導航。',
+    ] },
+    { name: '熔爐之心', tag: '鍛造', keyword: '精煉 · 重構', quotes: [
+      '今日適合一次果敢的重構，刪除即創造。',
+      '你心裡那段"早晚要改"的代碼，今天就是早。',
+      '與其修補，不如把它推回爐火裡重鑄。',
+      '減法比加法更需要勇氣，今天你有這份勇氣。',
+    ] },
+    { name: '寂靜之鐘', tag: '冥想', keyword: '深思 · 沉潛', quotes: [
+      '讓 IDE 暫停十分鐘，答案常在白板上浮現。',
+      '今天少打字，多想一想。手指會感謝大腦。',
+      '把問題寫下來讀一遍，半數 bug 當場暴露。',
+      '安靜是最被低估的生產力工具。',
+    ] },
+    { name: '銀河書簡', tag: '智識', keyword: '閱讀 · 累積', quotes: [
+      '今天讀完一個長 issue 的討論，比寫十行代碼值錢。',
+      '允許自己花一小時讀源碼，那是滾雪球的開始。',
+      '收藏夾裡那篇文，今天就讀完它。',
+      '一篇好的 RFC，勝過十次會議。',
+    ] },
+    { name: '紅寶匠人', tag: '創造', keyword: '雕琢 · 細節', quotes: [
+      '把一個邊界條件想清楚，就是今天最好的輸出。',
+      '今日適合打磨那個"差不多了"的細節。',
+      '錯誤信息也是產品的一部分，把它寫得人話一點。',
+      '一處微調，往往勝過一次重寫。',
+    ] },
+    { name: '青銅之蛇', tag: '蛻變', keyword: '環路 · 蛻變', quotes: [
+      '一個 retry-loop 修好了，整條鏈路都活了過來。',
+      '讓自己經歷一次"原來如此"的瞬間。',
+      '今天值得一次徹底的認知刷新。',
+      '換個角度看那個老問題，它會變得很小。',
+    ] },
+    { name: '光之迴響', tag: '協作', keyword: '回聲 · 共振', quotes: [
+      '一句"我來幫你看看"，就是今日最強的 buff。',
+      '主動 ping 一下卡住的同事，你的 5 分鐘可能省他半天。',
+      '今天答一個別人問過你的問題，回聲會傳得很遠。',
+      '感謝一位幫過你的同事，越具體越好。',
+    ] },
+    { name: '苔蘚低語', tag: '休憩', keyword: '生長 · 留白', quotes: [
+      '讓進度條慢一點，讓創造力快一點。',
+      '今日宜偷一會兒懶，靈感不在鍵盤上。',
+      '允許一天的"看似沒產出"，土壤需要時間發酵。',
+      '把椅子推開，去窗邊站三分鐘。',
+    ] },
+    { name: '星海羅盤', tag: '抉擇', keyword: '方向 · 決斷', quotes: [
+      '別再糾結技術選型，先把第一行代碼寫出來。',
+      '今日適合做出那個一直拖著的決定。',
+      '選 A 還是選 B 都行，只要別再選"再等等"。',
+      '把方案寫在紙上，多數選擇會自我揭曉。',
+    ] },
+    { name: '黃昏爐火', tag: '專注', keyword: '心流 · 燃燒', quotes: [
+      '關閉 Slack，今天屬於你和編輯器的二人世界。',
+      '把今天最想做的事排到上午第一格。',
+      '一段不被打斷的 90 分鐘，勝過一整天的碎片時間。',
+      '讓"勿擾模式"成為今天的禮物。',
+    ] },
+    { name: '懸浮之環', tag: '平衡', keyword: '取捨 · 張力', quotes: [
+      '完美與上線之間，請選擇上線。',
+      '今天值得為某件事說一次"不"。',
+      '少做一件事，遠比多做一件事難。',
+      '把範圍縮小一半，效果常常翻倍。',
+    ] },
+    { name: '鏡面湖', tag: '覆盤', keyword: '映照 · 覺察', quotes: [
+      '回看一週前自己寫的代碼，會比 review 更誠實。',
+      '今天寫一段三行的覆盤，明天就用得到。',
+      '問自己：這一週最讓我自豪的一件事是什麼？',
+      '過去的你犯過的錯，未必你今天還在犯。',
+    ] },
+    { name: '深林信使', tag: '消息', keyword: '傳達 · 鏈接', quotes: [
+      '一封寫得清楚的郵件，勝過三場會議。',
+      '今天適合主動同步一次進展，讓信息走在前面。',
+      '把那條想了三天的話發出去，最壞不過沒回復。',
+      '一句"對齊一下"，能省掉一週的猜測。',
+    ] },
+    { name: '夜之提琴', tag: '詩意', keyword: '韻律 · 優雅', quotes: [
+      '為變量起一個動聽的名字，命名是程序員的詩。',
+      '今天寫一段你願意拿給朋友看的代碼。',
+      '讓函數像句子那樣易讀，讓模塊像段落那樣自洽。',
+      '把空行用得像呼吸一樣自然。',
+    ] },
+    { name: '黎明鑄鐵', tag: '勇氣', keyword: '直面 · 挑戰', quotes: [
+      '今天直面那個一直被你跳過的 TODO。',
+      '把最難的那件事放在第一個，剩下的會變容易。',
+      '該說的話就說出來，遲到的反饋是沒禮貌的反饋。',
+      '把"等我學會再做"換成"邊做邊學"。',
+    ] },
+    { name: '極光之紗', tag: '靈感', keyword: '迸發 · 流動', quotes: [
+      '保持沐浴或散步的狀態，bug 多半在水流聲裡被沖掉。',
+      '今日的好點子在鍵盤外，記得帶個本子。',
+      '允許自己暫時離開屏幕，靈感會從背後追上來。',
+      '換一個寫代碼的地方，思路也會跟著挪窩。',
+    ] },
+    { name: '羽落之筆', tag: '記錄', keyword: '書寫 · 沉澱', quotes: [
+      '今日適合寫一篇文檔，未來的你會感謝現在的自己。',
+      '把口口相傳的規則落到 README 裡。',
+      '為今天的小決定寫一句"為什麼"，半年後它救你。',
+      '把腦子裡的圖畫到 README 裡，團隊就有了共識。',
+    ] },
+    { name: '潮汐之環', tag: '節奏', keyword: '起伏 · 週期', quotes: [
+      '高效與低谷皆是潮汐，重要的是別在退潮時責怪自己。',
+      '今日宜跟著身體走，效率自有其潮位。',
+      '不必每天都全力奔跑，會跑的人也會走。',
+      '低能量時段，做低能量任務，那叫聰明。',
+    ] },
+    { name: '紫晶聖盃', tag: '豐饒', keyword: '滋養 · 饋贈', quotes: [
+      '別忘了喝水。也別忘了誇自己一句。',
+      '今日給自己留一份小獎勵，哪怕是一杯好咖啡。',
+      '吃頓好的，再回去 debug。',
+      '今天對自己溫柔一些，世界對你也會。',
+    ] },
+    { name: '金色齒輪', tag: '系統', keyword: '機制 · 架構', quotes: [
+      '一個清晰的模塊邊界，勝過十個聰明的 hack。',
+      '今日宜畫一張架構圖，在腦子之外把它顯形。',
+      '與其打補丁，不如先想清楚是誰在和誰說話。',
+      '為機制投資一點時間，未來連本帶利還你。',
+    ] },
+    { name: '晨曦之翼', tag: '啟程', keyword: '出發 · 第一步', quotes: [
+      '把"等我準備好"換成"先 push 一個 draft PR"。',
+      '今日適合開一個新倉庫，哪怕只寫一個 README。',
+      '0 → 1 永遠是最難也最值得的那一步。',
+      '只要開始，就已經領先昨天的自己。',
+    ] },
+    { name: '寒星之刃', tag: '清算', keyword: '剔除 · 淨化', quotes: [
+      '今天適合刪一些過時的依賴，少即是多。',
+      '把那個一年沒人用的功能下線吧。',
+      '收件箱清零一次，整個人都輕盈了。',
+      '過期的待辦，不刪就是在偷未來你的注意力。',
+    ] },
+    { name: '月光石階', tag: '指引', keyword: '夜行 · 步步', quotes: [
+      '不必看清整個階梯，先邁出眼前的這一步。',
+      '今日只問"下一小步是什麼"，別的交給明天。',
+      '黑暗裡走得穩的人，都不靠看清遠方。',
+      '把大目標拆到 30 分鐘以內，再開始動手。',
+    ] },
+  ],
+
   'en-US': [
     { name: 'Wheel of Fortune', tag: 'Chance', keyword: 'Flow · Rhythm', quotes: [
       'Every commit bends the curve of fate — today is worth a push.',
@@ -350,6 +526,22 @@ const SUITS_GOOD = {
     '关掉两个长期不看的群', '为周报准备一段亮点', '把混乱的 imports 排好',
     '为一个边界条件加一个测试', '抽一段时间彻底安静地思考', '感谢一个帮过你的人',
   ],
+  'zh-TW': [
+    '重構一段陳年代碼', '寫一篇技術筆記', '認真做一次 Code Review', 'Pair programming 一小時',
+    '提一個 draft PR', '關閉通知專注 90 分鐘', '用便籤理清需求', '部署一次到測試環境',
+    '認真補單元測試', '把一個 TODO 註釋清掉', '請同事喝一杯咖啡', '早一點下班，散步回家',
+    '給變量起個好聽的名字', '更新依賴小版本', '閱讀一份開源項目 README',
+    '把腦子裡的草圖畫到白板上', '為某段代碼加一段中文註釋', '清空一次桌面文件夾',
+    '回顧上週的待辦，刪掉兩條', '把一個老 issue 關掉', '寫一段集成測試',
+    '把一個長函數拆成兩個', '給項目加一行 logging', '主動同步一次進展',
+    '請教一個不熟悉領域的同事', '為新人寫一份"如何上手"', '把一個 TODO 轉成 issue',
+    '嘗試一個新的快捷鍵', '把一段 if-else 改成查表', '把一個魔法數字提成常量',
+    '用紙筆思考十分鐘', '嘗試一種新的休息節奏', '在 commit message 裡寫"為什麼"',
+    '回應一個擱置的 PR comment', '主動 1:1 一位同事', '為今天定一個最重要的目標',
+    '關掉兩個長期不看的群', '為週報準備一段亮點', '把混亂的 imports 排好',
+    '為一個邊界條件加一個測試', '抽一段時間徹底安靜地思考', '感謝一個幫過你的人',
+  ],
+
   'en-US': [
     'Refactor an old piece of code', 'Write a tech note', 'Do a real code review', 'Pair-program for an hour',
     'Open a draft PR', 'Mute notifications for 90 minutes', 'Lay out the requirements on sticky notes', 'Deploy once to staging',
@@ -380,6 +572,19 @@ const SUITS_BAD = {
     '反复刷新 CI 当作 debug', '在情绪低谷时做职业决定', '在没看 docs 时就重写它',
     '把 review 当作"挑毛病"',
   ],
+  'zh-TW': [
+    '週五傍晚發佈到生產', '直接改 main 分支', 'git push --force', '跳過測試就合併',
+    'rm -rf 不看路徑', '在沒備份時改數據庫', 'npm install -g 不看版本', '關掉 CI 通知',
+    '在情緒激動時回覆評論', '把 try { ... } catch {} 留在 PR 裡', '熬夜調一個一行就能改的 bug',
+    '在沒看清需求時就動手', '為了趕進度跳過 code review', '同時開十個分支',
+    '在 PR 裡夾帶不相關的改動', '在餓肚子時做架構決定', '凌晨發線上變更',
+    '在 review 裡只說"LGTM"不解釋', '為一個細節爭論超過 30 分鐘', '把 hotfix 直接合到 main',
+    '把"以後再說"寫進註釋', '把 print 調試當作日誌', '在不熟悉的代碼裡盲目加 try-catch',
+    '一邊開會一邊寫關鍵代碼', '同時承諾三件事都給同一天', '在沒充分睡眠時上線',
+    '反覆刷新 CI 當作 debug', '在情緒低谷時做職業決定', '在沒看 docs 時就重寫它',
+    '把 review 當作"挑毛病"',
+  ],
+
   'en-US': [
     'Ship to production on a Friday evening', 'Push straight to main', 'git push --force', 'Merge without running tests',
     'rm -rf without checking the path', 'Touch the database without a backup', 'npm install -g without checking the version', 'Mute CI notifications',
@@ -403,6 +608,15 @@ const COLORS = {
     { name: '黛蓝', hex: '#3730a3' }, { name: '银灰', hex: '#94a3b8' }, { name: '苔绿', hex: '#65a30d' },
     { name: '梅红', hex: '#be185d' },
   ],
+  'zh-TW': [
+    { name: '靛青', hex: '#4f46e5' }, { name: '玫珀', hex: '#f472b6' }, { name: '湖藍', hex: '#06b6d4' },
+    { name: '森綠', hex: '#10b981' }, { name: '橙金', hex: '#f59e0b' }, { name: '霧紫', hex: '#a78bfa' },
+    { name: '磚紅', hex: '#ef4444' }, { name: '雪白', hex: '#f5f5f7' }, { name: '炭黑', hex: '#1f2937' },
+    { name: '茶褐', hex: '#92400e' }, { name: '青瓷', hex: '#5eead4' }, { name: '檀香', hex: '#c2956a' },
+    { name: '黛藍', hex: '#3730a3' }, { name: '銀灰', hex: '#94a3b8' }, { name: '苔綠', hex: '#65a30d' },
+    { name: '梅紅', hex: '#be185d' },
+  ],
+
   'en-US': [
     { name: 'Indigo', hex: '#4f46e5' }, { name: 'Rose Amber', hex: '#f472b6' }, { name: 'Lake Blue', hex: '#06b6d4' },
     { name: 'Forest Green', hex: '#10b981' }, { name: 'Amber Gold', hex: '#f59e0b' }, { name: 'Misty Violet', hex: '#a78bfa' },
@@ -420,6 +634,13 @@ const HOURS = {
     '黄昏 17:30 — 19:00', '夜晚 20:00 — 21:30', '夜晚 21:00 — 22:30',
     '深夜 22:00 — 23:30', '深夜 23:00 — 00:30', '凌晨 05:30 — 07:00',
   ],
+  'zh-TW': [
+    '清晨 07:00 — 08:30', '上午 09:30 — 11:00', '上午 10:30 — 12:00',
+    '正午 12:00 — 13:00', '下午 14:00 — 15:30', '下午 15:30 — 17:00',
+    '黃昏 17:30 — 19:00', '夜晚 20:00 — 21:30', '夜晚 21:00 — 22:30',
+    '深夜 22:00 — 23:30', '深夜 23:00 — 00:30', '凌晨 05:30 — 07:00',
+  ],
+
   'en-US': [
     'Early morning 07:00 — 08:30', 'Morning 09:30 — 11:00', 'Late morning 10:30 — 12:00',
     'Midday 12:00 — 13:00', 'Afternoon 14:00 — 15:30', 'Afternoon 15:30 — 17:00',
@@ -459,6 +680,37 @@ const MANTRAS = {
     'Done > Perfect > Started > Nothing.',
     '相信节奏，相信复利。',
   ],
+  'zh-TW': [
+    'It compiles. Ship it.',
+    'Make it work, make it right, make it fast.',
+    'Done is better than perfect.',
+    'Premature optimization is the root of all evil.',
+    'Read the source, Luke.',
+    'Stay hungry, stay foolish.',
+    'Talk is cheap, show me the code.',
+    '最好的代碼，是不必寫的代碼。',
+    '一次只解決一個問題。',
+    '能跑起來，就先跑起來。',
+    '相信你的下一個 git commit。',
+    '今天的我，不評判過去的我。',
+    '簡單優於複雜，明確優於聰明。',
+    '寧可寫兩遍，也別錯抽象一次。',
+    '寫給人讀的代碼，順便能在機器上跑。',
+    '今日少做一些，明天多走一些。',
+    '走得慢一點，但別停下來。',
+    '允許它先醜陋地工作，再優雅地工作。',
+    '名字取得好，bug 就少一半。',
+    '與其完美地做一件事，不如做完一件事。',
+    '別信"以後會重寫"，但允許"現在能用"。',
+    '允許自己今天只做一件好事。',
+    '懷疑你的假設，不要懷疑你的價值。',
+    '今天打動你的，未必能打動半年後的你。',
+    '一切代碼都是債，今天還一點。',
+    '先有反饋，再有完美。',
+    'Done > Perfect > Started > Nothing.',
+    '相信節奏，相信複利。',
+  ],
+
   'en-US': [
     'It compiles. Ship it.',
     'Make it work, make it right, make it fast.',
@@ -524,6 +776,39 @@ const INSIGHTS = {
     '允许自己今天只交付 60 分，明天再迭代。',
     '相信复利，但别忘了今天就是利息。',
   ],
+  'zh-TW': [
+    '今日的注意力比時間更稀缺，請優先分配。',
+    '與其追求"今天做完什麼"，不如確認"今天往哪走"。',
+    '碰到第三次的麻煩，就該把它封裝成函數。',
+    '與其修十個小 bug，不如挖透一個根因。',
+    '一個乾淨的桌面，常常帶來一個乾淨的思路。',
+    '把"我感覺"換成"我看到了"。',
+    '當方案太多時，說明問題沒問對。',
+    '讓別人少猜一次，團隊就快一倍。',
+    '高頻小同步，勝過偶爾大對齊。',
+    '當代碼難寫，往往是設計在求救。',
+    '今天的反饋循環越短，明天的不確定越少。',
+    '如果你想加一個特例，先想想是不是模型錯了。',
+    '別隻問"能不能做"，也問"該不該做"。',
+    '每一次 push，都是給未來的自己寫信。',
+    '小決定靠習慣，大決定靠睡一覺。',
+    '一個穩定的工具鏈，勝過十個炫技。',
+    '把會議變小，把文檔變好。',
+    '今日宜留 10% 的餘力給意外。',
+    '當興趣來敲門，請它進來坐 10 分鐘。',
+    '觀察一次自己的拖延，不評判，只記錄。',
+    '把一段重複操作腳本化，未來你會笑出聲。',
+    '該寫測試時寫測試，該睡覺時睡覺。',
+    '專注是種練習，今天又是一個 set。',
+    '當你想放棄，先去倒一杯水再說。',
+    '今天遇到的每一個 stack trace，都是免費的課。',
+    '不熟悉的領域，先複述一遍再動手。',
+    '當代碼評審讓你不舒服，多半擊中了真問題。',
+    '把"難"拆成"先做哪一步"，難就開始消解。',
+    '允許自己今天只交付 60 分，明天再迭代。',
+    '相信複利，但別忘了今天就是利息。',
+  ],
+
   'en-US': [
     'Today, attention is scarcer than time — allocate it first.',
     'Instead of "what to finish today", decide "which way to head today".',
@@ -591,6 +876,39 @@ const UI_I18N = {
     toastCopied: '已复制到剪贴板',
     toastCopyFailed: '复制失败',
   },
+  'zh-TW': {
+    title: '每日佔卜',
+    spreadAria: '今日牌陣',
+    fortuneMatrix: '運勢矩陣',
+    todayGood: '今日宜',
+    todayBad: '今日忌',
+    omenTitle: '機緣提示',
+    luckyColor: '幸運色',
+    luckyNumber: '幸運數字',
+    luckyHour: '推薦時段',
+    mantra: '咒語',
+    copyText: '複製運勢文本',
+    footerHint: '願你今日的代碼無 bug，commit 總能通過 review。',
+    greetingFresh: '凝神',
+    greetingDrawn: '今日卦象已立',
+    subtitleFresh: '輕觸一張牌，揭開今日卦象',
+    subtitleDrawn: '抽一張牌以重溫',
+    tipFresh: '每日卦象一旦顯現便已註定 · 翌日 00:00 煥新',
+    tipDrawn: '卦象已註定 · 儀式僅供回味',
+    cardAriaLabel: (i) => `第 ${i} 張牌`,
+    todayInsightLabel: '◇ 今日洞察 ◇',
+    fortuneOverall: '綜合', fortuneWork: '工作', fortuneInspire: '靈感', fortuneWealth: '財運',
+    dateFormat: ({ y, m, d }) => `${y} 年 ${m} 月 ${d} 日`,
+    shareCardLine: (name, keyword) => `【${name}】 ${keyword}`,
+    shareInsight: (text) => `今日洞察：${text}`,
+    shareGood: (list) => `今日宜：${list.join('、')}`,
+    shareBad: (list) => `今日忌：${list.join('、')}`,
+    shareLucky: (color, n, hour) => `幸運色：${color}　幸運數字：${n}　推薦時段：${hour}`,
+    shareMantra: (text) => `咒語：${text}`,
+    toastCopied: '已複製到剪貼板',
+    toastCopyFailed: '複製失敗',
+  },
+
   'en-US': {
     title: 'Daily Divination',
     spreadAria: 'Today\'s spread',
@@ -807,6 +1125,23 @@ function applyStaticI18n() {
 // ── Card-back symbols (purely cosmetic; the actual fortune is fixed by date) ──
 const BACK_SYMBOLS = ['✦', '✶', '☾', '✧', '☄', '✺', '◌', '☼', '✤'];
 
+function applySceneTone(tone) {
+  // Dye the entire scene (background, aurora, card, accents) with the day's
+  // card tone so the room feels monochromatic — no clash between purple bg
+  // and a blue card. tone[0] is the bright accent, tone[1] is deep shadow.
+  const root = document.querySelector('.div-app') || document.body;
+  root.style.setProperty('--card-tone-1', tone[0]);
+  root.style.setProperty('--card-tone-2', tone[1]);
+  if (dom.cardFront) {
+    dom.cardFront.style.setProperty('--card-tone-1', tone[0]);
+    dom.cardFront.style.setProperty('--card-tone-2', tone[1]);
+  }
+  if (dom.resultStage) {
+    dom.resultStage.style.setProperty('--card-tone-1', tone[0]);
+    dom.resultStage.style.setProperty('--card-tone-2', tone[1]);
+  }
+}
+
 async function init() {
   applyStaticI18n();
   const today = dateKey();
@@ -926,10 +1261,17 @@ function onPick(chosen, today, alreadyDrawn) {
     }
   }
   chosen.classList.add('is-chosen');
+  // Pre-compute the day's card so we can start the scene-tone transition
+  // in lockstep with the burst+flip animation. CSS will animate `.div-app`
+  // background over ~1.4s, so by the time the result is revealed the room
+  // is already breathing the new card's color.
+  const indices = generateFortuneIndices(today);
+  const tone = CARD_VISUALS[indices.cardIdx].tone;
   // After the lift settles, trigger the flip-into-burst sequence.
   setTimeout(() => {
     spawnBurst(chosen);
     chosen.classList.add('is-flipping');
+    applySceneTone(tone);
   }, 380);
   setTimeout(() => revealResult(today, alreadyDrawn), 1280);
 }
@@ -961,7 +1303,7 @@ function paintResult(f) {
   dom.cardArt.textContent = f.card.symbol;
   dom.cardName.textContent = f.card.name;
   dom.cardKeyword.textContent = f.card.keyword;
-  dom.cardQuote.textContent = `"${f.quote}"`;
+  dom.cardQuote.textContent = f.quote;
   if (dom.cardInsight) {
     dom.cardInsight.innerHTML = '';
     const label = document.createElement('span');
@@ -973,8 +1315,7 @@ function paintResult(f) {
     dom.cardInsight.appendChild(label);
     dom.cardInsight.appendChild(text);
   }
-  dom.cardFront.style.setProperty('--card-tone-1', f.card.tone[0]);
-  dom.cardFront.style.setProperty('--card-tone-2', f.card.tone[1]);
+  applySceneTone(f.card.tone);
 
   dom.fortunes.innerHTML = '';
   for (const item of f.fortunes) {
@@ -998,7 +1339,7 @@ function paintResult(f) {
   dom.luckyColorName.textContent = f.color.name;
   dom.luckyNumber.textContent = String(f.luckyNumber);
   dom.luckyHour.textContent = f.hour;
-  dom.luckyMantra.textContent = `"${f.mantra}"`;
+  dom.luckyMantra.textContent = f.mantra;
 }
 
 function escapeHtml(s) {
