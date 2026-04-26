@@ -185,7 +185,8 @@ export async function sendMessage(
       dialogTurnId,
     });
     if (!startOk) {
-      throw new Error('Session is still busy finishing the previous turn');
+      const currentState = stateMachineManager.getCurrentState(sessionId);
+      throw new Error(`Session is still busy finishing the previous turn (current state: ${currentState})`);
     }
 
     if (isFirstMessage) {
@@ -304,6 +305,7 @@ export async function cancelCurrentTask(context: FlowChatContext): Promise<boole
       : false;
     
     if (success) {
+      context.userCancelledSessionIds.add(sessionId);
       markCurrentTurnItemsAsCancelled(context, sessionId);
       cleanupSessionBuffers(context, sessionId);
     }

@@ -2250,7 +2250,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         workspacePath={workspacePath}
       />
       
-      <div className="code-editor-tool__content">
+<div className="code-editor-tool__content">
         {isTableEditor ? (
           <CodeTableEditor
             value={content}

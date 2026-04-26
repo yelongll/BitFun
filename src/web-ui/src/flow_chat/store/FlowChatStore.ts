@@ -47,8 +47,8 @@ export class FlowChatStore {
   private static instance: FlowChatStore;
   private state: FlowChatState;
   private listeners: Set<(state: FlowChatState) => void> = new Set();
-  
   private silentMode = false;
+  private onPersistUnreadCompletion?: (sessionId: string, value: 'completed' | 'error' | 'interrupted' | undefined) => void;
 
   private constructor() {
     this.clearOldStorage();
@@ -194,6 +194,16 @@ export class FlowChatStore {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  /**
+   * Register a callback to persist unread completion changes.
+   * Called by FlowChatManager during initialization.
+   */
+  public registerPersistUnreadCompletionCallback(
+    callback: (sessionId: string, value: 'completed' | 'error' | 'interrupted' | undefined) => void
+  ): void {
+    this.onPersistUnreadCompletion = callback;
   }
 
   public createSession(
@@ -431,13 +441,17 @@ export class FlowChatStore {
     });
   }
 
-  public updateSessionBtwOrigin(sessionId: string, origin: Session['btwOrigin']): void {
+  public updateSessionBtwOrigin(
+    sessionId: string,
+    origin: Session['btwOrigin'],
+    sessionKind: SessionKind = 'btw'
+  ): void {
     this.setState(prev => {
       const session = prev.sessions.get(sessionId);
       if (!session) return prev;
 
       const relationship = normalizeSessionRelationship({
-        sessionKind: 'btw',
+        sessionKind,
         parentSessionId: origin?.parentSessionId ?? session.parentSessionId,
         btwOrigin: { ...(session.btwOrigin || {}), ...(origin || {}) },
       });
@@ -1256,6 +1270,7 @@ export class FlowChatStore {
 
       const updatedSession: Session = {
         ...session,
+        lastActiveAt: timestamp,
         lastFinishedAt: timestamp,
       };
 
@@ -1269,9 +1284,87 @@ export class FlowChatStore {
     });
   }
 
+  public markSessionUnreadCompletion(
+    sessionId: string,
+    completionKind: 'completed' | 'error' | 'interrupted'
+  ): void {
+    this.setState(prev => {
+      const session = prev.sessions.get(sessionId);
+      if (!session) return prev;
+
+      const updatedSession: Session = {
+        ...session,
+        hasUnreadCompletion: completionKind,
+      };
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return { ...prev, sessions: newSessions };
+    });
+    this.onPersistUnreadCompletion?.(sessionId, completionKind);
+  }
+
+  public clearSessionUnreadCompletion(sessionId: string): void {
+    this.setState(prev => {
+      const session = prev.sessions.get(sessionId);
+      if (!session || !session.hasUnreadCompletion) return prev;
+
+      const updatedSession: Session = {
+        ...session,
+        hasUnreadCompletion: undefined,
+      };
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return { ...prev, sessions: newSessions };
+    });
+    this.onPersistUnreadCompletion?.(sessionId, undefined);
+  }
+
+  public setSessionNeedsAttention(
+    sessionId: string,
+    attentionKind: 'ask_user' | 'tool_confirm'
+  ): void {
+    this.setState(prev => {
+      const session = prev.sessions.get(sessionId);
+      if (!session) return prev;
+
+      const updatedSession: Session = {
+        ...session,
+        needsUserAttention: attentionKind,
+      };
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return { ...prev, sessions: newSessions };
+    });
+    this.onPersistUnreadCompletion?.(sessionId, undefined);
+  }
+
+  public clearSessionNeedsAttention(sessionId: string): void {
+    this.setState(prev => {
+      const session = prev.sessions.get(sessionId);
+      if (!session || !session.needsUserAttention) return prev;
+
+      const updatedSession: Session = {
+        ...session,
+        needsUserAttention: undefined,
+      };
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return { ...prev, sessions: newSessions };
+    });
+    this.onPersistUnreadCompletion?.(sessionId, undefined);
+  }
+
   public async updateSessionTitle(
-    sessionId: string, 
-    title: string, 
+    sessionId: string,
+    title: string,
     status: 'generating' | 'generated' | 'failed'
   ): Promise<void> {
     this.setState(prev => {
@@ -1561,6 +1654,8 @@ export class FlowChatStore {
             sessionKind: relationship.sessionKind,
             btwThreads: [],
             btwOrigin: relationship.btwOrigin,
+            hasUnreadCompletion: metadata.unreadCompletion,
+            needsUserAttention: metadata.needsUserAttention,
           };
           
           const newSessions = new Map(prev.sessions);
@@ -1629,6 +1724,10 @@ export class FlowChatStore {
           sessions: newSessions,
         };
       });
+      
+      // Reset state machine to IDLE after loading history
+      // This handles the case where restoreSession triggered events that left the state machine in PROCESSING
+      stateMachineManager.reset(sessionId);
     } catch (error) {
       log.error('Failed to load session history', { sessionId, error });
       throw error;
@@ -1827,7 +1926,6 @@ export class FlowChatStore {
       const updatedSession = {
         ...session,
         todos: updatedTodos,
-        lastActiveAt: Date.now()
       };
 
       const newSessions = new Map(prev.sessions);
@@ -1872,7 +1970,6 @@ export class FlowChatStore {
       const updatedSession = {
         ...session,
         todos: [...todos],
-        lastActiveAt: Date.now()
       };
 
       const newSessions = new Map(prev.sessions);

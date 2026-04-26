@@ -1,10 +1,14 @@
-use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
+use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext, ValidationResult};
+use crate::agentic::tools::ToolPathOperation;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use tool_runtime::fs::edit_file::{apply_edit_to_content, edit_file};
 
 pub struct FileEditTool;
+
+const LARGE_EDIT_SOFT_LINE_LIMIT: usize = 200;
+const LARGE_EDIT_SOFT_BYTE_LIMIT: usize = 20 * 1024;
 
 impl Default for FileEditTool {
     fn default() -> Self {
@@ -34,7 +38,7 @@ Usage:
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
 - The edit will FAIL if `old_string` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `replace_all` to change every instance of `old_string`.
-- Keep edits focused. Avoid replacing huge multi-hundred-line blocks in one call when a smaller targeted edit would work.
+- Keep edits focused. The 200-line / 20KB guideline is a soft reliability threshold, not a hard cap. If a large change is required, split it into several focused Edit calls by section, function, or component instead of truncating or doing one huge replacement.
 - Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance."#
         .to_string())
     }
@@ -50,11 +54,11 @@ Usage:
                 "old_string": {
                     "type": "string",
                     "default": "",
-                    "description": "The text to replace (must be unique within the file, and must match the file contents exactly, including all whitespace and indentation). Include enough surrounding context to avoid broad replacements."
+                    "description": "The text to replace (must be unique within the file, and must match the file contents exactly, including all whitespace and indentation). Include enough surrounding context to avoid broad replacements, but avoid huge multi-hundred-line old_string payloads."
                 },
                 "new_string": {
                     "type": "string",
-                    "description": "The text to replace it with (must be different from old_string). Keep edits targeted; avoid replacing huge multi-hundred-line blocks in one call when smaller edits are possible."
+                    "description": "The text to replace it with (must be different from old_string). Keep edits targeted. The 200-line / 20KB guideline is a soft reliability threshold; for larger changes, split the work into several focused Edit calls by section, function, or component."
                 },
                 "replace_all": {
                     "type": "boolean",
@@ -77,6 +81,96 @@ Usage:
 
     fn needs_permissions(&self, _input: Option<&Value>) -> bool {
         false
+    }
+
+    async fn validate_input(
+        &self,
+        input: &Value,
+        context: Option<&ToolUseContext>,
+    ) -> ValidationResult {
+        let file_path = match input.get("file_path").and_then(|v| v.as_str()) {
+            Some(path) if !path.is_empty() => path,
+            _ => {
+                return ValidationResult {
+                    result: false,
+                    message: Some("file_path is required and cannot be empty".to_string()),
+                    error_code: Some(400),
+                    meta: None,
+                };
+            }
+        };
+
+        if input.get("old_string").is_none() {
+            return ValidationResult {
+                result: false,
+                message: Some("old_string is required".to_string()),
+                error_code: Some(400),
+                meta: None,
+            };
+        }
+
+        if input.get("new_string").is_none() {
+            return ValidationResult {
+                result: false,
+                message: Some("new_string is required".to_string()),
+                error_code: Some(400),
+                meta: None,
+            };
+        }
+
+        if let Some(ctx) = context {
+            let resolved = match ctx.resolve_tool_path(file_path) {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    return ValidationResult {
+                        result: false,
+                        message: Some(err.to_string()),
+                        error_code: Some(400),
+                        meta: None,
+                    };
+                }
+            };
+
+            if let Err(err) = ctx.enforce_path_operation(ToolPathOperation::Edit, &resolved) {
+                return ValidationResult {
+                    result: false,
+                    message: Some(err.to_string()),
+                    error_code: Some(400),
+                    meta: None,
+                };
+            }
+        }
+
+        let old_string = input
+            .get("old_string")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let new_string = input
+            .get("new_string")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let largest_lines = old_string.lines().count().max(new_string.lines().count());
+        let largest_bytes = old_string.len().max(new_string.len());
+        if largest_lines > LARGE_EDIT_SOFT_LINE_LIMIT || largest_bytes > LARGE_EDIT_SOFT_BYTE_LIMIT
+        {
+            return ValidationResult {
+                result: true,
+                message: Some(format!(
+                    "Large Edit payload: largest side is {} lines, {} bytes. This is allowed when necessary, but prefer a staged approach: split the change into several focused Edit calls by section, function, or component instead of one huge replacement.",
+                    largest_lines, largest_bytes
+                )),
+                error_code: None,
+                meta: Some(json!({
+                    "large_edit": true,
+                    "largest_line_count": largest_lines,
+                    "largest_byte_count": largest_bytes,
+                    "soft_line_limit": LARGE_EDIT_SOFT_LINE_LIMIT,
+                    "soft_byte_limit": LARGE_EDIT_SOFT_BYTE_LIMIT
+                })),
+            };
+        }
+
+        ValidationResult::default()
     }
 
     async fn call_impl(
@@ -105,6 +199,7 @@ Usage:
             .unwrap_or(false);
 
         let resolved = context.resolve_tool_path(file_path)?;
+        context.enforce_path_operation(ToolPathOperation::Edit, &resolved)?;
 
         // For remote workspace paths, use the abstract FS to read → edit in memory → write back.
         if resolved.uses_remote_workspace_backend() {

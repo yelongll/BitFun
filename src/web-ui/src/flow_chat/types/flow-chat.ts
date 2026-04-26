@@ -14,7 +14,7 @@ export interface FlowItem {
   id: string;
   type: 'text' | 'tool' | 'image-analysis' | 'thinking';
   timestamp: number;
-  status: 'pending' | 'preparing' | 'running' | 'streaming' | 'completed' | 'cancelled' | 'error' | 'analyzing' | 'pending_confirmation' | 'confirmed'; // Includes error, analyzing, and confirmation states.
+  status: 'pending' | 'preparing' | 'running' | 'streaming' | 'receiving' | 'completed' | 'cancelled' | 'error' | 'analyzing' | 'pending_confirmation' | 'confirmed'; // Includes error, analyzing, and confirmation states.
   
   // Subagent markers.
   parentTaskToolId?: string; // Parent Task tool ID.
@@ -246,6 +246,22 @@ export interface Session {
     parentDialogTurnId?: string;
     parentTurnIndex?: number;
   };
+
+  /**
+   * Set when a session finishes (completed / error / cancelled) while not the active session.
+   * Cleared after the user switches to it and the content renders.
+   * 'completed' → green dot, 'error' → red dot, 'interrupted' → red dot (partial stream recovery).
+   */
+  hasUnreadCompletion?: 'completed' | 'error' | 'interrupted';
+
+  /**
+   * Set when a session requires user attention while not the active session.
+   * This is a high-priority alert that takes precedence over hasUnreadCompletion.
+   * 'ask_user' → session has pending AskUserQuestion waiting for answer
+   * 'tool_confirm' → session has pending tool confirmations
+   * Cleared when the user switches to the session or the pending action is resolved.
+   */
+  needsUserAttention?: 'ask_user' | 'tool_confirm';
 }
 
 export interface SessionConfig {
@@ -300,12 +316,14 @@ export interface ToolCardConfig {
 export interface ToolCardProps {
   toolItem: FlowToolItem;
   config: ToolCardConfig;
+  interruptionNote?: string | null;
   onConfirm?: (updatedInput?: any) => void;  // toolId is known within the card.
   onReject?: () => void;
   onOpenInEditor?: (filePath: string) => void;
   onOpenInPanel?: (panelType: string, data: any) => void;
   onExpand?: () => void;
   sessionId?: string;
+  turnId?: string;
   /** Callback for MCP App ui/message requests. Returns whether the message was handled successfully. */
   onMcpAppMessage?: (params: import('@/infrastructure/api/service-api/MCPAPI').McpUiMessageParams) => Promise<import('@/infrastructure/api/service-api/MCPAPI').McpUiMessageResult>;
 }

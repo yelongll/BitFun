@@ -284,9 +284,32 @@ impl SessionManager {
                 .collect::<Vec<_>>()
                 .join("\n\n");
 
-            if !assistant_text.trim().is_empty() {
-                messages
-                    .push(Message::assistant(assistant_text).with_turn_id(turn.turn_id.clone()));
+            let assistant_thinking = turn
+                .model_rounds
+                .iter()
+                .flat_map(|round| round.thinking_items.iter())
+                .map(|item| item.content.clone())
+                .filter(|value| !value.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+
+            let has_text = !assistant_text.trim().is_empty();
+            let has_thinking = !assistant_thinking.trim().is_empty();
+
+            if has_text || has_thinking {
+                let reasoning_content = if has_thinking {
+                    Some(assistant_thinking)
+                } else {
+                    None
+                };
+                messages.push(
+                    Message::assistant_with_reasoning(
+                        reasoning_content,
+                        assistant_text,
+                        Vec::new(),
+                    )
+                    .with_turn_id(turn.turn_id.clone()),
+                );
             }
         }
 
@@ -1019,7 +1042,8 @@ impl SessionManager {
 
         // Reset session state to Idle
         // After application restart, previous Processing state is invalid and must be reset
-        if !matches!(session.state, SessionState::Idle) {
+        let previous_state_was_not_idle = !matches!(session.state, SessionState::Idle);
+        if previous_state_was_not_idle {
             let old_state = session.state.clone();
             session.state = SessionState::Idle;
             debug!(
@@ -1135,6 +1159,34 @@ impl SessionManager {
             messages.len(),
             context_msg_count
         );
+
+        // Mark session as having unread completion if it was previously running (not Idle).
+        // This handles both normal app close and abnormal crash scenarios.
+        if previous_state_was_not_idle {
+            if let Ok(Some(mut metadata)) = self
+                .persistence_manager
+                .load_session_metadata(&session_storage_path, session_id)
+                .await
+            {
+                if metadata.unread_completion.is_none() {
+                    debug!(
+                        "Marking session as having unread completion (was interrupted during restore): session_id={}",
+                        session_id
+                    );
+                    metadata.unread_completion = Some("completed".to_string());
+                    if let Err(e) = self
+                        .persistence_manager
+                        .save_session_metadata(&session_storage_path, &metadata)
+                        .await
+                    {
+                        warn!(
+                            "Failed to save unread_completion metadata: session_id={}, error={}",
+                            session_id, e
+                        );
+                    }
+                }
+            }
+        }
 
         // 4. Add to memory (will overwrite if already exists)
         self.sessions

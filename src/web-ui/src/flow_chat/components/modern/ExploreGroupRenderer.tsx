@@ -146,17 +146,17 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
   
   // Build summary text with i18n.
   const displaySummary = useMemo(() => {
-    const { readCount, searchCount, thinkingCount } = stats;
+    const { readCount, searchCount, commandCount } = stats;
     
     const parts: string[] = [];
-    if (thinkingCount > 0) {
-      parts.push(t('exploreRegion.thinkingCount', { count: thinkingCount }));
-    }
     if (readCount > 0) {
       parts.push(t('exploreRegion.readFiles', { count: readCount }));
     }
     if (searchCount > 0) {
       parts.push(t('exploreRegion.searchCount', { count: searchCount }));
+    }
+    if (commandCount > 0) {
+      parts.push(t('exploreRegion.commandCount', { count: commandCount }));
     }
     
     if (parts.length === 0) {
@@ -229,7 +229,7 @@ interface ExploreItemRendererProps {
   isLastItem?: boolean;
 }
 
-const ExploreItemRenderer = React.memo<ExploreItemRendererProps>(({ item, isLastItem }) => {
+const ExploreItemRenderer = React.memo<ExploreItemRendererProps>(({ item, turnId, isLastItem }) => {
   const {
     onToolConfirm,
     onToolReject,
@@ -286,9 +286,10 @@ const ExploreItemRenderer = React.memo<ExploreItemRendererProps>(({ item, isLast
           onOpenInEditor={handleOpenInEditor}
           onOpenInPanel={handleOpenInPanel}
           sessionId={sessionId}
+          turnId={turnId}
         />
       );
-    
+
     default:
       return null;
   }

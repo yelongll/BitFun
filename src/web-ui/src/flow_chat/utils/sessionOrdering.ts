@@ -62,13 +62,13 @@ export function sessionBelongsToWorkspaceNavRow(
   return true;
 }
 
-export function getSessionSortTimestamp(session: Pick<Session, 'createdAt' | 'lastFinishedAt'>): number {
-  return session.lastFinishedAt ?? session.createdAt;
+export function getSessionSortTimestamp(session: Pick<Session, 'createdAt' | 'lastActiveAt' | 'lastFinishedAt'>): number {
+  return session.lastActiveAt ?? session.lastFinishedAt ?? session.createdAt;
 }
 
 export function compareSessionsForDisplay(
-  a: Pick<Session, 'sessionId' | 'createdAt' | 'lastFinishedAt'>,
-  b: Pick<Session, 'sessionId' | 'createdAt' | 'lastFinishedAt'>
+  a: Pick<Session, 'sessionId' | 'createdAt' | 'lastActiveAt' | 'lastFinishedAt'>,
+  b: Pick<Session, 'sessionId' | 'createdAt' | 'lastActiveAt' | 'lastFinishedAt'>
 ): number {
   const timestampDiff = getSessionSortTimestamp(b) - getSessionSortTimestamp(a);
   if (timestampDiff !== 0) {
@@ -80,5 +80,20 @@ export function compareSessionsForDisplay(
     return createdAtDiff;
   }
 
+  return a.sessionId.localeCompare(b.sessionId);
+}
+
+/**
+ * Left-nav session list order: newest-created first, stable while switching sessions
+ * (does not use `lastActiveAt`, so rows do not jump to the top on click).
+ */
+export function compareSessionsForNavStable(
+  a: Pick<Session, 'sessionId' | 'createdAt'>,
+  b: Pick<Session, 'sessionId' | 'createdAt'>
+): number {
+  const createdAtDiff = b.createdAt - a.createdAt;
+  if (createdAtDiff !== 0) {
+    return createdAtDiff;
+  }
   return a.sessionId.localeCompare(b.sessionId);
 }

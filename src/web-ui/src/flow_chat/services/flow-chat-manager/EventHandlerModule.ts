@@ -17,13 +17,14 @@ import {
   type ToolEventData,
   type ParamsPartialToolEvent
 } from '../EventBatcher';
-import { notificationService } from '../../../shared/notification-system';
+import { notificationService } from '../../../shared/notification-system/services/NotificationService';
+import type { NotificationAction } from '../../../shared/notification-system/types';
 import { createLogger } from '@/shared/utils/logger';
 import type {
   ImageAnalysisEvent,
   SessionModelAutoMigratedEvent,
 } from '@/infrastructure/api/service-api/AgentAPI';
-import { i18nService } from '@/infrastructure/i18n';
+import { i18nService } from '@/infrastructure/i18n/core/I18nService';
 import { MCPAPI } from '@/infrastructure/api/service-api/MCPAPI';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import type { FlowChatContext, DialogTurn, ModelRound, FlowToolItem } from './types';
@@ -31,6 +32,12 @@ import {
   buildSessionModelMigrationNotice,
   shouldSuppressSessionModelMigrationNotice,
 } from '../../utils/sessionModelMigrationNotice';
+import {
+  getAiErrorPresentation,
+  normalizeAiErrorDetail,
+  type AiErrorPresentation,
+  type AiErrorDetail,
+} from '@/shared/ai-errors/aiErrorPresenter';
 
 const pendingImageAnalysisTurns = new Map<string, string>();
 // `restore_session` and assistant bootstrap can race on the same historical
@@ -57,9 +64,11 @@ import {
   handleToolTerminalReady,
 } from './ToolEventModule';
 import {
+  routeModelRoundStartedToToolCardInternal,
   routeTextChunkToToolCardInternal,
   routeToolEventToToolCardInternal
 } from './SubagentModule';
+import { normalizeSubagentParentInfo } from './subagentParentInfo';
 
 const log = createLogger('EventHandlerModule');
 const TURN_COMPLETION_QUIET_WINDOW_MS = 500;
@@ -90,6 +99,149 @@ function logDroppedDataEvent(
   });
 }
 
+function attachSubagentSessionToParentTool(
+  parentInfo: SubagentParentInfo,
+  subagentSessionId: string,
+): void {
+  const store = FlowChatStore.getInstance();
+  const parentSession = store.getState().sessions.get(parentInfo.sessionId);
+  if (!parentSession) {
+    return;
+  }
+
+  const parentTurn = parentSession.dialogTurns.find((turn) => turn.id === parentInfo.dialogTurnId);
+  if (!parentTurn) {
+    return;
+  }
+
+  const parentTool = store.findToolItem(
+    parentInfo.sessionId,
+    parentInfo.dialogTurnId,
+    parentInfo.toolCallId,
+  );
+
+  if (parentTool?.subagentSessionId === subagentSessionId) {
+    return;
+  }
+
+  store.updateModelRoundItem(
+    parentInfo.sessionId,
+    parentInfo.dialogTurnId,
+    parentInfo.toolCallId,
+    {
+      subagentSessionId,
+    } as any,
+  );
+}
+
+function settleSubagentItems(
+  context: FlowChatContext,
+  parentInfo: SubagentParentInfo,
+  subagentSessionId: string,
+  status: 'completed' | 'cancelled' | 'error',
+  errorMessage?: string,
+): void {
+  const store = FlowChatStore.getInstance();
+  const parentSession = store.getState().sessions.get(parentInfo.sessionId);
+  if (!parentSession) {
+    return;
+  }
+
+  const parentTurn = parentSession.dialogTurns.find((turn) => turn.id === parentInfo.dialogTurnId);
+  if (!parentTurn) {
+    return;
+  }
+
+  const parentTaskToolIds = new Set<string>([parentInfo.toolCallId]);
+  for (const round of parentTurn.modelRounds) {
+    for (const item of round.items) {
+      if (
+        item.type === 'tool' &&
+        (item.id === parentInfo.toolCallId || (item as FlowToolItem).toolCall?.id === parentInfo.toolCallId)
+      ) {
+        parentTaskToolIds.add(item.id);
+      }
+    }
+  }
+
+  const timestamp = Date.now();
+  let changed = false;
+
+  store.updateDialogTurn(parentInfo.sessionId, parentInfo.dialogTurnId, (turn) => {
+    const updatedRounds = turn.modelRounds.map((round) => {
+      let roundChanged = false;
+      const updatedItems = round.items.map((item) => {
+        if (
+          !item.isSubagentItem
+          || !parentTaskToolIds.has(item.parentTaskToolId || '')
+          || item.subagentSessionId !== subagentSessionId
+        ) {
+          return item;
+        }
+
+        if (item.status === 'completed' || item.status === 'cancelled' || item.status === 'error') {
+          return item;
+        }
+
+        changed = true;
+
+        if (item.type === 'text') {
+          roundChanged = true;
+          return {
+            ...item,
+            status,
+            isStreaming: false,
+            timestamp,
+          };
+        }
+
+        if (item.type === 'thinking') {
+          roundChanged = true;
+          return {
+            ...item,
+            status,
+            isStreaming: false,
+            isCollapsed: true,
+            timestamp,
+          };
+        }
+
+        if (item.type === 'tool') {
+          roundChanged = true;
+          const nextToolResult = status === 'completed'
+            ? item.toolResult
+            : {
+              result: null,
+              success: false,
+              error: errorMessage || (status === 'cancelled'
+                ? 'Subagent was cancelled.'
+                : 'Subagent failed before this tool finished.'),
+            };
+
+          return {
+            ...item,
+            status,
+            isParamsStreaming: false,
+            endTime: item.endTime || timestamp,
+            toolResult: nextToolResult,
+            timestamp,
+          };
+        }
+
+        return item;
+      });
+
+      return roundChanged ? { ...round, items: updatedItems } : round;
+    });
+
+    return changed ? { ...turn, modelRounds: updatedRounds } : turn;
+  });
+
+  if (changed) {
+    debouncedSaveDialogTurn(context, parentInfo.sessionId, parentInfo.dialogTurnId, 800);
+  }
+}
+
 /**
  * Event filtering mechanism: determines if an event should be processed
  */
@@ -99,6 +251,10 @@ export function shouldProcessEvent(
   eventType: 'data' | 'control' | 'state_sync',
   eventName = 'unknown'
 ): boolean {
+  if (eventType === 'state_sync') {
+    return true;
+  }
+
   const machine = stateMachineManager.get(sessionId);
   if (!machine) {
     if (eventType === 'data') {
@@ -109,10 +265,6 @@ export function shouldProcessEvent(
 
   const currentState = machine.getCurrentState();
   const context = machine.getContext();
-
-  if (eventType === 'state_sync') {
-    return true;
-  }
 
   if (eventType === 'control') {
     if (currentState === SessionExecutionState.IDLE || currentState === SessionExecutionState.ERROR) {
@@ -412,13 +564,14 @@ function schedulePendingTurnCompletion(
   }, TURN_COMPLETION_QUIET_WINDOW_MS);
 }
 
-function beginTurnCompletion(context: FlowChatContext, sessionId: string, turnId: string): void {
+function beginTurnCompletion(context: FlowChatContext, sessionId: string, turnId: string, partialRecoveryReason?: string): void {
   clearPendingTurnCompletion(context, sessionId);
 
   context.pendingTurnCompletions.set(sessionId, {
     turnId,
     lastActivityAt: Date.now(),
     timer: null,
+    partialRecoveryReason,
   });
 
   schedulePendingTurnCompletion(context, sessionId, turnId);
@@ -489,6 +642,15 @@ function finalizeTurnCompletionState(
   saveDialogTurnToDisk(context, sessionId, turnId).catch(error => {
     log.warn('Failed to save dialog turn (non-critical)', { sessionId, turnId, error });
   });
+
+  // Mark unread completion for non-active sessions
+  const activeSessionId = store.getState().activeSessionId;
+  if (sessionId !== activeSessionId) {
+    const pending = context.pendingTurnCompletions.get(sessionId);
+    const isPartialRecovery = !!pending?.partialRecoveryReason;
+    // Partial recovery after retry failure is treated as an error state (red dot)
+    context.flowChatStore.markSessionUnreadCompletion(sessionId, isPartialRecovery ? 'interrupted' : 'completed');
+  }
 
   clearPendingTurnCompletion(context, sessionId, turnId);
 }
@@ -759,9 +921,11 @@ function cleanRemoteUserInput(raw: string): string {
 }
 
 function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
-  const { sessionId, turnId, turnIndex, userInput, originalUserInput, userMessageMetadata, subagentParentInfo } = event;
+  const { sessionId, turnId, turnIndex, userInput, originalUserInput, userMessageMetadata } = event;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
 
   if (subagentParentInfo) {
+    attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
     return;
   }
 
@@ -896,7 +1060,8 @@ function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
  * Handle text chunk event
  */
 function handleTextChunk(context: FlowChatContext, event: any): void {
-  const { sessionId, turnId, roundId, text, contentType = 'text', isThinkingEnd = false, subagentParentInfo } = event;
+  const { sessionId, turnId, roundId, text, contentType = 'text', isThinkingEnd = false } = event;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
   
   const parentSessionId = subagentParentInfo?.sessionId;
   const parentTurnId = subagentParentInfo?.dialogTurnId;
@@ -1051,7 +1216,8 @@ function handleToolEvent(
   },
   onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
 ): void {
-  const { sessionId, turnId, toolEvent, subagentParentInfo } = event;
+  const { sessionId, turnId, toolEvent } = event;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
   if (!turnId) {
     log.debug('Tool event missing turnId', { sessionId, toolId: toolEvent.tool_id, eventType: toolEvent.event_type });
     return;
@@ -1124,9 +1290,17 @@ function handleToolEvent(
  * Handle model round started event
  */
 function handleModelRoundStart(context: FlowChatContext, event: any): void {
-  const { sessionId, turnId, roundId, roundIndex, subagentParentInfo } = event;
+  const { sessionId, turnId, roundId, roundIndex } = event;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
 
   if (subagentParentInfo) {
+    attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
+    routeModelRoundStartedToToolCardInternal(
+      context,
+      subagentParentInfo.sessionId,
+      subagentParentInfo.toolCallId,
+      { sessionId, turnId, roundId },
+    );
     return;
   }
   
@@ -1342,9 +1516,15 @@ function handleDialogTurnComplete(
 ): void {
   const sessionId = event?.sessionId ?? event?.session_id;
   const turnId = event?.turnId ?? event?.turn_id;
-  const subagentParentInfo = event?.subagentParentInfo ?? event?.subagent_parent_info;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
+  // Partial recovery reason from backend (stream was interrupted mid-way)
+  const partialRecoveryReason = event?.partialRecoveryReason ?? event?.partial_recovery_reason;
 
   if (subagentParentInfo) {
+    if (sessionId) {
+      attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
+      settleSubagentItems(context, subagentParentInfo, sessionId, 'completed');
+    }
     return;
   }
 
@@ -1387,20 +1567,120 @@ function handleDialogTurnComplete(
     log.debug('Skipping BACKEND_STREAM_COMPLETED transition', { currentState, sessionId, turnId });
   }
 
-  beginTurnCompletion(context, sessionId, turnId);
+  beginTurnCompletion(context, sessionId, turnId, partialRecoveryReason);
 }
 
 /**
  * Handle dialog turn failed event
  */
+/**
+ * Format a raw dialog error string into a user-friendly notification.
+ * Returns a title, a short message with actionable advice, and the original error for diagnostics.
+ */
+function normalizeDialogErrorDetail(event: any): AiErrorDetail {
+  const rawCategory = typeof event.errorCategory === 'string' ? event.errorCategory : undefined;
+  const detail = event.errorDetail && typeof event.errorDetail === 'object'
+    ? event.errorDetail
+    : { category: rawCategory, rawMessage: event.error };
+
+  return normalizeAiErrorDetail(detail, event.error);
+}
+
+export interface DialogErrorNotification {
+  type: 'error' | 'warning';
+  title: string;
+  message: string;
+  detail: string;
+  rawError: string;
+  diagnostics: string;
+  actions?: NotificationAction[];
+  metadata?: Record<string, any>;
+}
+
+export function formatDialogErrorForNotification(
+  rawError: string,
+  errorDetail?: AiErrorDetail
+): DialogErrorNotification {
+  const raw = rawError || '';
+  const normalizedDetail = normalizeAiErrorDetail(errorDetail ?? { rawMessage: raw }, raw);
+  const presentation = getAiErrorPresentation(normalizedDetail);
+  const title = i18nService.t(presentation.titleKey);
+  const message = i18nService.t(presentation.messageKey);
+  const diagnostics = buildDialogErrorDiagnostics(presentation, raw, normalizedDetail);
+
+  return {
+    type: presentation.severity,
+    title,
+    message,
+    detail: diagnostics || raw,
+    rawError: raw,
+    diagnostics,
+    actions: buildDialogErrorActions(diagnostics),
+    metadata: {
+      aiError: {
+        category: presentation.category,
+        retryable: presentation.retryable,
+        diagnostics,
+        rawError: raw,
+        detail: normalizedDetail,
+      },
+    },
+  };
+}
+
+function buildDialogErrorDiagnostics(
+  presentation: AiErrorPresentation,
+  rawError: string,
+  detail: AiErrorDetail
+): string {
+  const lines = [
+    presentation.diagnostics,
+    detail.providerMessage ? `provider_message=${detail.providerMessage}` : null,
+    rawError ? `raw_error=${rawError}` : null,
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
+function buildDialogErrorActions(diagnostics: string): NotificationAction[] | undefined {
+  if (!diagnostics) {
+    return undefined;
+  }
+
+  return [
+    {
+      label: i18nService.t('errors:ai.actions.copyDiagnostics'),
+      variant: 'secondary',
+      onClick: () => {
+        const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+        if (!clipboard?.writeText) {
+          return;
+        }
+
+        void clipboard.writeText(diagnostics).then(() => {
+          notificationService.success(i18nService.t('flow-chat:deepReviewActionBar.diagnosticsCopied'), {
+            duration: 2500,
+          });
+        });
+      },
+    },
+  ];
+}
+
 function handleDialogTurnFailed(context: FlowChatContext, event: any): void {
-  const { sessionId, turnId, error, subagentParentInfo } = event;
+  const { sessionId, turnId, error } = event;
+  const errorDetail = normalizeDialogErrorDetail(event);
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
 
   if (subagentParentInfo) {
+    if (sessionId) {
+      attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
+      settleSubagentItems(context, subagentParentInfo, sessionId, 'error', error);
+    }
     return;
   }
   
-  log.error('Dialog turn failed', { sessionId, turnId, error });
+  log.error('Dialog turn failed', { sessionId, turnId, error, errorDetail });
   clearPendingTurnCompletion(context, sessionId, turnId);
   
   const store = FlowChatStore.getInstance();
@@ -1479,10 +1759,25 @@ function handleDialogTurnFailed(context: FlowChatContext, event: any): void {
     });
   }
   
-  notificationService.error(error || 'Execution failed', {
-    title: 'Dialog execution failed',
-    duration: 5000
-  });
+  const formatted = formatDialogErrorForNotification(error, errorDetail);
+  const options = {
+    title: formatted.title,
+    duration: 8000,
+    actions: formatted.actions,
+    metadata: formatted.metadata,
+  };
+
+  if (formatted.type === 'warning') {
+    notificationService.warning(formatted.message, options);
+  } else {
+    notificationService.error(formatted.message, options);
+  }
+
+  // Mark unread error completion for non-active sessions
+  const activeSessionIdForError = store.getState().activeSessionId;
+  if (sessionId !== activeSessionIdForError) {
+    context.flowChatStore.markSessionUnreadCompletion(sessionId, 'error');
+  }
 }
 
 /**
@@ -1493,9 +1788,14 @@ function handleDialogTurnCancelled(
   event: any,
   _onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
 ): void {
-  const { sessionId, turnId, subagentParentInfo } = event;
+  const { sessionId, turnId } = event;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
 
   if (subagentParentInfo) {
+    if (sessionId) {
+      attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
+      settleSubagentItems(context, subagentParentInfo, sessionId, 'cancelled');
+    }
     return;
   }
   
@@ -1565,6 +1865,13 @@ function handleDialogTurnCancelled(
         log.error('State machine transition failed on cancelled finishing settled', { sessionId, error });
       });
   }
+
+  // Mark unread completion for non-active sessions (skip if user explicitly cancelled)
+  const activeSessionIdForCancelled = store.getState().activeSessionId;
+  if (sessionId !== activeSessionIdForCancelled && !context.userCancelledSessionIds.has(sessionId)) {
+    context.flowChatStore.markSessionUnreadCompletion(sessionId, 'completed');
+  }
+  context.userCancelledSessionIds.delete(sessionId);
 }
 
 /**

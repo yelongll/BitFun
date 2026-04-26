@@ -121,7 +121,8 @@ impl TransportAdapter for TauriTransportAdapter {
                 session_id,
                 turn_id,
                 round_id,
-                ..
+                round_index,
+                subagent_parent_info,
             } => {
                 self.app_handle.emit(
                     "agentic://model-round-started",
@@ -129,6 +130,8 @@ impl TransportAdapter for TauriTransportAdapter {
                         "sessionId": session_id,
                         "turnId": turn_id,
                         "roundId": round_id,
+                        "roundIndex": round_index,
+                        "subagentParentInfo": subagent_parent_info,
                     }),
                 )?;
             }
@@ -191,6 +194,7 @@ impl TransportAdapter for TauriTransportAdapter {
                 session_id,
                 turn_id,
                 subagent_parent_info,
+                partial_recovery_reason,
                 ..
             } => {
                 self.app_handle.emit(
@@ -199,6 +203,7 @@ impl TransportAdapter for TauriTransportAdapter {
                         "sessionId": session_id,
                         "turnId": turn_id,
                         "subagentParentInfo": subagent_parent_info,
+                        "partialRecoveryReason": partial_recovery_reason,
                     }),
                 )?;
             }
@@ -235,6 +240,8 @@ impl TransportAdapter for TauriTransportAdapter {
                 session_id,
                 turn_id,
                 error,
+                error_category,
+                error_detail,
                 subagent_parent_info,
             } => {
                 self.app_handle.emit(
@@ -243,6 +250,8 @@ impl TransportAdapter for TauriTransportAdapter {
                         "sessionId": session_id,
                         "turnId": turn_id,
                         "error": error,
+                        "errorCategory": error_category,
+                        "errorDetail": error_detail,
                         "subagentParentInfo": subagent_parent_info,
                     }),
                 )?;

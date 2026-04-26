@@ -182,6 +182,15 @@
       "parentSession": "Parent session",
       "childSourceWithoutTurn": "From {{parentTitle}}",
       "childSourceWithTurn": "From {{parentTitle}} · Turn {{turnIndex}}",
+      "reviewRunning": "Reviewing",
+      "deepReviewRunning": "Reviewing",
+      "unreadCompleted": "Completed — unread",
+      "unreadError": "Failed — unread",
+      "unreadInterrupted": "Interrupted — retry needed",
+      "needsUserInput": "Needs your input",
+      "needsToolConfirm": "Needs confirmation",
+      "badgeNeedsInput": "Waiting",
+      "badgeNeedsConfirm": "Confirm",
       "needProjectWorkspaceForSession": "Open or add a project workspace first. Code and Cowork sessions cannot be created in the assistant area."
     },
     "scheduledJobs": {
@@ -1023,6 +1032,9 @@
     }
   },
   "notify": {
-    "dialogCompleted": "AI agent has finished the task."
+    "dialogCompleted": "AI agent has finished the task.",
+    "dialogCompletedTitle": "BitFun task finished",
+    "dialogCompletedWithSession": "\"{{sessionTitle}}\" is ready. Return to BitFun to review the result.",
+    "dialogCompletedFallback": "A BitFun session is ready. Return to BitFun to review the result."
   }
 }

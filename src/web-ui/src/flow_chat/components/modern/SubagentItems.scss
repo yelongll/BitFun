@@ -6,6 +6,7 @@
 
 .subagent-items-wrapper {
   position: relative;
+  contain: layout paint style;
 }
 
 .subagent-items-wrapper--collapsed {
@@ -18,7 +19,7 @@
 
 // Subagent container for items under the same parent task.
 .subagent-items-container {
-  padding: 12px 14px;
+  padding: 12px 0;
 
   // Continue the task card border on left/right/bottom; top border is hidden.
   background: var(--color-bg-flowchat);
@@ -26,11 +27,37 @@
   border-top: none;
   // Top corners are square to merge with the header card above.
   border-radius: 0 0 8px 8px;
-  backdrop-filter: blur(8px);
+  // Match the BaseToolCard backdrop-filter for seamless visual merge.
+  backdrop-filter: blur(10px);
 
-  // Fixed height; overflow scrolls.
-  height: 400px;
+  // Keep concurrent subagents scannable; overflow keeps details reachable.
+  // The detail panel remains the place for reading long subagent output.
+  max-height: clamp(78px, 12vh, 118px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: layout paint style;
+
+  .flow-text-block--subagent-compact {
+    margin-bottom: 0.15rem;
+    max-height: calc(var(--flowchat-font-size-base) * 1.45 * 3);
+    overflow: hidden;
+    line-height: 1.45;
+
+    .markdown-renderer,
+    .text-content {
+      line-height: 1.45;
+    }
+
+    .markdown-renderer {
+      --markdown-block-gap: 0.15em;
+    }
+  }
+}
+
+// When expanded, keep a reasonable max-height so the card does not grow
+// unbounded during streaming; users can scroll to see all content.
+.subagent-items-container--expanded {
+  max-height: clamp(120px, 28vh, 320px);
 }
 
 .subagent-items-container--collapsed {

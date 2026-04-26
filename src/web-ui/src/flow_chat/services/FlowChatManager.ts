@@ -37,7 +37,8 @@ import {
   addDialogTurn as addDialogTurnModule,
   addImageAnalysisPhase as addImageAnalysisPhaseModule,
   updateImageAnalysisResults as updateImageAnalysisResultsModule,
-  updateImageAnalysisItem as updateImageAnalysisItemModule
+  updateImageAnalysisItem as updateImageAnalysisItemModule,
+  updateSessionMetadata,
 } from './flow-chat-manager';
 
 const log = createLogger('FlowChatManager');
@@ -65,6 +66,7 @@ export class FlowChatManager {
       lastSaveHashes: new Map(),
       turnSaveInFlight: new Map(),
       turnSavePending: new Set(),
+      userCancelledSessionIds: new Set(),
       currentWorkspacePath: null
     };
     
@@ -86,6 +88,16 @@ export class FlowChatManager {
   ): Promise<boolean> {
     try {
       await this.initializeEventListeners();
+
+      // Register callback to persist unread completion changes to backend
+      this.context.flowChatStore.registerPersistUnreadCompletionCallback(
+        (sessionId, value) => {
+          updateSessionMetadata(this.context, sessionId).catch(err => {
+            log.warn('Failed to persist unread completion change', { sessionId, value, err });
+          });
+        }
+      );
+
       await this.context.flowChatStore.initializeFromDisk(
         workspacePath,
         remoteConnectionId,
@@ -191,6 +203,17 @@ export class FlowChatManager {
 
   async deleteChatSession(sessionId: string): Promise<void> {
     return deleteChatSessionModule(this.context, sessionId);
+  }
+
+  public discardLocalSession(sessionId: string): string[] {
+    const removedSessionIds = this.context.flowChatStore.removeSession(sessionId);
+    removedSessionIds.forEach(id => {
+      stateMachineManager.delete(id);
+      this.context.processingManager.clearSessionStatus(id);
+      cleanupSaveState(this.context, id);
+      cleanupSessionBuffers(this.context, id);
+    });
+    return removedSessionIds;
   }
 
   async renameChatSessionTitle(sessionId: string, title: string): Promise<string> {

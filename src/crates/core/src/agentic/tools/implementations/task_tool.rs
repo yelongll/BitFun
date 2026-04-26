@@ -1,5 +1,8 @@
 use crate::agentic::agents::{get_agent_registry, AgentInfo};
 use crate::agentic::coordination::get_global_coordinator;
+use crate::agentic::deep_review_policy::{
+    load_default_deep_review_policy, record_deep_review_task_budget, DEEP_REVIEW_AGENT_TYPE,
+};
 use crate::agentic::tools::framework::{
     Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
@@ -11,6 +14,9 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 pub struct TaskTool;
+
+const LARGE_TASK_PROMPT_SOFT_LINE_LIMIT: usize = 180;
+const LARGE_TASK_PROMPT_SOFT_BYTE_LIMIT: usize = 16 * 1024;
 
 impl Default for TaskTool {
     fn default() -> Self {
@@ -70,6 +76,8 @@ Usage notes:
 - Provide clear, detailed prompt so the agent can work autonomously and return exactly the information you need.
 - If 'workspace_path' is omitted, the task inherits the current workspace by default.
 - The 'workspace_path' parameter must still be provided explicitly for the Explore and FileFinder agent.
+- Use 'model_id' when a caller needs a specific model or model slot for the subagent. Omit it to use the agent default.
+- Use 'timeout_seconds' when you need a hard deadline for the subagent. Omit it or set it to 0 to disable the timeout.
 - Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool calls
 - When the agent is done, it will return a single message back to you.
 - The agent's outputs should generally be trusted
@@ -173,7 +181,7 @@ impl Tool for TaskTool {
                 },
                 "prompt": {
                     "type": "string",
-                    "description": "The task for the agent to perform"
+                    "description": "The task for the agent to perform. Keep it scoped and concise. The 180-line / 16KB guideline is a soft reliability threshold, not a hard cap. For large delegations, split into multiple Task calls with clear ownership, and pass file paths, symbols, constraints, and exact questions instead of pasting large file contents."
                 },
                 "subagent_type": {
                     "type": "string",
@@ -182,6 +190,15 @@ impl Tool for TaskTool {
                 "workspace_path": {
                     "type": "string",
                     "description": "The absolute path of the workspace for this task. If omitted, inherits the current workspace. Explore/FileFinder must provide it explicitly."
+                },
+                "model_id": {
+                    "type": "string",
+                    "description": "Optional model ID or model slot alias for this subagent task. Omit it to use the agent default."
+                },
+                "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Optional timeout for this subagent task in seconds. Use 0 or omit it to disable the timeout."
                 }
             },
             "required": [
@@ -217,10 +234,39 @@ impl Tool for TaskTool {
         input: &Value,
         _context: Option<&ToolUseContext>,
     ) -> ValidationResult {
-        InputValidator::new(input)
+        let validation = InputValidator::new(input)
             .validate_required("prompt")
             .validate_required("subagent_type")
-            .finish()
+            .finish();
+        if !validation.result {
+            return validation;
+        }
+
+        if let Some(prompt) = input.get("prompt").and_then(|value| value.as_str()) {
+            let line_count = prompt.lines().count();
+            let byte_count = prompt.len();
+            if line_count > LARGE_TASK_PROMPT_SOFT_LINE_LIMIT
+                || byte_count > LARGE_TASK_PROMPT_SOFT_BYTE_LIMIT
+            {
+                return ValidationResult {
+                    result: true,
+                    message: Some(format!(
+                        "Large Task prompt: {} lines, {} bytes. This is allowed when necessary, but prefer staged delegation: split large work into multiple Task calls with clear ownership, and pass file paths, symbols, constraints, and exact questions instead of large pasted context.",
+                        line_count, byte_count
+                    )),
+                    error_code: None,
+                    meta: Some(json!({
+                        "large_task_prompt": true,
+                        "line_count": line_count,
+                        "byte_count": byte_count,
+                        "soft_line_limit": LARGE_TASK_PROMPT_SOFT_LINE_LIMIT,
+                        "soft_byte_limit": LARGE_TASK_PROMPT_SOFT_BYTE_LIMIT
+                    })),
+                };
+            }
+        }
+
+        validation
     }
 
     fn render_tool_use_message(&self, input: &Value, options: &ToolRenderOptions) -> String {
@@ -274,6 +320,25 @@ impl Tool for TaskTool {
             .get("workspace_path")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+        let model_id = match input.get("model_id") {
+            Some(value) => {
+                let value = value
+                    .as_str()
+                    .ok_or_else(|| BitFunError::tool("model_id must be a string".to_string()))?;
+                let value = value.trim();
+                (!value.is_empty()).then(|| value.to_string())
+            }
+            None => None,
+        };
+        let mut timeout_seconds = match input.get("timeout_seconds") {
+            Some(value) => {
+                let parsed = value.as_u64().ok_or_else(|| {
+                    BitFunError::tool("timeout_seconds must be a non-negative integer".to_string())
+                })?;
+                (parsed > 0).then_some(parsed)
+            }
+            None => None,
+        };
         let current_workspace_path = context
             .workspace_root()
             .map(|path| path.to_string_lossy().into_owned());
@@ -351,23 +416,86 @@ impl Tool for TaskTool {
             ));
         };
 
+        if context
+            .agent_type
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|agent_type| agent_type == DEEP_REVIEW_AGENT_TYPE)
+        {
+            let policy = load_default_deep_review_policy().await.map_err(|error| {
+                BitFunError::tool(format!(
+                    "Failed to load DeepReview execution policy: {}",
+                    error
+                ))
+            })?;
+            let role = policy
+                .classify_subagent(&subagent_type)
+                .map_err(|violation| {
+                    BitFunError::tool(format!(
+                        "DeepReview Task policy violation: {}",
+                        violation.to_tool_error_message()
+                    ))
+                })?;
+            let is_readonly = get_agent_registry()
+                .get_subagent_is_readonly(&subagent_type)
+                .unwrap_or(false);
+            if !is_readonly {
+                return Err(BitFunError::tool(format!(
+                    "DeepReview Task policy violation: {}",
+                    json!({
+                        "code": "deep_review_subagent_not_readonly",
+                        "message": format!(
+                            "DeepReview review-phase subagent '{}' must be read-only",
+                            subagent_type
+                        )
+                    })
+                )));
+            }
+            let is_review = get_agent_registry()
+                .get_subagent_is_review(&subagent_type)
+                .unwrap_or(false);
+            if !is_review {
+                return Err(BitFunError::tool(format!(
+                    "DeepReview Task policy violation: {}",
+                    json!({
+                        "code": "deep_review_subagent_not_review",
+                        "message": format!(
+                            "DeepReview review-phase subagent '{}' must be marked for review",
+                            subagent_type
+                        )
+                    })
+                )));
+            }
+            record_deep_review_task_budget(&dialog_turn_id, &policy, role).map_err(
+                |violation| {
+                    BitFunError::tool(format!(
+                        "DeepReview Task policy violation: {}",
+                        violation.to_tool_error_message()
+                    ))
+                },
+            )?;
+            timeout_seconds = policy.effective_timeout_seconds(role, timeout_seconds);
+        }
+
         // Get global coordinator
         let coordinator = get_global_coordinator()
             .ok_or_else(|| BitFunError::tool("coordinator not initialized".to_string()))?;
 
-        // Use coordinator to execute subagent, passing parent tool ID, parent turn_id and cancellation token
+        let parent_info = SubagentParentInfo {
+            tool_call_id,
+            session_id,
+            dialog_turn_id,
+        };
         let result = coordinator
             .execute_subagent(
                 subagent_type.clone(),
                 prompt,
-                SubagentParentInfo {
-                    tool_call_id,
-                    session_id,
-                    dialog_turn_id,
-                },
-                Some(effective_workspace_path),
+                parent_info,
+                Some(effective_workspace_path.clone()),
                 None,
                 context.cancellation_token.as_ref(),
+                model_id,
+                timeout_seconds,
             )
             .await?;
 
@@ -381,5 +509,105 @@ impl Tool for TaskTool {
             )),
             image_attachments: None,
         }])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TaskTool;
+    use crate::agentic::deep_review_policy::{
+        DeepReviewBudgetTracker, DeepReviewExecutionPolicy, DeepReviewSubagentRole,
+    };
+    use crate::agentic::tools::framework::Tool;
+    use serde_json::json;
+
+    #[test]
+    fn task_schema_accepts_optional_model_id() {
+        let schema = TaskTool::new().input_schema();
+
+        assert_eq!(schema["properties"]["model_id"]["type"], "string");
+        assert!(!schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value.as_str() == Some("model_id")));
+    }
+
+    #[test]
+    fn deep_review_policy_allows_only_configured_team_members() {
+        let policy = DeepReviewExecutionPolicy::from_config_value(Some(&json!({
+            "extra_subagent_ids": [
+                "ExtraReviewer",
+                "DeepReview",
+                "ReviewFixer",
+                "ReviewJudge",
+                "ReviewBusinessLogic"
+            ]
+        })));
+
+        assert_eq!(
+            policy.classify_subagent("ReviewBusinessLogic").unwrap(),
+            DeepReviewSubagentRole::Reviewer
+        );
+        assert_eq!(
+            policy.classify_subagent("ExtraReviewer").unwrap(),
+            DeepReviewSubagentRole::Reviewer
+        );
+        assert_eq!(
+            policy.classify_subagent("ReviewJudge").unwrap(),
+            DeepReviewSubagentRole::Judge
+        );
+        assert!(policy.classify_subagent("ReviewFixer").is_err());
+        assert!(policy.classify_subagent("CodeReview").is_err());
+        assert!(policy.classify_subagent("DeepReview").is_err());
+    }
+
+    #[test]
+    fn deep_review_policy_caps_reviewer_and_judge_timeouts() {
+        let policy = DeepReviewExecutionPolicy::from_config_value(Some(&json!({
+            "reviewer_timeout_seconds": 300,
+            "judge_timeout_seconds": 240
+        })));
+
+        assert_eq!(
+            policy.effective_timeout_seconds(DeepReviewSubagentRole::Reviewer, Some(900)),
+            Some(300)
+        );
+        assert_eq!(
+            policy.effective_timeout_seconds(DeepReviewSubagentRole::Reviewer, None),
+            Some(300)
+        );
+        assert_eq!(
+            policy.effective_timeout_seconds(DeepReviewSubagentRole::Judge, Some(900)),
+            Some(240)
+        );
+    }
+
+    #[test]
+    fn deep_review_policy_saturates_oversized_numeric_limits() {
+        let policy = DeepReviewExecutionPolicy::from_config_value(Some(&json!({
+            "reviewer_timeout_seconds": u64::MAX,
+            "judge_timeout_seconds": u64::MAX
+        })));
+
+        assert_eq!(policy.reviewer_timeout_seconds, 3600);
+        assert_eq!(policy.judge_timeout_seconds, 3600);
+    }
+
+    #[test]
+    fn deep_review_budget_tracker_caps_judge_per_turn() {
+        let policy = DeepReviewExecutionPolicy::default();
+        let tracker = DeepReviewBudgetTracker::default();
+
+        tracker
+            .record_task("turn-1", &policy, DeepReviewSubagentRole::Judge)
+            .unwrap();
+        assert!(tracker
+            .record_task("turn-1", &policy, DeepReviewSubagentRole::Judge)
+            .is_err());
+
+        tracker
+            .record_task("turn-2", &policy, DeepReviewSubagentRole::Judge)
+            .unwrap();
     }
 }

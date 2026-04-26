@@ -3,17 +3,29 @@
  * Provides unified card appearance and interaction effects
  */
 
+/* ========== Shared header variables ========== */
+:root {
+  --tool-card-header-pad-y: 7px;
+  --tool-card-header-pad-x: 0px;
+  /* Inset for header trailing controls (e.g. open-in-panel). Left stays 0 for icon rail alignment. */
+  --tool-card-header-pad-right: 10px;
+  --tool-card-header-icon-rail: 24px;
+  --tool-card-header-icon-slot: calc(var(--tool-card-header-icon-rail) + 10px);
+}
+
 /* ========== Card wrapper ========== */
 .base-tool-card-wrapper {
   display: flex;
   flex-direction: column;
-  margin: 6px 0;
+  margin: 4px 0;
   border-radius: 8px;
   border: 1px solid var(--border-base);
   background: var(--color-bg-flowchat);
   backdrop-filter: blur(10px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
   
   &:hover {
     border-color: var(--border-medium);
@@ -88,15 +100,10 @@
 
 /* ========== Header row styles ========== */
 .base-tool-card-header {
-  /* Used by icon-rail divider to meet card inner top/bottom for this row */
-  --tool-card-header-pad-y: 10px;
-  --tool-card-header-pad-x: 10px;
-  --tool-card-header-icon-rail: 28px;
-
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: var(--tool-card-header-pad-y) var(--tool-card-header-pad-x);
+  padding: var(--tool-card-header-pad-y) var(--tool-card-header-pad-right) var(--tool-card-header-pad-y) var(--tool-card-header-pad-x);
   position: relative;
   z-index: 11;
   flex-shrink: 0;
@@ -135,10 +142,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   flex-shrink: 0;
   align-self: stretch;
-  padding-right: 10px;
+  width: var(--tool-card-header-icon-slot);
   margin-right: 8px;
   box-sizing: border-box;
   min-height: 0;
@@ -295,7 +302,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
   font-weight: 500;
@@ -306,6 +313,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  > * {
+    min-width: 0;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
 }
 
 /* Right extra content */
@@ -314,11 +329,19 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  min-width: 0;
+
+  svg {
+    flex-shrink: 0;
+  }
 }
 
 /* ========== Expanded content area ========== */
 .base-tool-card-expanded {
-  padding: 10px 10px;
+  /* Full-bleed dividers in children use these (header pad-x is 0; do not conflate). */
+  --tool-card-expanded-pad-x: 10px;
+  --tool-card-expanded-pad-y: 10px;
+  padding: var(--tool-card-expanded-pad-y) var(--tool-card-expanded-pad-x);
   background: transparent;
   position: relative;
   animation: expandDown 0.2s ease-out;

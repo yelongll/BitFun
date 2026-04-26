@@ -9,21 +9,12 @@
  */
 
 import React, { ReactNode } from 'react';
+import { BaseToolCard, type BaseToolCardProps } from './BaseToolCard';
 import './CompactToolCard.scss';
 
 export interface CompactToolCardProps {
   /** Tool status */
-  status:
-    | 'pending'
-    | 'preparing'
-    | 'streaming'
-    | 'running'
-    | 'completed'
-    | 'error'
-    | 'cancelled'
-    | 'analyzing'
-    | 'pending_confirmation'
-    | 'confirmed';
+  status: BaseToolCardProps['status'];
   /** Whether expanded */
   isExpanded?: boolean;
   /** Card click callback */
@@ -56,8 +47,23 @@ export const CompactToolCard: React.FC<CompactToolCardProps> = ({
   const loadingShimmer =
     status === 'preparing' ||
     status === 'streaming' ||
+    status === 'receiving' ||
     status === 'running' ||
     status === 'analyzing';
+
+  if (isExpanded && expandedContent) {
+    return (
+      <BaseToolCard
+        status={status}
+        isExpanded
+        onClick={handleWrapperClick}
+        className={`compact-tool-card-wrapper--expanded-card ${className}`.trim()}
+        header={header}
+        expandedContent={expandedContent}
+        headerExpandAffordance={clickable || Boolean(onClick)}
+      />
+    );
+  }
 
   return (
     <div

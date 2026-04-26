@@ -41,6 +41,70 @@ function hasActiveStreamingNarrative(items: FlowItem[]): boolean {
   });
 }
 
+function useTaskCollapsed(toolId: string): boolean {
+  const [isCollapsed, setIsCollapsed] = useState(() =>
+    taskCollapseStateManager.isCollapsed(toolId)
+  );
+
+  useEffect(() => {
+    setIsCollapsed(taskCollapseStateManager.isCollapsed(toolId));
+
+    const unsubscribe = taskCollapseStateManager.addListener((changedToolId, collapsed) => {
+      if (changedToolId === toolId) {
+        setIsCollapsed(collapsed);
+      }
+    });
+
+    return unsubscribe;
+  }, [toolId]);
+
+  return isCollapsed;
+}
+
+interface TaskWithSubagentWrapperProps {
+  taskItem: FlowItem;
+  parentTaskToolId: string;
+  items: FlowItem[];
+  turnId: string;
+  roundId: string;
+}
+
+const TaskWithSubagentWrapper: React.FC<TaskWithSubagentWrapperProps> = React.memo(({
+  taskItem,
+  parentTaskToolId,
+  items,
+  turnId,
+  roundId,
+}) => {
+  const isCollapsed = useTaskCollapsed(parentTaskToolId);
+  const hasPrompt = Boolean(
+    taskItem.type === 'tool' &&
+    (taskItem as FlowToolItem).toolCall?.input?.prompt
+  );
+  const className = [
+    'task-with-subagent-wrapper',
+    !isCollapsed && 'task-with-subagent-wrapper--expanded',
+    hasPrompt && 'task-with-subagent-wrapper--has-prompt',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <div className={className}>
+      <FlowItemRenderer
+        item={taskItem}
+        turnId={turnId}
+        roundId={roundId}
+        isLastItem={false}
+      />
+      <SubagentItemsContainer
+        parentTaskToolId={parentTaskToolId}
+        items={items}
+        turnId={turnId}
+        roundId={roundId}
+      />
+    </div>
+  );
+});
+
 export const ModelRoundItem = React.memo<ModelRoundItemProps>(
   ({ round, turnId, isLastRound = false }) => {
     const { t } = useTranslation('flow-chat');
@@ -292,7 +356,7 @@ export const ModelRoundItem = React.memo<ModelRoundItemProps>(
           switch (group.type) {
             case 'explore':
               return group.items.map((item, itemIdx) => (
-                <FlowItemRenderer 
+                <FlowItemRenderer
                   key={item.id}
                   item={item}
                   turnId={turnId}
@@ -300,7 +364,7 @@ export const ModelRoundItem = React.memo<ModelRoundItemProps>(
                   isLastItem={isLast && itemIdx === group.items.length - 1}
                 />
               ));
-            
+
             case 'critical': {
               // If next group is the matching subagent, skip here — rendered by subagent case.
               const nextGroup = groupedItems[groupIndex + 1];
@@ -338,15 +402,14 @@ export const ModelRoundItem = React.memo<ModelRoundItemProps>(
               
               if (hasPairedTask) {
                 return (
-                  <div key={`task-with-subagent-${prevGroup.item.id}`} className="task-with-subagent-wrapper">
-                    <FlowItemRenderer
-                      item={prevGroup.item}
-                      turnId={turnId}
-                      roundId={round.id}
-                      isLastItem={false}
-                    />
-                    {subagentContainer}
-                  </div>
+                  <TaskWithSubagentWrapper
+                    key={`task-with-subagent-${prevGroup.item.id}`}
+                    taskItem={prevGroup.item}
+                    parentTaskToolId={group.parentTaskToolId}
+                    items={group.items}
+                    turnId={turnId}
+                    roundId={round.id}
+                  />
                 );
               }
               return subagentContainer;
@@ -453,59 +516,48 @@ const SubagentItemsContainer = React.memo<SubagentItemsContainerProps>(({
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, [isCollapsed]);
-  
-  // Use MutationObserver for streaming auto-scroll with throttling.
+
+  const scrollSignal = useMemo(() => {
+    return items.map((item) => {
+      const itemAny = item as any;
+      const contentLength = typeof itemAny.content === 'string' ? itemAny.content.length : 0;
+      const paramsLength = itemAny.partialParams ? JSON.stringify(itemAny.partialParams).length : 0;
+      return `${item.id}:${item.status}:${contentLength}:${paramsLength}`;
+    }).join('|');
+  }, [items]);
+
+  // Auto-scroll only when the subagent item data changes. A MutationObserver on
+  // the whole subtree also reacts to layout-driven DOM churn while the right
+  // panel opens, which amplifies FlowChat reflow work.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || isCollapsed) return;
-    
-    let rafId: number | null = null;
-    let throttleTimer: NodeJS.Timeout | null = null;
-    const THROTTLE_MS = 50;
-    
-    const scrollToBottom = () => {
-      if (container && !userScrolledUpRef.current) {
+
+    const rafId = requestAnimationFrame(() => {
+      if (!userScrolledUpRef.current) {
         container.scrollTop = container.scrollHeight;
         lastScrollTopRef.current = container.scrollTop;
       }
-    };
-    
-    const throttledScroll = () => {
-      if (throttleTimer) return;
-      
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(scrollToBottom);
-      }, THROTTLE_MS);
-    };
-    
-    const observer = new MutationObserver(throttledScroll);
-    
-    observer.observe(container, {
-      childList: true,
-      subtree: true,
-      characterData: true,
     });
-    
-    scrollToBottom();
-    
-    return () => {
-      observer.disconnect();
-      if (rafId) cancelAnimationFrame(rafId);
-      if (throttleTimer) clearTimeout(throttleTimer);
-    };
-  }, [isCollapsed]);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [isCollapsed, scrollSignal]);
   
+  // Don't render the scrollable container when there are no items yet.
+  // This prevents an empty white area from showing before subagent content arrives.
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
     <div className={`subagent-items-wrapper ${isCollapsed ? 'subagent-items-wrapper--collapsed' : 'subagent-items-wrapper--expanded'}`}>
-      <div 
+      <div
         ref={containerRef}
         className={`subagent-items-container ${isCollapsed ? 'subagent-items-container--collapsed' : 'subagent-items-container--expanded'}`}
         data-parent-tool-id={parentTaskToolId}
       >
         {items.map((item, idx) => (
-          <SubagentItemRenderer 
+          <SubagentItemRenderer
             key={item.id}
             item={item}
             turnId={turnId}
@@ -521,7 +573,7 @@ const SubagentItemsContainer = React.memo<SubagentItemsContainerProps>(({
 /**
  * Subagent item renderer (used inside the container, no collapse logic).
  */
-const SubagentItemRenderer = React.memo<{ item: FlowItem; turnId: string; roundId: string; isLastItem?: boolean }>(({ item, isLastItem }) => {
+const SubagentItemRenderer = React.memo<{ item: FlowItem; turnId: string; roundId: string; isLastItem?: boolean }>(({ item, turnId, isLastItem }) => {
   const {
     onToolConfirm,
     onToolReject,
@@ -559,6 +611,7 @@ const SubagentItemRenderer = React.memo<{ item: FlowItem; turnId: string; roundI
       return (
         <FlowTextBlock
           textItem={item as FlowTextItem}
+          className="flow-text-block--subagent-compact"
         />
       );
     
@@ -576,9 +629,10 @@ const SubagentItemRenderer = React.memo<{ item: FlowItem; turnId: string; roundI
           onOpenInEditor={handleOpenInEditor}
           onOpenInPanel={handleOpenInPanel}
           sessionId={sessionId}
+          turnId={turnId}
         />
       );
-    
+
     default:
       return null;
   }
@@ -595,7 +649,7 @@ interface FlowItemRendererProps {
 }
 
 // Do not memoize: streaming content updates frequently.
-const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({ item, isLastItem }) => {
+const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({ item, turnId, isLastItem }) => {
   const {
     onToolConfirm,
     onToolReject,
@@ -646,6 +700,7 @@ const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({ item, isLastItem })
       return wrapContent(
         <FlowTextBlock
           textItem={item as FlowTextItem}
+          className={isSubagentItem ? 'flow-text-block--subagent-compact' : ''}
         />
       );
     
@@ -681,10 +736,11 @@ const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({ item, isLastItem })
               }
             }}
             sessionId={sessionId}
+            turnId={turnId}
           />
         </div>
       );
-    
+
     default:
       return null;
   }

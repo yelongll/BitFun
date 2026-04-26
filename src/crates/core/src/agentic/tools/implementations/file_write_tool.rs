@@ -1,6 +1,7 @@
 use crate::agentic::tools::framework::{
     Tool, ToolRenderOptions, ToolResult, ToolUseContext, ValidationResult,
 };
+use crate::agentic::tools::ToolPathOperation;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -8,6 +9,9 @@ use std::path::Path;
 use tokio::fs;
 
 pub struct FileWriteTool;
+
+const LARGE_WRITE_SOFT_LINE_LIMIT: usize = 200;
+const LARGE_WRITE_SOFT_BYTE_LIMIT: usize = 20 * 1024;
 
 impl Default for FileWriteTool {
     fn default() -> Self {
@@ -35,7 +39,8 @@ Usage:
 - If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
 - The file_path parameter must be either an absolute path or an exact `bitfun://runtime/...` URI returned by another tool.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
-- Keep writes focused. Avoid sending hundreds of lines in one Write call; prefer Read + Edit for targeted updates, and split large rewrites into smaller chunks when possible.
+- Keep writes focused. The 200-line / 20KB guideline is a soft reliability threshold, not a hard cap. If a task genuinely needs more content, preserve correctness and use a staged plan instead of truncating.
+- For existing files, prefer Read + targeted Edit calls. For large new files or rewrites, write the stable scaffold first, then fill or revise sections with focused Edit calls. Do not replace an entire existing file just to change a few sections.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked."#.to_string())
     }
@@ -50,7 +55,7 @@ Usage:
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to write to the file. Keep writes focused; avoid sending hundreds of lines in one call. Prefer Read + Edit for targeted changes, and split large rewrites into smaller chunks when possible."
+                    "description": "The content to write to the file. 200 lines / 20KB is a soft reliability threshold, not a hard cap. For existing files prefer Read + focused Edit calls. For large new files, write a stable scaffold first, then add sections in follow-up focused edits unless a complete initial body is required."
                 }
             },
             "required": ["file_path", "content"],
@@ -96,8 +101,36 @@ Usage:
             };
         }
 
+        let large_write_warning =
+            input
+                .get("content")
+                .and_then(|v| v.as_str())
+                .and_then(|content| {
+                    let line_count = content.lines().count();
+                    let byte_count = content.len();
+                    if line_count > LARGE_WRITE_SOFT_LINE_LIMIT
+                        || byte_count > LARGE_WRITE_SOFT_BYTE_LIMIT
+                    {
+                        Some((line_count, byte_count))
+                    } else {
+                        None
+                    }
+                });
+
         if let Some(ctx) = context {
-            if let Err(err) = ctx.resolve_tool_path(file_path) {
+            let resolved = match ctx.resolve_tool_path(file_path) {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    return ValidationResult {
+                        result: false,
+                        message: Some(err.to_string()),
+                        error_code: Some(400),
+                        meta: None,
+                    };
+                }
+            };
+
+            if let Err(err) = ctx.enforce_path_operation(ToolPathOperation::Write, &resolved) {
                 return ValidationResult {
                     result: false,
                     message: Some(err.to_string()),
@@ -105,6 +138,24 @@ Usage:
                     meta: None,
                 };
             }
+        }
+
+        if let Some((line_count, byte_count)) = large_write_warning {
+            return ValidationResult {
+                result: true,
+                message: Some(format!(
+                    "Large Write payload: {} lines, {} bytes. This is allowed when necessary, but prefer a staged approach: for existing files use Read + focused Edit calls; for large new files write a stable scaffold first, then add sections in follow-up edits unless a complete initial body is required.",
+                    line_count, byte_count
+                )),
+                error_code: None,
+                meta: Some(json!({
+                    "large_write": true,
+                    "line_count": line_count,
+                    "byte_count": byte_count,
+                    "soft_line_limit": LARGE_WRITE_SOFT_LINE_LIMIT,
+                    "soft_byte_limit": LARGE_WRITE_SOFT_BYTE_LIMIT
+                })),
+            };
         }
 
         ValidationResult::default()
@@ -138,6 +189,7 @@ Usage:
             .ok_or_else(|| BitFunError::tool("file_path is required".to_string()))?;
 
         let resolved = context.resolve_tool_path(file_path)?;
+        context.enforce_path_operation(ToolPathOperation::Write, &resolved)?;
 
         let content = input
             .get("content")
