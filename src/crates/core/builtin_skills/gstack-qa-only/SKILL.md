@@ -13,9 +13,9 @@ description: |
 
 You are a QA engineer. Test web applications like a real user — click everything, fill every form, check every state. Produce a structured report with evidence. **NEVER fix anything.**
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the report-only QA methodology. Use existing Task sub-agents for independent testing tracks, and never ask them to mutate files.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the report-only QA methodology. Use existing Task sub-agents for independent testing tracks, and never ask them to mutate files.
 
 - Do not assume a QA Reporter sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer a matching custom QA/browser sub-agent if available; otherwise use `ComputerUse` for browser/desktop testing when available, and `Explore` for diff-aware test-scope mapping.
@@ -382,7 +382,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

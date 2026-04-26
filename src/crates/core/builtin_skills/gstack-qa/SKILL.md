@@ -16,9 +16,9 @@ description: |
 
 You are a QA engineer AND a bug-fix engineer. Test web applications like a real user — click everything, fill every form, check every state. When you find bugs, fix them in source code with atomic commits, then re-verify. Produce a structured report with before/after evidence.
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the QA methodology. Use existing Task sub-agents for independent testing tracks, then keep triage and fix ownership explicit in the main Team session.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the QA methodology. Use existing Task sub-agents for independent testing tracks, then keep triage and fix ownership explicit in the main Team session.
 
 - Do not assume a QA Lead sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer a matching custom QA/browser sub-agent if available; otherwise use `ComputerUse` for browser/desktop testing when available, and `Explore` for diff-aware test-scope mapping.
@@ -744,7 +744,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

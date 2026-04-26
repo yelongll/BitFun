@@ -5,7 +5,7 @@ export const bitfunSolarizedDarkTheme: ThemeConfig = {
   name: 'Solarized Dark',
   type: 'dark',
   description: 'Solarized Dark 主题 - 经典 Solarized 深色，精确配色方案',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
 
   colors: {

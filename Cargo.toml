@@ -22,7 +22,7 @@ resolver = "2"
 # Shared package metadata — single source of truth for version
 [workspace.package]
 version = "0.2.4" # x-release-please-version
-authors = ["BitFun Team"]
+authors = ["空灵语言 团队"]
 edition = "2021"
 
 # Shared dependency versions to keep all crates aligned

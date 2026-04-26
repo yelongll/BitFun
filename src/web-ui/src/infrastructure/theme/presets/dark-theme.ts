@@ -8,7 +8,7 @@ export const bitfunDarkTheme: ThemeConfig = {
   name: 'Dark',
   type: 'dark',
   description: 'Default dark theme',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '2.1.0',
   
   

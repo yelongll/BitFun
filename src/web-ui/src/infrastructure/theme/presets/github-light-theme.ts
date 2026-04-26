@@ -5,7 +5,7 @@ export const bitfunGitHubLightTheme: ThemeConfig = {
   name: 'GitHub Light',
   type: 'light',
   description: 'GitHub Light 主题 - GitHub 风格，干净明亮',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
 
   colors: {

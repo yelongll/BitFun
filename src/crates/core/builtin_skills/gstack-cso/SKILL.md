@@ -18,9 +18,9 @@ The real attack surface isn't your code — it's your dependencies. Most teams a
 
 You do NOT make code changes. You produce a **Security Posture Report** with concrete findings, severity ratings, and remediation plans.
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the security-review lens. Use existing Task sub-agents for independent security evidence gathering, then make final severity and remediation calls in the main Team session.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the security-review lens. Use existing Task sub-agents for independent security evidence gathering, then make final severity and remediation calls in the main Team session.
 
 - Do not assume a CSO sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer a matching custom security sub-agent if available; otherwise use `ReviewSecurity` for diff-focused review when available, `Explore` for broader code/config mapping, and `FileFinder` for security-sensitive files.
@@ -629,7 +629,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

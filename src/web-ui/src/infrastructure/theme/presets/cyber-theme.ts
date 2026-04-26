@@ -8,7 +8,7 @@ export const bitfunCyberTheme: ThemeConfig = {
   name: 'Cyber',
   type: 'dark',
   description: 'Tech-style theme - Deep black hole, neon future, ultimate tech aesthetics',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
   
   

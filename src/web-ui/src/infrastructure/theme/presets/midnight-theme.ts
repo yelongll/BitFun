@@ -8,7 +8,7 @@ export const bitfunMidnightTheme: ThemeConfig = {
   name: 'Midnight',
   type: 'dark',
   description: 'Midnight gray dark theme - Professional and elegant, inspired by JetBrains IDE',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
   
   

@@ -167,7 +167,7 @@
       "lockedCount": "{{count}} locked roles",
       "extraCount": "{{count}} extra Sub-Agents",
       "localOnly": "Code review",
-      "localOnlyDescription": "Runs inside BitFun as read-only Sub-Agents and reports back into this review thread.",
+      "localOnlyDescription": "Runs inside 空灵语言 as read-only Sub-Agents and reports back into this review thread.",
       "parallelLabel": "Parallel reviewers",
       "parallelDescription": "Logic, performance, security, and extra reviewers work side by side before the judge validates findings.",
       "warningLabel": "Heavier review",

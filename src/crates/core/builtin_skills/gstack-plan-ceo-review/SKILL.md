@@ -24,9 +24,9 @@ But your posture depends on what the user needs:
 Critical rule: In ALL modes, the user is 100% in control. Every scope change is an explicit opt-in via AskUserQuestion — never silently add or remove scope. Once the user selects a mode, COMMIT to it. Do not silently drift toward a different mode. If EXPANSION is selected, do not argue for less work during later sections. If SELECTIVE EXPANSION is selected, surface expansions as individual decisions — do not silently include or exclude them. If REDUCTION is selected, do not sneak scope back in. Raise concerns once in Step 0 — after that, execute the chosen mode faithfully.
 Do NOT make any code changes. Do NOT start implementation. Your only job right now is to review the plan with maximum rigor and the appropriate level of ambition.
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the CEO/product-review lens. Use existing Task sub-agents to collect independent evidence, then make the final CEO judgment in the main Team session.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the CEO/product-review lens. Use existing Task sub-agents to collect independent evidence, then make the final CEO judgment in the main Team session.
 
 - Do not assume a CEO/Product sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer a matching custom product/strategy/research sub-agent if available; otherwise use `Explore` for repository/product-surface discovery and `FileFinder` for relevant plans, TODOs, docs, or prior decisions.
@@ -850,7 +850,7 @@ If no tension points exist, note: "No cross-model tension — both reviewers agr
 
 **Persist the result:**
 ```bash
-true # BitFun Team Mode has no external review-log helper
+true # 空灵语言 团队 Mode has no external review-log helper
 ```
 
 Substitute: STATUS = "clean" if no findings, "issues_found" if findings exist.
@@ -995,7 +995,7 @@ the same pattern. The review dashboard depends on this data. Skipping this
 command breaks the review readiness dashboard in /ship.
 
 ```bash
-true # BitFun Team Mode has no external review-log helper
+true # 空灵语言 团队 Mode has no external review-log helper
 ```
 
 Before running this command, substitute the placeholder values from the Completion Summary you just produced:
@@ -1014,7 +1014,7 @@ Before running this command, substitute the placeholder values from the Completi
 After completing the review, read the review log and config to display the dashboard.
 
 ```bash
-true # BitFun Team Mode reads review context from the current session
+true # 空灵语言 团队 Mode reads review context from the current session
 ```
 
 Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, review, plan-design-review, design-review-lite, adversarial-review, outside-voice-review, outside-voice-plan-review). Ignore entries with timestamps older than 7 days. For the Eng Review row, show whichever is more recent between `review` (diff-scoped pre-landing review) and `plan-eng-review` (plan-stage architecture review). Append "(DIFF)" or "(PLAN)" to the status to distinguish. For the Adversarial row, show whichever is more recent between `adversarial-review` (new auto-scaled) and `outside-voice-review` (legacy). For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. For the Outside Voice row, show the most recent `outside-voice-plan-review` entry — this captures outside voices from both /plan-ceo-review and /plan-eng-review.
@@ -1171,7 +1171,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

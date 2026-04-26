@@ -5,7 +5,7 @@ export const bitfunOneDarkTheme: ThemeConfig = {
   name: 'One Dark',
   type: 'dark',
   description: 'One Dark 主题 - Atom 编辑器经典主题，干净专业',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
 
   colors: {

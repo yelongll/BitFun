@@ -8,7 +8,7 @@ export const bitfunChinaStyleTheme: ThemeConfig = {
   name: 'Ink Charm',
   type: 'light',
   description: 'Chinese style theme - Rice paper and ink, blue and vermilion, warm and elegant',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
   
   

@@ -384,6 +384,6 @@ export const BitFunDarkThemeMetadata = {
   id: 'bitfun-dark',
   label: 'Dark',
   description: 'Premium vibrant dark theme with modern multi-color palette',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '2.0.0',
 };

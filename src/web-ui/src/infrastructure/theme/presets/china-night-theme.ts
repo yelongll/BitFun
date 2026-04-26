@@ -8,7 +8,7 @@ export const bitfunChinaNightTheme: ThemeConfig = {
   name: 'Ink Night',
   type: 'dark',
   description: 'Chinese dark theme - Starlit ink night, moonlight like water, serene and elegant',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
   
   

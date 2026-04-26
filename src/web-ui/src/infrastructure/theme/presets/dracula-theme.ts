@@ -5,7 +5,7 @@ export const bitfunDraculaTheme: ThemeConfig = {
   name: 'Dracula',
   type: 'dark',
   description: 'Dracula 主题 - 深紫色背景，鲜艳配色，经典吸血鬼美学',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
 
   colors: {

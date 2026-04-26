@@ -8,7 +8,7 @@ export const bitfunLightTheme: ThemeConfig = {
   name: 'Light',
   type: 'light',
   description: 'Light theme - Neutral gray surfaces, black primary actions',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '2.3.0',
 
   layout: {

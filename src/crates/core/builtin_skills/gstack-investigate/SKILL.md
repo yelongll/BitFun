@@ -18,9 +18,9 @@ description: |
 
 Fixing symptoms creates whack-a-mole debugging. Every fix that doesn't address root cause makes the next bug harder to find. Find the root cause, then fix it.
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the debugging methodology. Use existing Task sub-agents to gather independent evidence, then keep hypothesis selection and fixes in the main Team session.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the debugging methodology. Use existing Task sub-agents to gather independent evidence, then keep hypothesis selection and fixes in the main Team session.
 
 - Do not assume a Debugger sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer matching custom debugging/domain sub-agents if available; otherwise use `Explore` for code-path tracing and `FileFinder` for locating logs, configs, tests, and affected files.
@@ -179,7 +179,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

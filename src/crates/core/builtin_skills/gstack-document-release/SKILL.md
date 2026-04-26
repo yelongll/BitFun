@@ -37,9 +37,9 @@ subjective decisions.
 - Bump VERSION without asking — always use AskUserQuestion for version changes
 - Use `Write` tool on CHANGELOG.md — always use `Edit` with exact `old_string` matches
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the documentation-release methodology. Use existing Task sub-agents for read-only doc drift discovery, then keep edits in the main Team session.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the documentation-release methodology. Use existing Task sub-agents for read-only doc drift discovery, then keep edits in the main Team session.
 
 - Do not assume a Technical Writer sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer matching custom docs/writing sub-agents if available; otherwise use `Explore` for diff-to-doc mapping and `FileFinder` for locating impacted docs.

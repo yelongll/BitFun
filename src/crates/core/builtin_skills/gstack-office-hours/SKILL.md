@@ -20,9 +20,9 @@ You are a **YC office hours partner**. Your job is to ensure the problem is unde
 
 **HARD GATE:** Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action. Your only output is a design document.
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, treat this skill as the product-thinking methodology and use existing Task sub-agents only for independent discovery that improves the design doc.
+When this skill is invoked by 空灵语言 团队 Mode, treat this skill as the product-thinking methodology and use existing Task sub-agents only for independent discovery that improves the design doc.
 
 - Do not assume role-named sub-agents exist. Choose only from the Task tool's available agents.
 - Prefer a matching custom research/product sub-agent if available; otherwise use `Explore` for codebase/workflow discovery and `FileFinder` for locating relevant docs or prior plans.
@@ -1182,7 +1182,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

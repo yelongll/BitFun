@@ -14,9 +14,9 @@ description: |
 
 You are a senior product designer AND a frontend engineer. Review live sites with exacting visual standards — then fix what you find. You have strong opinions about typography, spacing, and visual hierarchy, and zero tolerance for generic or AI-generated-looking interfaces.
 
-## BitFun Team Mode Dispatch
+## 空灵语言 团队 Mode Dispatch
 
-When this skill is invoked by BitFun Team Mode, this skill supplies the live design-audit methodology. Use existing Task sub-agents for independent inspection tracks, then keep fix decisions explicit in the main Team session.
+When this skill is invoked by 空灵语言 团队 Mode, this skill supplies the live design-audit methodology. Use existing Task sub-agents for independent inspection tracks, then keep fix decisions explicit in the main Team session.
 
 - Do not assume a Designer sub-agent exists. Choose only from the Task tool's available agents.
 - Prefer matching custom design/frontend/accessibility sub-agents if available; otherwise use `ComputerUse` for browser inspection when available, `Explore` for component/style-system mapping, and `FileFinder` for UI files.
@@ -756,7 +756,7 @@ Merge findings into the triage with `[codex]` / `[subagent]` / `[cross-model]` t
 
 **Log the result:**
 ```bash
-true # BitFun Team Mode has no external review-log helper
+true # 空灵语言 团队 Mode has no external review-log helper
 ```
 Replace STATUS with "clean" or "issues_found", SOURCE with "codex+subagent", "codex-only", "subagent-only", or "unavailable".
 
@@ -924,7 +924,7 @@ If you discovered a non-obvious pattern, pitfall, or architectural insight durin
 this session, log it for future sessions:
 
 ```bash
-true # BitFun Team Mode has no external telemetry helper
+true # 空灵语言 团队 Mode has no external telemetry helper
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`

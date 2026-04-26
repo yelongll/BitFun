@@ -8,7 +8,7 @@ export const bitfunSlateTheme: ThemeConfig = {
   name: 'Slate',
   type: 'dark',
   description: 'Slate gray geometric theme - Deep immersion, high contrast grayscale aesthetics',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.3.0',
 
   layout: {

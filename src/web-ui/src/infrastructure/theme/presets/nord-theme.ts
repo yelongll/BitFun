@@ -5,7 +5,7 @@ export const bitfunNordTheme: ThemeConfig = {
   name: 'Nord',
   type: 'dark',
   description: 'Nord 主题 - 北极蓝调色板，干净优雅',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
 
   colors: {

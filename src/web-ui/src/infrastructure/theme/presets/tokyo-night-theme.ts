@@ -5,7 +5,7 @@ export const bitfunTokyoNightTheme: ThemeConfig = {
   name: 'Tokyo Night',
   type: 'dark',
   description: 'Tokyo Night 主题 - 东京夜景风格，深邃宁静',
-  author: 'BitFun Team',
+  author: '空灵语言 团队',
   version: '1.0.0',
 
   colors: {
