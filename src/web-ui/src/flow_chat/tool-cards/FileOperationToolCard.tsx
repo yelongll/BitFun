@@ -698,15 +698,15 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
       case 'running':
       case 'streaming':
       case 'preparing':
-        return <Loader2 className="animate-spin" size={12} />;
+        return <Loader2 className="animate-spin" size={16} />;
       case 'completed':
-        return <Check size={12} className="icon-check-done" />;
+        return <Check size={16} className="icon-check-done" />;
       case 'pending':
       case 'confirmed':
       case 'pending_confirmation':
       case 'analyzing':
       default:
-        return <Clock size={12} />;
+        return <Clock size={16} />;
     }
   };
 
@@ -806,9 +806,8 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
                 className="file-op-open-full-button"
                 onClick={handleOpenFullCodeClick}
                 aria-label={t('toolCards.file.openFullCodeHint')}
-                title={t('toolCards.file.openFullCodeHint')}
               >
-                <ChevronRight size={18} strokeWidth={2} absoluteStrokeWidth />
+                <ChevronRight size={14} strokeWidth={2} absoluteStrokeWidth />
               </button>
             </Tooltip>
           )}
@@ -828,7 +827,7 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
         clickable={false}
         header={
           <CompactToolCardHeader
-            statusIcon={getDeleteStatusIcon()}
+            icon={getDeleteStatusIcon()}
             content={renderDeleteContent()}
           />
         }

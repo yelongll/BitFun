@@ -383,6 +383,9 @@
     "customInstructionsPlaceholder": "描述修复的额外要求或上下文信息...",
     "fillBackInput": "填入输入框",
     "fillBackInputHint": "将选中的修复计划填入输入框，供手动编辑",
+    "replaceInputConfirmTitle": "替换当前输入？",
+    "replaceInputConfirmMessage": "输入框中已有文本，填入计划将替换当前草稿内容。",
+    "replaceInputConfirmAction": "替换输入",
     "reviewInterrupted": "深度审核已中断",
     "resumeBlocked": "继续前需要处理问题",
     "resumeRunning": "正在继续审核...",
@@ -515,6 +518,8 @@
   "modelRound": {
     "copyDialog": "复制对话",
     "copiedDialog": "已复制!",
+    "forkDialog": "从这里分叉会话",
+    "forkFailed": "创建分叉会话失败",
     "like": "点赞",
     "dislike": "点踩",
     "report": "举报",

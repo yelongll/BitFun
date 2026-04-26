@@ -363,7 +363,6 @@ pub async fn run() {
             api::agentic_api::cancel_tool,
             api::agentic_api::generate_session_title,
             api::agentic_api::get_available_modes,
-            api::btw_api::btw_ask,
             api::btw_api::btw_ask_stream,
             api::btw_api::btw_cancel,
             api::editor_ai_api::editor_ai_stream,
@@ -545,6 +544,7 @@ pub async fn run() {
             delete_persisted_session,
             touch_session_activity,
             load_persisted_session_metadata,
+            fork_session,
             // AI Memory API
             api::ai_memory_api::get_all_memories,
             api::ai_memory_api::add_memory,

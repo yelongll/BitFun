@@ -12,10 +12,13 @@ use crate::agentic::events::{
     AgenticEvent, EventPriority, EventQueue, EventRouter, EventSubscriber,
 };
 use crate::agentic::execution::{ContextCompactionOutcome, ExecutionContext, ExecutionEngine};
-use crate::agentic::fork::{ForkContextSnapshot, ForkExecutionRequest, ForkExecutionResult};
+use crate::agentic::fork_agent::{
+    ForkAgentContextSnapshot, ForkAgentExecutionRequest, ForkAgentExecutionResult,
+};
 use crate::agentic::image_analysis::ImageContextData;
 use crate::agentic::round_preempt::DialogRoundPreemptSource;
 use crate::agentic::session::SessionManager;
+use crate::agentic::side_question::build_btw_user_input;
 use crate::agentic::tools::pipeline::{SubagentParentInfo, ToolPipeline};
 use crate::agentic::tools::ToolRuntimeRestrictions;
 use crate::agentic::WorkspaceBinding;
@@ -860,6 +863,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     /// and must never appear as top-level items in the UI.
     async fn create_hidden_subagent_session(
         &self,
+        session_id: Option<String>,
         session_name: String,
         agent_type: String,
         config: SessionConfig,
@@ -867,7 +871,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     ) -> BitFunResult<Session> {
         self.session_manager
             .create_session_with_id_and_details(
-                None,
+                session_id,
                 session_name,
                 agent_type,
                 config,
@@ -1872,18 +1876,25 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 }
             };
 
-            if let (Some(ref wp), Some(status)) = (&session_workspace_path, workspace_turn_status) {
-                Self::finalize_turn_in_workspace(
-                    &session_id_clone,
-                    &turn_id_clone,
-                    turn_index,
-                    &user_input_for_workspace,
-                    wp,
-                    session_storage_path_for_finalize.as_deref(),
-                    status,
-                    user_message_metadata_clone,
-                )
-                .await;
+            let should_finalize_in_workspace =
+                session_manager.should_persist_session_id(&session_id_clone);
+
+            if should_finalize_in_workspace {
+                if let (Some(ref wp), Some(status)) =
+                    (&session_workspace_path, workspace_turn_status)
+                {
+                    Self::finalize_turn_in_workspace(
+                        &session_id_clone,
+                        &turn_id_clone,
+                        turn_index,
+                        &user_input_for_workspace,
+                        wp,
+                        session_storage_path_for_finalize.as_deref(),
+                        status,
+                        user_message_metadata_clone,
+                    )
+                    .await;
+                }
             }
         });
 
@@ -2276,6 +2287,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
 
         let session = self
             .create_hidden_subagent_session(
+                None,
                 session_name,
                 agent_type.clone(),
                 session_config,
@@ -2624,10 +2636,10 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         })
     }
 
-    pub async fn capture_fork_context_snapshot(
+    pub async fn capture_fork_agent_context_snapshot(
         &self,
         parent_session_id: &str,
-    ) -> BitFunResult<ForkContextSnapshot> {
+    ) -> BitFunResult<ForkAgentContextSnapshot> {
         let parent_session = self
             .session_manager
             .get_session(parent_session_id)
@@ -2635,29 +2647,126 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 BitFunError::NotFound(format!("Parent session not found: {}", parent_session_id))
             })?;
         let context_messages = self.load_session_context_messages(&parent_session).await?;
-        ForkContextSnapshot::from_parent_session(&parent_session, context_messages)
+        ForkAgentContextSnapshot::from_parent_session(&parent_session, context_messages)
+    }
+
+    async fn ensure_hidden_btw_session(
+        &self,
+        parent_session_id: &str,
+        child_session_id: &str,
+        child_session_name: Option<&str>,
+    ) -> BitFunResult<Session> {
+        if let Some(session) = self.session_manager.get_session(child_session_id) {
+            return Ok(session);
+        }
+
+        let snapshot = self
+            .capture_fork_agent_context_snapshot(parent_session_id)
+            .await?;
+        let session_name = child_session_name
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("Side thread")
+            .to_string();
+        let child_session = self
+            .create_hidden_subagent_session(
+                Some(child_session_id.to_string()),
+                session_name,
+                snapshot.parent_agent_type.clone(),
+                snapshot.build_child_session_config(None),
+                Some(format!("session-{}", snapshot.parent_session_id)),
+            )
+            .await?;
+
+        self.session_manager
+            .replace_context_messages(&child_session.session_id, snapshot.messages)
+            .await;
+
+        Ok(child_session)
+    }
+
+    pub async fn start_hidden_btw_turn(
+        &self,
+        request_id: &str,
+        parent_session_id: &str,
+        child_session_id: &str,
+        child_session_name: Option<&str>,
+        question: &str,
+        model_id: Option<&str>,
+    ) -> BitFunResult<String> {
+        if request_id.trim().is_empty() {
+            return Err(BitFunError::Validation(
+                "request_id is required".to_string(),
+            ));
+        }
+        if parent_session_id.trim().is_empty() {
+            return Err(BitFunError::Validation(
+                "parent_session_id is required".to_string(),
+            ));
+        }
+        if child_session_id.trim().is_empty() {
+            return Err(BitFunError::Validation(
+                "child_session_id is required".to_string(),
+            ));
+        }
+        if question.trim().is_empty() {
+            return Err(BitFunError::Validation("question is required".to_string()));
+        }
+
+        let child_session = self
+            .ensure_hidden_btw_session(parent_session_id, child_session_id, child_session_name)
+            .await?;
+
+        if let Some(model_id) = model_id.map(str::trim).filter(|model_id| !model_id.is_empty()) {
+            self.session_manager
+                .update_session_model_id(child_session_id, model_id)
+                .await?;
+        }
+
+        let turn_id = format!("btw-turn-{}", request_id.trim());
+        let user_message_metadata = Some(serde_json::json!({
+            "kind": "btw",
+            "parentSessionId": parent_session_id,
+        }));
+
+        self.start_dialog_turn_internal(
+            child_session_id.to_string(),
+            build_btw_user_input(question),
+            Some(question.trim().to_string()),
+            None,
+            Some(turn_id.clone()),
+            child_session.agent_type.clone(),
+            child_session.config.workspace_path.clone(),
+            DialogSubmissionPolicy::for_source(DialogTriggerSource::DesktopApi)
+                .with_skip_tool_confirmation(true),
+            user_message_metadata,
+            true,
+        )
+        .await?;
+
+        Ok(turn_id)
     }
 
     /// Execute a hidden child agent that inherits the parent session's current
     /// model-visible context.
-    pub async fn execute_forked_agent(
+    pub async fn execute_fork_agent(
         &self,
-        request: ForkExecutionRequest,
+        request: ForkAgentExecutionRequest,
         cancel_token: Option<&CancellationToken>,
-    ) -> BitFunResult<ForkExecutionResult> {
+    ) -> BitFunResult<ForkAgentExecutionResult> {
         if request.agent_type.trim().is_empty() {
             return Err(BitFunError::Validation(
-                "ForkExecutionRequest.agent_type is required".to_string(),
+                "ForkAgentExecutionRequest.agent_type is required".to_string(),
             ));
         }
         if request.description.trim().is_empty() {
             return Err(BitFunError::Validation(
-                "ForkExecutionRequest.description is required".to_string(),
+                "ForkAgentExecutionRequest.description is required".to_string(),
             ));
         }
         if request.prompt_messages.is_empty() {
             return Err(BitFunError::Validation(
-                "ForkExecutionRequest.prompt_messages must not be empty".to_string(),
+                "ForkAgentExecutionRequest.prompt_messages must not be empty".to_string(),
             ));
         }
 
@@ -2684,7 +2793,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             )
             .await?;
 
-        Ok(ForkExecutionResult {
+        Ok(ForkAgentExecutionResult {
             text: child_result.text,
             inherited_message_count,
             prompt_message_count,

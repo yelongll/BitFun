@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Split,
   ChevronRight,
-  ChevronDown,
 } from 'lucide-react';
 
 import { useTranslation } from 'react-i18next';
@@ -15,6 +14,8 @@ import { CubeLoading, Button } from '../../component-library';
 import { Markdown } from '@/component-library/components/Markdown/Markdown';
 import type { ToolCardProps } from '../types/flow-chat';
 import { BaseToolCard } from './BaseToolCard';
+import { ToolCardIconSlot } from './ToolCardIconSlot';
+import { ToolCardStatusIcon } from './ToolCardStatusIcon';
 import { taskCollapseStateManager } from '../store/TaskCollapseStateManager';
 import { useToolCardHeightContract } from './useToolCardHeightContract';
 import { ToolTimeoutIndicator } from './ToolTimeoutIndicator';
@@ -32,6 +33,7 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
   sessionId
 }) => {
   const { t } = useTranslation('flow-chat');
+  const { t: tAgents } = useTranslation('scenes/agents');
   const { toolCall, toolResult, status, requiresConfirmation, userConfirmed } = toolItem;
   const toolId = toolItem.id ?? toolCall?.id;
   
@@ -213,15 +215,22 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
     const desc =
       (taskInput?.description || '').trim() || t('toolCards.taskDetailPanel.untitled');
     const raw = taskInput?.agentType;
-    const agentTypeLabel =
-      raw && raw !== 'Not provided'
-        ? raw
-        : t('toolCards.taskTool.defaultAgentKind');
+    let agentTypeLabel: string;
+    if (raw && raw !== 'Not provided') {
+      const rc = taskInput?.reviewerContext;
+      agentTypeLabel = rc
+        ? tAgents(`reviewTeams.members.${rc.definitionKey}.funName`, {
+            defaultValue: rc.roleName,
+          })
+        : raw;
+    } else {
+      agentTypeLabel = t('toolCards.taskTool.defaultAgentKind');
+    }
     return t('toolCards.taskTool.headerLine', {
       agentType: agentTypeLabel,
       description: desc,
     });
-  }, [taskInput, t]);
+  }, [taskInput, t, tAgents]);
 
   const openTaskDetailPanel = useCallback(
     (e: React.MouseEvent) => {
@@ -255,23 +264,14 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
 
   const renderHeader = () => (
     <div className="task-header-wrapper">
-      <div
-        className={`task-icon-container ${isRunning ? 'is-running' : ''}${
-          showHeaderExpandHint ? ' task-icon-container--expandable' : ''
-        }`}
-      >
-        <div className="task-task-icon-marks">
-          <div className="task-task-icon-main">{renderToolIcon()}</div>
-          {showHeaderExpandHint && (
-            <span
-              className={`task-task-icon-hint${isExpanded ? ' task-task-icon-hint--open' : ''}`}
-              aria-hidden
-            >
-              <ChevronDown size={16} strokeWidth={2} absoluteStrokeWidth />
-            </span>
-          )}
-        </div>
-      </div>
+      <ToolCardIconSlot
+        icon={renderToolIcon()}
+        iconClassName={`task-icon ${isRunning ? 'is-running' : ''}`}
+        expandable={showHeaderExpandHint}
+        affordanceKind="expand"
+        isExpanded={isExpanded}
+        onAffordanceClick={handleCardClick}
+      />
 
       <div className="task-content-wrapper">
         <div className="task-body-columns">
@@ -310,10 +310,8 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
               title={t('toolCards.taskTool.openInPanel')}
             />
             <div className="task-header-rail__visual" aria-hidden>
-              <ChevronRight size={18} strokeWidth={2} absoluteStrokeWidth />
-              <div className="task-status-icon task-status-icon--rail">
-                {renderStatusIcon()}
-              </div>
+              <ChevronRight size={16} strokeWidth={2} absoluteStrokeWidth />
+              <ToolCardStatusIcon icon={renderStatusIcon()} className="task-status-icon--rail" />
             </div>
           </div>
         </div>
@@ -327,11 +325,13 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
       return null;
     }
 
+    const rc = taskInput?.reviewerContext;
+
     if (
       !hasInterruptionNote &&
       !hasRealPrompt &&
       !needsConfirmation &&
-      !taskInput?.reviewerContext
+      !rc
     ) {
       return null;
     }
@@ -349,17 +349,25 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
             )}
           </>
         )}
-        {taskInput?.reviewerContext ? (
+        {rc ? (
           <div className="task-reviewer-context">
-            <div className="task-reviewer-context__role" style={{ color: taskInput.reviewerContext.accentColor }}>
-              {taskInput.reviewerContext.roleName}
+            <div className="task-reviewer-context__role" style={{ color: rc.accentColor }}>
+              {tAgents(`reviewTeams.members.${rc.definitionKey}.role`, {
+                defaultValue: rc.roleName,
+              })}
             </div>
             <div className="task-reviewer-context__description">
-              {taskInput.reviewerContext.description}
+              {tAgents(`reviewTeams.members.${rc.definitionKey}.description`, {
+                defaultValue: rc.description,
+              })}
             </div>
             <ul className="task-reviewer-context__responsibilities">
-              {taskInput.reviewerContext.responsibilities.map((resp, idx) => (
-                <li key={idx}>{resp}</li>
+              {rc.responsibilities.map((resp, idx) => (
+                <li key={idx}>
+                  {tAgents(`reviewTeams.members.${rc.definitionKey}.responsibilities.${idx}`, {
+                    defaultValue: resp,
+                  })}
+                </li>
               ))}
             </ul>
           </div>

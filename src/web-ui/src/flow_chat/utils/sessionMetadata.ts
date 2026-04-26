@@ -116,7 +116,8 @@ export function deriveSessionRelationshipFromMetadata(
   metadata?: Pick<SessionMetadata, 'customMetadata'> | null
 ): Pick<Session, 'sessionKind' | 'parentSessionId' | 'btwOrigin'> {
   const customMetadata = metadata?.customMetadata;
-  const sessionKind = normalizeSessionKind(customMetadata?.kind);
+  const rawSessionKind = normalizeSessionKind(customMetadata?.kind);
+  const sessionKind = rawSessionKind === 'btw' ? 'normal' : rawSessionKind;
 
   return normalizeSessionRelationship({
     sessionKind,
@@ -131,6 +132,18 @@ export function deriveSessionRelationshipFromMetadata(
           }
         : undefined,
   });
+}
+
+export function isLegacyPersistedBtwSession(
+  metadata?: Pick<SessionMetadata, 'customMetadata' | 'tags'> | null
+): boolean {
+  const kind = normalizeSessionKind(metadata?.customMetadata?.kind);
+  if (kind === 'btw') {
+    return true;
+  }
+
+  const tags = metadata?.tags;
+  return Array.isArray(tags) && tags.includes('btw');
 }
 
 export function deriveLastFinishedAtFromMetadata(
@@ -298,9 +311,11 @@ export function buildSessionMetadata(
     remoteConnectionId:
       session.remoteConnectionId ?? existingMetadata?.remoteConnectionId,
     remoteSshHost: session.remoteSshHost ?? existingMetadata?.remoteSshHost,
-    unreadCompletion:
-      session.hasUnreadCompletion ?? existingMetadata?.unreadCompletion,
-    needsUserAttention:
-      session.needsUserAttention ?? existingMetadata?.needsUserAttention,
+    // Always use the in-memory session value as the source of truth.
+    // Previously this used `??` to fall back to existingMetadata, which prevented
+    // clears from reaching disk: when the store sets `hasUnreadCompletion: undefined`,
+    // `undefined ?? existingMetadata.unreadCompletion` would restore the old value.
+    unreadCompletion: session.hasUnreadCompletion,
+    needsUserAttention: session.needsUserAttention,
   };
 }
