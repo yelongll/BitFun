@@ -297,7 +297,7 @@ async function initializeAfterRender(): Promise<void> {
     }
   });
 
-  log.info('BitFun core systems initialized successfully');
+  log.info('空灵语言 core systems initialized successfully');
   logElapsed(log, 'Startup phase completed', phaseStartedAt, {
     data: { phase: 'initializeAfterRender' },
   });
@@ -308,7 +308,7 @@ async function startApplication(): Promise<void> {
   try {
     await initializeBeforeRender();
   } catch (error) {
-    log.error('Failed to initialize BitFun (pre-render)', error);
+    log.error('Failed to initialize 空灵语言 (pre-render)', error);
   }
 
   // I18n Provider.

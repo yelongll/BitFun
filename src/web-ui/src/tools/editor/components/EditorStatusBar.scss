@@ -57,6 +57,16 @@ $_section-gap: 12px;
         background: var(--element-bg-medium);
       }
     }
+
+    &--active {
+      background: rgba(0, 122, 204, 0.2);
+      color: #3794ff;
+
+      &:hover {
+        background: rgba(0, 122, 204, 0.3);
+        color: #3794ff;
+      }
+    }
   }
 
   // Separator

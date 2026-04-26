@@ -80,9 +80,9 @@ impl TelegramBot {
 
     fn enter_pairing_code_message(language: BotLanguage) -> &'static str {
         if language.is_chinese() {
-            "请输入 BitFun Desktop 中显示的 6 位配对码。"
+            "请输入 空灵语言 桌面版 中显示的 6 位配对码。"
         } else {
-            "Please enter the 6-digit pairing code from BitFun Desktop."
+            "Please enter the 6-digit pairing code from 空灵语言 Desktop."
         }
     }
 

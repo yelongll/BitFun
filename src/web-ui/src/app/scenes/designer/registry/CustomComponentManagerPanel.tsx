@@ -7,7 +7,7 @@ import {
   deleteCustomComponent, 
   exportComponentToJson 
 } from './CustomComponentManager';
-import { componentRegistry } from './ComponentRegistry';
+
 import type { ComponentDefinition } from './types';
 
 interface CustomComponentManagerPanelProps {

@@ -66,7 +66,7 @@
   "providers": {
     "openbitfun": {
       "name": "OpenBitFun",
-      "description": "OpenBitFun 大模型平臺"
+      "description": "Open空灵語言大模型平臺"
     },
     "gemini": {
       "name": "Google Gemini",

@@ -32,7 +32,7 @@ pub struct ServerAppState {
 ///
 /// The optional `workspace` path, when provided, is opened automatically.
 pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerAppState>> {
-    log::info!("Initializing BitFun server core services");
+    log::info!("Initializing 空灵语言 server core services");
 
     // 1. Global config
     config::initialize_global_config().await?;
@@ -223,6 +223,6 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
         start_time: std::time::Instant::now(),
     });
 
-    log::info!("BitFun server core services initialized");
+    log::info!("空灵语言 server core services initialized");
     Ok(state)
 }

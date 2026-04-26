@@ -74,7 +74,7 @@ impl HtmlLabels {
 
     pub fn en() -> Self {
         HtmlLabels {
-            title: "BitFun Insights",
+            title: "kongling Insights",
             subtitle_template: "{msgs} messages across {sessions} sessions ({analyzed} analyzed) | {start} to {end}",
             at_a_glance: "At a Glance",
             whats_working: "What's working:",
@@ -138,7 +138,7 @@ impl HtmlLabels {
 
     pub fn zh() -> Self {
         HtmlLabels {
-            title: "BitFun 洞察",
+            title: "kongling 洞察",
             subtitle_template:
                 "{msgs} 条消息，{sessions} 个会话（{analyzed} 个已分析）| {start} 至 {end}",
             at_a_glance: "概览",

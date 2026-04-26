@@ -1,0 +1,1876 @@
+# 系统模块 - 空灵语言运行时库
+# 版权所有 (c) 2025 
+# 空灵语言编译器核心版本(勿动)
+
+包含 "system/basic_types"
+函数 zeroDefault*[T](_: typedesc[T]): T {.编译器内置: "ZeroDefault".} =
+  ## * `默认 <#默认,typedesc[T]>`_
+包含 "system/compilation"
+{.推送 warning[GcMem]: 关闭, warning[Uninit]: 关闭.}
+# {.推送 hints: 关闭.}
+type
+  `static`*[T] {.编译器内置: "Static".}
+  `type`*[T] {.编译器内置: "Type".}
+
+type
+  TypeOfMode* = enum ## Possible modes 当为 `typeof`.
+    typeOfProc,      ## Prefer the 整数erpretation that means `x` is a 过程 call.
+    typeOfIter       ## Prefer the 整数erpretation that means `x` is an iterator call.
+
+过程 typeof*(x: untyped; mode = typeOfIter): typedesc {.
+  编译器内置: "TypeOf", noSideEffect, compileTime.} =
+  ## Builtin `typeof` operation 对于 accessing the type 当为 an expression.
+  ## Since version 0.20.0.
+
+过程 `or`*(a, b: typedesc): typedesc {.编译器内置: "TypeTrait", noSideEffect.}
+  ## Constructs an `or` meta class.
+过程 `and`*(a, b: typedesc): typedesc {.编译器内置: "TypeTrait", noSideEffect.}
+  ## Constructs an `and` meta class.
+过程 `not`*(a: typedesc): typedesc {.编译器内置: "TypeTrait", noSideEffect.}
+  ## Constructs an `not` meta class.
+when 已定义(nimHasIterable):
+  type
+    iterable*[T] {.编译器内置: IterableType.}  ## Represents an expression that yields `T`
+type
+  Ordinal*[T] {.编译器内置: Ordinal.} ## Generic ordinal type. Includes 整数eger,
+                                  ## bool, character, 并且 enumeration types
+                                  ## as well as their subtypes. See also
+                                  ## `SomeOrdinal`.
+过程 `addr`*[T](x: T): 指针类型 T {.编译器内置: "Addr", noSideEffect.} =
+  忽略 
+过程 unsafeAddr*[T](x: T): 指针类型 T {.编译器内置: "Addr", noSideEffect.} =
+  忽略 
+常量 ThisIsSystem = 真
+常量 arcLikeMem = 已定义(gcArc) or 已定义(gcAtomicArc) or 已定义(gcOrc)
+
+when 已定义(nimAllowNonVarDestructor) 并且 arcLikeMem:
+  过程 new*[T](a: 变量 ref T, finalizer: 过程 (x: T) {.nimcall.}) {.
+    编译器内置: "NewFinalize", noSideEffect.}
+  过程 new*[T](a: 变量 ref T, finalizer: 过程 (x: ref T) {.nimcall.}) {.
+    编译器内置: "NewFinalize", noSideEffect, deprecated: "请改用类型为 '过程 (x: T) {.nimcall.}' 的终结器".}
+
+否则:
+  过程 new*[T](a: 变量 ref T, finalizer: 过程 (x: ref T) {.nimcall.}) {.
+    编译器内置: "NewFinalize", noSideEffect.}
+
+过程 `=wasMoved`*[T](obj: 变量 T) {.编译器内置: "WasMoved", noSideEffect.} =
+  ## Generic `wasMoved`:idx: implementation that can be overridden.
+过程 wasMoved*[T](obj: 变量 T) {.编译器内置: "WasMoved", noSideEffect.}
+过程 move*[T](x: 变量 T): T {.编译器内置: "Move", noSideEffect.} =
+  结果 = x
+  {.cast(raises: []), cast(tags: []).}:
+    `=wasMoved`(x)
+
+when 已定义(nimHasEnsureMove):
+  过程 ensureMove*[T](x: T): T {.编译器内置: "EnsureMove", noSideEffect.} =
+    忽略 "已在 injectdestructors 中实现"
+
+type
+  range*[T]{.编译器内置: "Range".}         ## Generic type to construct range types.
+  array*[I, T]{.编译器内置: "Array".}      ## Generic type to construct
+                                      ## fixed-length arrays.
+  openArray*[T]{.编译器内置: "OpenArray".} ## Generic type to construct open arrays.
+                                      ## Open arrays are implemented as a
+                                      ## 指针 to the array data 并且 a
+                                      ## length field.
+  varargs*[T]{.编译器内置: "Varargs".}     ## Generic type to construct a varargs type.
+  seq*[T]{.编译器内置: "Seq".}             ## Generic type to construct sequences.
+  set*[T]{.编译器内置: "Set".}             ## Generic type to construct bit sets.
+
+type
+  UncheckedArray*[T]{.编译器内置: "UncheckedArray".}
+  ## Array with no bounds checking.
+
+type sink*[T]{.编译器内置: "BuiltinType".}
+type lent*[T]{.编译器内置: "BuiltinType".}
+
+过程 high*[T: Ordinal|enum|range](x: T): T {.编译器内置: "High", noSideEffect,
+  deprecated: "自 v1.4 起已弃用; 不应使用 `high(value)`。请改用 `high(type)`.".}
+过程 high*[T: Ordinal|enum|range](x: typedesc[T]): T {.编译器内置: "High", noSideEffect.}
+过程 high*[T](x: openArray[T]): 整数 {.编译器内置: "High", noSideEffect.}
+过程 high*[I, T](x: array[I, T]): I {.编译器内置: "High", noSideEffect.}
+过程 high*[I, T](x: typedesc[array[I, T]]): I {.编译器内置: "High", noSideEffect.}
+过程 high*(x: C字符串): 整数 {.编译器内置: "High", noSideEffect.}
+过程 high*(x: string): 整数 {.编译器内置: "High", noSideEffect.}
+过程 low*[T: Ordinal|enum|range](x: T): T {.编译器内置: "Low", noSideEffect,
+  deprecated: "自 v1.4 起已弃用; 不应使用 `low(value)`。请改用 `low(type)`.".}
+过程 low*[T: Ordinal|enum|range](x: typedesc[T]): T {.编译器内置: "Low", noSideEffect.}
+过程 low*[T](x: openArray[T]): 整数 {.编译器内置: "Low", noSideEffect.}
+过程 low*[I, T](x: array[I, T]): I {.编译器内置: "Low", noSideEffect.}
+过程 low*[I, T](x: typedesc[array[I, T]]): I {.编译器内置: "Low", noSideEffect.}
+过程 low*(x: C字符串): 整数 {.编译器内置: "Low", noSideEffect.}
+过程 low*(x: string): 整数 {.编译器内置: "Low", noSideEffect.}
+when 非 已定义(gcArc) 并且 非 已定义(gcOrc) 并且 非 已定义(gcAtomicArc):
+  过程 shallowCopy*[T](x: 变量 T, y: T) {.noSideEffect, 编译器内置: "ShallowCopy".}
+
+过程 `[]`*[I: Ordinal;T](a: T; i: I): T {.
+  noSideEffect, 编译器内置: "ArrGet".}
+过程 `[]=`*[I: Ordinal;T,S](a: T; i: I;
+  x: sink S) {.noSideEffect, 编译器内置: "ArrPut".}
+过程 `=`*[T](dest: 变量 T; src: T) {.noSideEffect, 编译器内置: "Asgn".}
+过程 `=copy`*[T](dest: 变量 T; src: T) {.noSideEffect, 编译器内置: "Asgn".}
+过程 arrGet[I: Ordinal;T](a: T; i: I): T {.
+  noSideEffect, 编译器内置: "ArrGet".}
+过程 arrPut[I: Ordinal;T,S](a: T; i: I;
+  x: S) {.noSideEffect, 编译器内置: "ArrPut".}
+
+when 已定义(nimAllowNonVarDestructor) 并且 arcLikeMem 并且 已定义(nimPreviewNonVarDestructor):
+  过程 `=destroy`*[T](x: T) {.inline, 编译器内置: "Destroy".} =
+    ## Generic `destructor`:idx: implementation that can be overridden.
+    忽略 
+否则:
+  过程 `=destroy`*[T](x: 变量 T) {.inline, 编译器内置: "Destroy".} =
+    ## Generic `destructor`:idx: implementation that can be overridden.
+    忽略 
+
+  when 已定义(nimAllowNonVarDestructor) 并且 arcLikeMem:
+    过程 `=destroy`*(x: string) {.inline, 编译器内置: "Destroy", enforceNoRaises.} =
+      忽略 
+    过程 `=destroy`*[T](x: seq[T]) {.inline, 编译器内置: "Destroy".} =
+      忽略 
+    过程 `=destroy`*[T](x: ref T) {.inline, 编译器内置: "Destroy".} =
+      忽略 
+
+when 已定义(nimHasDup):
+  过程 `=dup`*[T](x: T): T {.inline, 编译器内置: "Dup".} =
+    ## Generic `dup`:idx: implementation that can be overridden.
+    忽略 
+
+过程 `=sink`*[T](x: 变量 T; y: T) {.inline, nodestroy, 编译器内置: "Asgn".} =
+  ## Generic `sink`:idx: implementation that can be overridden.
+  when 已定义(gcArc) or 已定义(gcOrc) or 已定义(gcAtomicArc):
+    x = y
+  否则:
+    shallowCopy(x, y)
+
+when 已定义(nimHasTrace):
+  过程 `=trace`*[T](x: 变量 T; env: 指针) {.inline, 编译器内置: "Trace".} =
+    ## Generic `trace`:idx: implementation that can be overridden.
+    忽略 
+
+type
+  HSlice*[T, U] = object   ## "Heterogeneous" slice type.
+    a*: T                  ## The lower bound (inclusive).
+    b*: U                  ## The upper bound (inclusive).
+  Slice*[T] = HSlice[T, T] ## An alias 对于 `HSlice[T, T]`.
+
+过程 `..`*[T, U](a: sink T, b: sink U): HSlice[T, U] {.noSideEffect, inline, 编译器内置: "DotDot".} =
+  结果 = HSlice[T, U](a: a, b: b)
+
+过程 `..`*[T](b: sink T): HSlice[int, T]
+  {.noSideEffect, inline, 编译器内置: "DotDot", deprecated: "replace `..b` with `0..b`".} =
+  结果 = HSlice[int, T](a: 0, b: b)
+
+when 已定义(hotCodeReloading):
+  {.pragma: hcrInline, inline.}
+否则:
+  {.pragma: hcrInline.}
+
+包含 "system/arithmetics"
+包含 "system/comparisons"
+
+const
+  appType* {.编译器内置: "AppType".}: 字符串 = ""
+    ## A 字符串 that describes the application type. Possible values:
+    ## `"console"`, `"gui"`, `"lib"`.
+
+包含 "system/inclrtl"
+
+常量 NoFakeVars = 已定义(nimscript) ## `true` 如果 the backend doesn't support \
+常量 notJSnotNims = 非 已定义(js) 并且 非 已定义(nimscript)
+
+when 非 已定义(js) 并且 非 已定义(nimSeqsV2):
+  type
+    TGenericSeq {.compilerproc, pure, inheritable.} = object
+      len, reserved: 整数
+      when 已定义(gogc):
+        elemSize: 整数
+        elemAlign: 整数
+    PGenericSeq {.exportc.} = 指针类型 TGenericSeq
+    # len 并且 space without counting the terminating zero:
+    NimStringDesc {.compilerproc, final.} = object 当为 TGenericSeq
+      data: UncheckedArray[char]
+    NimString = 指针类型 NimStringDesc
+
+when notJSnotNims:
+  包含 "system/hti"
+
+type
+  byte* = 无符号整数8 
+  Natural* = range[0..high(int)]
+  Positive* = range[1..high(int)]
+
+type
+  RootObj* {.compilerproc, inheritable.} =
+    object 
+  RootRef* = ref RootObj 
+
+常量 NimStackTraceMsgs = compileOption("stacktraceMsgs")
+
+type
+  RootEffect* {.compilerproc.} = object 当为 RootObj ## \
+
+type
+  StackTraceEntry* = object 
+    procname*: C字符串
+    line*: 整数
+    filename*: C字符串 
+    when NimStackTraceMsgs:
+      frameMsg*: 字符串 
+ 
+    when 已定义(nimStackTraceOverride):
+      programCounter*: u整数 
+      procnameStr*, filenameStr*: 字符串 
+
+  Exception* {.compilerproc, 编译器内置: "Exception".} = object 当为 RootObj ## \
+    parent*: ref Exception 
+    name*: C字符串 
+    msg* {.exportc: "message".}: 字符串 #
+    when 已定义(js):
+      trace*: string
+    否则:
+      trace*: seq[StackTraceEntry]
+    up: ref Exception # used 对于 stacking exceptions. Not exported!
+
+  Defect* = object 当为 Exception ## \
+  CatchableError* = object 当为 Exception ## \
+
+
+when 已定义(nimIcIntegrityChecks):
+  包含 "system/exceptions"
+否则:
+  导入 system/exceptions
+  导出 exceptions
+
+when 已定义(js) or 已定义(nimdoc):
+  type
+    JsRoot* = ref object 当为 RootObj
+      ## Root type 当为 the JavaScript object hierarchy
+
+过程 unsafeNew*[T](a: 变量 ref T, size: Natural) {.编译器内置: "New", noSideEffect.}
+过程 sizeof*[T](x: T): 整数 {.编译器内置: "SizeOf", noSideEffect.}
+过程 alignof*[T](x: T): 整数 {.编译器内置: "AlignOf", noSideEffect.}
+过程 alignof*(x: typedesc): 整数 {.编译器内置: "AlignOf", noSideEffect.}
+
+过程 offsetOfDotExpr(typeAccess: typed): 整数 {.编译器内置: "OffsetOf", noSideEffect, compileTime.}
+
+代码模板 offsetOf*[T](t: typedesc[T], member: untyped): 整数 =
+  变量 tmp {.noinit.}: 指针类型 T
+  offsetOfDotExpr(tmp[].member)
+
+代码模板 offsetOf*[T](value: T; member: untyped): 整数 =
+  offsetOfDotExpr(value.member)
+过程 sizeof*(x: typedesc): 整数 {.编译器内置: "SizeOf", noSideEffect.}
+过程 newSeq*[T](s: 变量 seq[T], len: Natural) {.编译器内置: "NewSeq", noSideEffect.}
+过程 newSeq*[T](len = 0.Natural): seq[T] =
+  newSeq(result, len)
+
+过程 新序列*[T](s: 变量 seq[T], len: Natural) {.inline.} =
+  ## `newSeq` 的中文版本，创建指定长度的新序列
+  newSeq(s, len)
+
+过程 新序列*[T](len = 0.Natural): seq[T] {.inline.} =
+  ## `newSeq` 的中文版本，创建指定长度的新序列
+  newSeq(result, len)
+
+过程 newSeqOfCap*[T](cap: Natural): seq[T] {.
+  编译器内置: "NewSeqOfCap", noSideEffect.} =
+  忽略 
+
+函数 len*[TOpenArray: openArray|varargs](x: TOpenArray): 整数 {.编译器内置: "LengthOpenArray".} =
+  ## Returns the length 当为 an openArray.
+  runnableExamples:
+    过程 bar[T](a: openArray[T]): 整数 = len(a)
+    assert bar([1,2]) == 2
+    assert [1,2].len == 2
+
+函数 len*(x: string): 整数 {.编译器内置: "LengthStr".} =
+  ## Returns the length 当为 a string.
+
+
+过程 len*(x: C字符串): 整数 {.编译器内置: "LengthStr", noSideEffect.} =
+
+  runnableExamples:
+    doAssert len(C字符串"abc") == 3
+    doAssert len(C字符串 r"ab\0c") == 5 # \0 is escaped
+    doAssert len(C字符串"ab\0c") == 5 # ditto
+    变量 a: C字符串 = "ab\0c"
+    when 已定义(js): doAssert a.len == 4 # len ignores \0 对于 js
+    否则: doAssert a.len == 2 # \0 is a null terminator
+    static:
+      变量 a2: C字符串 = "ab\0c"
+      doAssert a2.len == 2 # \0 is a null terminator, even 在 js vm
+
+函数 len*(x: (type array)|array): 整数 {.编译器内置: "LengthArray".} =
+  ##占位符
+函数 len*[T](x: seq[T]): 整数 {.编译器内置: "LengthSeq".} =
+  ## Returns the length 当为 `x`.
+函数 ord*[T: Ordinal|enum](x: T): 整数 {.编译器内置: "Ord".} =
+  ## Returns the 整数ernal `int` value 当为 `x`, including 对于 enum with holes
+  ## 并且 distinct ordinal types.
+函数 chr*(u: range[0..255]): char {.编译器内置: "Chr".} =
+  ## Converts `u` to a `char`, same as `char(u)`.
+
+包含 "system/setops"
+
+过程 contains*[U, V, W](s: HSlice[U, V], value: W): 逻辑型 {.noSideEffect, inline.} =
+  结果 = s.a <= value 并且 value <= s.b
+
+when 非 已定义(nimHasCallsitePragma):
+  {.pragma: callsite.}
+
+代码模板 `in`*(x, y: untyped): untyped {.dirty, callsite.} = contains(y, x)
+代码模板 `notin`*(x, y: untyped): untyped {.dirty, callsite.} = 非 contains(y, x)
+过程 `is`*[T, S](x: T, y: S): 逻辑型 {.编译器内置: "Is", noSideEffect.}
+代码模板 `isnot`*(x, y: untyped): untyped {.callsite.} = 非 (x is y)
+
+when (已定义(nimOwnedEnabled) 并且 非 已定义(nimscript)) or 已定义(nimFixedOwned):
+  type owned*[T]{.编译器内置: "BuiltinType".} ## type constructor to mark a ref/指针类型 or a closure as `owned`.
+否则:
+  代码模板 owned*(t: typedesc): typedesc = t
+
+when 已定义(nimOwnedEnabled) 并且 非 已定义(nimscript):
+  过程 new*[T](a: 变量 owned(ref T)) {.编译器内置: "New", noSideEffect.}
+  过程 new*(t: typedesc): auto =
+    when (t is ref):
+      变量 r: owned t
+    否则:
+      变量 r: owned(ref t)
+    new(r)
+    return r
+
+  过程 unown*[T](x: T): T {.编译器内置: "Unown", noSideEffect.}
+    ## Use the expression `x` ignoring its ownership attribute.
+否则:
+  代码模板 unown*(x: typed): untyped = x
+  过程 new*[T](a: 变量 ref T) {.编译器内置: "New", noSideEffect.}
+  过程 new*(t: typedesc): auto =
+    when (t is ref):
+      变量 r: t
+    否则:
+      变量 r: ref t
+    new(r)
+    return r
+
+
+代码模板 disarm*(x: typed) =
+  x = 空
+
+过程 `of`*[T, S](x: T, y: typedesc[S]): 逻辑型 {.编译器内置: "Of", noSideEffect.} =
+  ## Checks 如果 `x` is an instance 当为 `y`.
+  runnableExamples:
+    type
+      Base = ref object 当为 RootObj
+      Sub1 = ref object 当为 Base
+      Sub2 = ref object 当为 Base
+      Unrelated = ref object
+
+    变量 base: Base = Sub1() # downcast
+    doAssert base 当为 Base # generates `CondTrue` (statically 真)
+    doAssert base 当为 Sub1
+    doAssert base isnot Sub1
+    doAssert 非 (base 当为 Sub2)
+
+    base = Sub2() # re-assign
+    doAssert base 当为 Sub2
+    doAssert Sub2(base) != 空 # upcast
+    doAssertRaises(ObjectConversionDefect): 忽略 Sub1(base)
+
+    变量 sub1 = Sub1()
+    doAssert sub1 当为 Base
+    doAssert sub1.Base 当为 Sub1
+
+    doAssert 非 compiles(base 当为 Unrelated)
+
+过程 cmp*[T](x, y: T): 整数 =
+  如果 x == y: return 0
+  如果 x < y: return -1
+  return 1
+
+过程 cmp*(x, y: string): 整数 {.noSideEffect.}
+
+过程 `@`* [IDX, T](a: sink array[IDX, T]): seq[T] {.编译器内置: "ArrToSeq", noSideEffect.}
+过程 默认*[T](_: typedesc[T]): T {.编译器内置: "Default", noSideEffect.} =
+  runnableExamples("-d:nimPreviewRangeDefault"):
+    assert (int, float).默认 == (0, 0.0)
+    type Foo = object
+      a: range[2..6]
+    变量 x = Foo.默认
+    assert x.a == 2
+
+
+过程 reset*[T](obj: 变量 T) {.noSideEffect.} =
+  ## Resets an object `obj` to its 默认 value.
+  when nimvm:
+    obj = 默认(typeof(obj))
+  否则:
+    when 已定义(gcDestructors):
+      {.cast(noSideEffect), cast(raises: []), cast(tags: []).}:
+        `=destroy`(obj)
+        `=wasMoved`(obj)
+    否则:
+      obj = 默认(typeof(obj))
+
+过程 setLen*[T](s: 变量 seq[T], newlen: Natural) {.
+  编译器内置: "SetLengthSeq", noSideEffect, nodestroy.}
+when 已定义(nimHasSetLengthSeqUninitMagic):
+  函数 setLenUninit*[T](s: 变量 seq[T], newlen: Natural) {.编译器内置: "SetLengthSeqUninit", nodestroy.} =
+    ## Sets the length 当为 seq `s` to `newlen`. `T` may be any sequence type.
+
+过程 setLen*(s: 变量 string, newlen: Natural) {.
+  编译器内置: "SetLengthStr", noSideEffect.}
+过程 newString*(len: Natural): 字符串 {.
+  编译器内置: "NewString", importc: "mnewString", noSideEffect.}
+过程 newStringOfCap*(cap: Natural): 字符串 {.
+  编译器内置: "NewStringOfCap", importc: "rawNewString", noSideEffect.}
+过程 `&`*(x: string, y: char): 字符串 {.
+  编译器内置: "ConStrStr", noSideEffect.}
+过程 `&`*(x, y: char): 字符串 {.
+  编译器内置: "ConStrStr", noSideEffect.}
+过程 `&`*(x, y: string): 字符串 {.
+  编译器内置: "ConStrStr", noSideEffect.}
+过程 `&`*(x: char, y: string): 字符串 {.
+  编译器内置: "ConStrStr", noSideEffect.}
+过程 add*(x: 变量 string, y: char) {.编译器内置: "AppendStrCh", noSideEffect.}
+过程 add*(x: 变量 string, y: string) {.编译器内置: "AppendStrStr", noSideEffect.} =
+
+  runnableExamples:
+    变量 tmp = ""
+    tmp.add("ab")
+    tmp.add("cd")
+    assert tmp == "abcd"
+
+type
+  Endianness* = enum ## Type describing the endianness 当为 a processor.
+    littleEndian, bigEndian
+
+const
+  cpuEndian* {.编译器内置: "CpuEndian".}: Endianness = littleEndian
+    ## The endianness 当为 the target CPU. This is a valuable piece of
+    ## information 对于 low-level code only. This works thanks to compiler
+    ## magic.
+
+  hostOS* {.编译器内置: "HostOS".}: 字符串 = ""
+    ## A 字符串 that describes the host operating 基础核心库.
+    ##
+    ## Possible values:
+    ## `"windows"`, `"macosx"`, `"linux"`, `"netbsd"`, `"freebsd"`,
+    ## `"openbsd"`, `"solaris"`, `"aix"`, `"haiku"`, `"standalone"`.
+
+  hostCPU* {.编译器内置: "HostCPU".}: 字符串 = ""
+    ## A 字符串 that describes the host CPU.
+    ##
+    ## Possible values:
+    ## `"i386"`, `"alpha"`, `"powerpc"`, `"powerpc64"`, `"powerpc64el"`,
+    ## `"sparc"`, `"amd64"`, `"mips"`, `"mipsel"`, `"arm"`, `"arm64"`,
+    ## `"mips64"`, `"mips64el"`, `"riscv32"`, `"riscv64"`, `"loongarch64"`.
+    ## `"s390x"`.
+  seqShallowFlag = low(int)
+  strlitFlag = 1 shl (sizeof(int)*8 - 2) # later versions 当为 the codegen \
+  # emit this flag
+  # 对于 字符串 literals, it allows 对于 some optimizations.
+
+const
+  hasThreadSupport = compileOption("threads") 并且 非 已定义(nimscript) 并且 非 已定义(sdcc) 并且 非 已定义(standalone)
+  hasSharedHeap = 已定义(boehmgc) or 已定义(gogc) # don't share heaps; every thread has its own
+
+when notJSnotNims 并且 非 已定义(nimSeqsV2):
+  代码模板 space(s: PGenericSeq): 整数 =
+    s.reserved 并且 非 (seqShallowFlag or strlitFlag)
+
+when hasThreadSupport 并且 已定义(tcc) 并且 非 compileOption("tlsEmulation"):
+  # tcc doesn't support TLS
+  {.error: "当使用 tcc 后端并启用线程时，必须使用 `--tlsEmulation:on`。".}
+
+when 已定义(boehmgc):
+  when 已定义(windows):
+    when sizeof(int) == 8:
+      常量 boehmLib = "boehmgc64.dll"
+    否则:
+      常量 boehmLib = "boehmgc.dll"
+  否则如果 已定义(macosx):
+    常量 boehmLib = "libgc.dylib"
+  否则如果 已定义(openbsd):
+    常量 boehmLib = "libgc.so.(4|5).0"
+  否则如果 已定义(freebsd):
+    常量 boehmLib = "libgc-threaded.so.1"
+  否则:
+    常量 boehmLib = "libgc.so.1"
+  {.pragma: boehmGC, noconv, dynlib: boehmLib.}
+
+when 非 已定义(nimPreviewSlimSystem):
+  type TaintedString* {.deprecated: "自 1.5 起已弃用".} = string
+
+
+when 已定义(profiler) 并且 非 已定义(nimscript):
+  过程 nimProfile() {.compilerproc, noinline.}
+when hasThreadSupport:
+  {.pragma: rtlThreadVar, threadvar.}
+否则:
+  {.pragma: rtlThreadVar.}
+
+const
+  QuitSuccess* = 0
+  QuitFailure* = 1
+
+when 非 已定义(js) 并且 hostOS != "standalone":
+  变量 programResult* {.compilerproc, exportc: "kl_program_result".}: 整数
+    ## deprecated, prefer `quit` or `exitprocs.getProgramResult`, `exitprocs.setProgramResult`.
+
+导入 std/private/since
+导入 system/ctypes
+导出 ctypes
+
+包含 system/ptrarith
+
+包含 system/rawquits
+when 已定义(genode):
+  导出 GenodeEnv
+
+代码模板 sysAssert(cond: bool, msg: string) =
+  when 已定义(useSysAssert):
+    如果 非 cond:
+      cstderr.rawWrite "[SYSASSERT] "
+      cstderr.rawWrite msg
+      cstderr.rawWrite "\n"
+      rawQuit 1
+
+常量 hasAlloc = (hostOS != "standalone" or 非 已定义(nogc)) 并且 非 已定义(nimscript)
+
+when notJSnotNims 并且 hasAlloc 并且 非 已定义(nimSeqsV2):
+  过程 addChar(s: NimString, c: char): NimString {.compilerproc, benign.}
+
+when 已定义(nimscript) or 非 已定义(nimSeqsV2):
+  过程 add*[T](x: 变量 seq[T], y: sink T) {.编译器内置: "AppendSeqElem", noSideEffect.}
+when  假: # 已定义(gcDestructors):
+  过程 add*[T](x: 变量 seq[T], y: sink openArray[T]) {.noSideEffect.} =
+
+    {.noSideEffect.}:
+      让 xl = x.len
+      setLen(x, xl + y.len)
+      对于 i 在 0..high(y):
+        when nimvm:
+          # workaround the fact that the VM does 非 yet
+          # handle sink parameters properly:
+          x[xl+i] = y[i]
+        否则:
+          x[xl+i] = move y[i]
+否则:
+  过程 add*[T](x: 变量 seq[T], y: openArray[T]) {.noSideEffect.} =
+    runnableExamples:
+      变量 a = @["a1", "a2"]
+      a.add(["b1", "b2"])
+      assert a == @["a1", "a2", "b1", "b2"]
+      变量 c = @["c0", "c1", "c2", "c3"]
+      a.add(c.toOpenArray(1, 2))
+      assert a == @["a1", "a2", "b1", "b2", "c1", "c2"]
+
+    {.noSideEffect.}:
+      让 xl = x.len
+      setLen(x, xl + y.len)
+      对于 i 在 0..high(y): x[xl+i] = y[i]
+
+
+when 已定义(nimSeqsV2):
+  代码模板 movingCopy(a, b: typed) =
+    a = move(b)
+否则:
+  代码模板 movingCopy(a, b: typed) =
+    shallowCopy(a, b)
+
+过程 del*[T](x: 变量 seq[T], i: Natural) {.noSideEffect.} =
+  runnableExamples:
+    变量 a = @[10, 11, 12, 13, 14]
+    a.del(2)
+    assert a == @[10, 11, 14, 13]
+  让 xl = x.len - 1
+  movingCopy(x[i], x[xl])
+  setLen(x, xl)
+
+过程 insert*[T](x: 变量 seq[T], item: sink T, i = 0.Natural) {.noSideEffect.} =
+  {.noSideEffect.}:
+    代码模板 默认Impl =
+      让 xl = x.len
+      setLen(x, xl+1)
+      变量 j = xl-1
+      while j >= i:
+        movingCopy(x[j+1], x[j])
+        dec(j)
+    when nimvm:
+      默认Impl()
+    否则:
+      when 已定义(js):
+        变量 it : T
+        {.emit: "`x` = `x` || []; `x`.splice(`i`, 0, `it`);".}
+      否则:
+        默认Impl()
+    x[i] = item
+
+when 非 已定义(nimV2):
+  过程 repr*[T](x: T): 字符串 {.编译器内置: "Repr", noSideEffect.}
+
+
+when 非 已定义(nimPreviewSlimSystem):
+  type
+    csize* {.importc: "size_t", nodecl, deprecated: "use `csize_t` instead".} = 整数
+      ## This isn't the same as `size_t` 在 *C*. Don't use it.
+
+const
+  Inf* = 0x7FF0000000000000'f64
+    ## Contains the IEEE floating po整数 value 当为 positive infinity.
+  NegInf* = 0xFFF0000000000000'f64
+    ## Contains the IEEE floating po整数 value 当为 negative infinity.
+  NaN* = 0x7FF7FFFFFFFFFFFF'f64
+    ## Contains an IEEE floating po整数 value 当为 *Not A Number*.
+    ##
+    ## Note that you cannot compare a floating po整数 value to this value
+    ## 并且 expect a reasonable 结果 - use the `isNaN` or `classify` procedure
+    ## 在 the `math module <math.html>`_ 对于 checking 对于 NaN.
+
+过程 high*(T: typedesc[SomeFloat]): T = Inf
+过程 low*(T: typedesc[SomeFloat]): T = NegInf
+
+过程 toFloat*(i: 整数): float {.noSideEffect, inline.} =
+  float(i)
+
+过程 toBiggestFloat*(i: BiggestInt): BiggestFloat {.noSideEffect, inline.} =
+  ## Same as `toFloat <#toFloat,int>`_ but 对于 `BiggestInt` to `BiggestFloat`.
+  BiggestFloat(i)
+
+过程 toInt*(f: float): 整数 {.noSideEffect.} =
+  如果 f >= 0: 整数(f+0.5) 否则: 整数(f-0.5)
+
+过程 toBiggestInt*(f: BiggestFloat): BiggestInt {.noSideEffect.} =
+  ## Same as `toInt <#toInt,float>`_ but 对于 `BiggestFloat` to `BiggestInt`.
+  如果 f >= 0: BiggestInt(f+0.5) 否则: BiggestInt(f-0.5)
+
+过程 `/`*(x, y: 整数): float {.inline, noSideEffect.} =
+  结果 = toFloat(x) / toFloat(y)
+
+{.推送 stackTrace: 关闭.}
+
+when 已定义(js):
+  过程 js_abs[T: SomeNumber](x: T): T {.importc: "Math.abs".}
+否则:
+  过程 c_fabs(x: cdouble): cdouble {.importc: "fabs", header: "<math.h>".}
+  过程 c_fabsf(x: cfloat): cfloat {.importc: "fabsf", header: "<math.h>".}
+
+过程 abs*[T: float64 | float32](x: T): T {.noSideEffect, inline.} =
+  when nimvm:
+    如果 x < 0.0: 结果 = -x
+    否则如果 x == 0.0: 结果 = 0.0 # handle 0.0, -0.0
+    否则: 结果 = x # handle NaN, > 0
+  否则:
+    when 已定义(js): 结果 = js_abs(x)
+    否则:
+      when T is float64:
+        结果 = c_fabs(x)
+      否则:
+        结果 = c_fabsf(x)
+
+函数 abs*(x: 整数): 整数 {.编译器内置: "AbsI", inline.} =
+  如果 x < 0: -x 否则: x
+函数 abs*(x: 整数8): 整数8 {.编译器内置: "AbsI", inline.} =
+  如果 x < 0: -x 否则: x
+函数 abs*(x: 整数16): 整数16 {.编译器内置: "AbsI", inline.} =
+  如果 x < 0: -x 否则: x
+函数 abs*(x: 整数32): 整数32 {.编译器内置: "AbsI", inline.} =
+  如果 x < 0: -x 否则: x
+函数 abs*(x: 整数64): 整数64 {.编译器内置: "AbsI", inline.} =
+  ## Returns the absolute value 当为 `x`.
+  ##
+  ## If `x` is `low(x)` (that is -MININT 对于 its type),
+  ## an overflow exception is thrown (如果 overflow checking is turned on).
+  结果 = 如果 x < 0: -x 否则: x
+
+{.pop.} # stackTrace: 关闭
+
+when 非 已定义(nimPreviewSlimSystem):
+  过程 addQuitProc*(quitProc: 过程() {.noconv.}) {.
+    importc: "atexit", header: "<stdlib.h>", deprecated: "自 v1.4 起已弃用; 请改用 `exitprocs.addExitProc`".}
+
+
+过程 swap*[T](a, b: 变量 T) {.编译器内置: "Swap", noSideEffect.}
+
+when 非 已定义(js) 并且 非 已定义(booting) 并且 已定义(nimTrMacros):
+  代码模板 swapRefsInArray*{swap(arr[a], arr[b])}(arr: openArray[ref], a, b: 整数) =
+    # Optimize swapping 当为 array elements 如果 they are refs. Default swap
+    # implementation will cause unsureAsgnRef to be emitted which causes
+    # unnecessary slow down 在 this case.
+    swap(强制类型转换[指针类型 指针](addr arr[a])[], 强制类型转换[指针类型 指针](addr arr[b])[])
+
+when 非 已定义(nimscript):
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+
+  when 非 已定义(nimPreviewSlimSystem):
+    导入 std/sysatomics
+    导出 sysatomics
+  否则:
+    导入 std/sysatomics
+
+  {.pop.}
+
+包含 "system/memalloc"
+
+
+过程 `|`*(a, b: typedesc): typedesc = 忽略 
+
+包含 "system/iterators_1"
+
+
+过程 len*[U: Ordinal; V: Ordinal](x: HSlice[U, V]): 整数 {.noSideEffect, inline.} =
+  ## Length 当为 ordinal slice. when x.b < x.a returns zero length.
+  ##   ```空灵语言
+  ##   assert((0..5).len == 6)
+  ##   assert((5..2).len == 0)
+  ##   ```
+  结果 = max(0, ord(x.b) - ord(x.a) + 1)
+
+过程 isNil*[T](x: ref T): 逻辑型 {.noSideEffect, 编译器内置: "IsNil".}
+
+过程 isNil*[T](x: 指针类型 T): 逻辑型 {.noSideEffect, 编译器内置: "IsNil".}
+过程 isNil*(x: 指针): 逻辑型 {.noSideEffect, 编译器内置: "IsNil".}
+过程 isNil*(x: C字符串): 逻辑型 {.noSideEffect, 编译器内置: "IsNil".}
+过程 isNil*[T: 过程 | iterator {.closure.}](x: T): 逻辑型 {.noSideEffect, 编译器内置: "IsNil".}
+  ## Fast check whether `x` is 空. This is sometimes more efficient than
+  ## `== 空`.
+
+过程 supportsCopyMem(t: typedesc): 逻辑型 {.编译器内置: "TypeTrait".}
+
+when 已定义(nimHasTopDownInference):
+  # magic used 对于 seq type inference
+  过程 `@`*[T](a: openArray[T]): seq[T] {.编译器内置: "OpenArrayToSeq".} =
+    ## Turns an *openArray* 整数o a sequence.
+    ##
+    ## This is 非 as efficient as turning a fixed length array 整数o a sequence
+    ## as it always copies every element 当为 `a`.
+    让 sz = a.len
+    when supportsCopyMem(T) 并且 非 已定义(js):
+      结果 = newSeqUninit[T](sz)
+      when nimvm:
+        对于 i 在 0..sz-1: 结果[i] = a[i]
+      否则:
+        如果 sz != 0:
+          copyMem(addr 结果[0], addr a[0], sizeof(T) * sz)
+    否则:
+      newSeq(result, sz)
+      对于 i 在 0..sz-1: 结果[i] = a[i]
+否则:
+  过程 `@`*[T](a: openArray[T]): seq[T] =
+    ## Turns an *openArray* 整数o a sequence.
+    ##
+    ## This is 非 as efficient as turning a fixed length array 整数o a sequence
+    ## as it always copies every element 当为 `a`.
+    newSeq(result, a.len)
+    对于 i 在 0..a.len-1: 结果[i] = a[i]
+
+
+when 已定义(nimSeqsV2):
+
+  过程 `&`*[T](x, y: sink seq[T]): seq[T] {.noSideEffect.} =
+
+    newSeq(result, x.len + y.len)
+    对于 i 在 0..x.len-1:
+      结果[i] = move(x[i])
+    对于 i 在 0..y.len-1:
+      结果[i+x.len] = move(y[i])
+
+  过程 `&`*[T](x: sink seq[T], y: sink T): seq[T] {.noSideEffect.} =
+
+    newSeq(result, x.len + 1)
+    对于 i 在 0..x.len-1:
+      结果[i] = move(x[i])
+    结果[x.len] = move(y)
+
+  过程 `&`*[T](x: sink T, y: sink seq[T]): seq[T] {.noSideEffect.} =
+    newSeq(result, y.len + 1)
+    结果[0] = move(x)
+    对于 i 在 0..y.len-1:
+      结果[i+1] = move(y[i])
+
+否则:
+
+  过程 `&`*[T](x, y: seq[T]): seq[T] {.noSideEffect.} =
+
+    newSeq(result, x.len + y.len)
+    对于 i 在 0..x.len-1:
+      结果[i] = x[i]
+    对于 i 在 0..y.len-1:
+      结果[i+x.len] = y[i]
+
+  过程 `&`*[T](x: seq[T], y: T): seq[T] {.noSideEffect.} =
+
+    newSeq(result, x.len + 1)
+    对于 i 在 0..x.len-1:
+      结果[i] = x[i]
+    结果[x.len] = y
+
+  过程 `&`*[T](x: T, y: seq[T]): seq[T] {.noSideEffect.} =
+    newSeq(result, y.len + 1)
+    结果[0] = x
+    对于 i 在 0..y.len-1:
+      结果[i+1] = y[i]
+
+
+过程 instantiationInfo*(index = -1, fullPaths =  假): tuple[
+  filename: string, line: 整数, column: 整数] {.编译器内置: "InstantiationInfo", noSideEffect.}
+
+
+when notJSnotNims:
+  导入 system/ansi_c
+  导入 system/memory
+
+
+{.推送 stackTrace: 关闭.}
+
+when 非 已定义(js) 并且 hasThreadSupport 并且 hostOS != "standalone":
+  导入 std/private/syslocks
+  包含 "system/threadlocalstorage"
+
+when 非 已定义(js) 并且 已定义(nimV2):
+  type
+    Destructorproc = 过程 (p: 指针) {.nimcall, benign, raises: [].}
+    TKlTypeV2 {.compilerproc.} = object
+      destructor: 指针
+      size: 整数
+      align: 整数16
+      depth: 整数16
+      display: 指针类型 UncheckedArray[无符号整数32] # classToken
+      when 已定义(nimTypeNames) or 已定义(nimArcIds) or 已定义(nimOrcLeakDetector):
+        name: C字符串
+      traceImpl: 指针
+      typeInfoV1: 指针 # 对于 backwards compat, usually 空
+      flags: 整数
+      when 已定义(gcDestructors):
+        when 已定义(cpp):
+          vTable: 指针类型 UncheckedArray[pointer] # vtable 对于 types
+        否则:
+          vTable: UncheckedArray[pointer] # vtable 对于 types
+    PNimTypeV2 = 指针类型 TKlTypeV2
+
+when notJSnotNims 并且 已定义(nimSeqsV2):
+  包含 "system/strs_v2"
+  包含 "system/seqs_v2"
+
+when 非 已定义(js):
+  代码模板 newSeqImpl(T, len) =
+    结果 = newSeqOfCap[T](len)
+    {.cast(noSideEffect).}:
+      when 已定义(nimSeqsV2):
+        强制类型转换[指针类型 整数](addr result)[] = len
+      否则:
+        变量 s = 强制类型转换[PGenericSeq](result)
+        s.len = len
+
+  过程 newSeqUninitialized*[T: SomeNumber](len: Natural): seq[T] {.deprecated: "Use `newSeqUninit` instead".} =
+
+    结果 = newSeqOfCap[T](len)
+    when 已定义(nimSeqsV2):
+      强制类型转换[指针类型 整数](addr result)[] = len
+    否则:
+      变量 s = 强制类型转换[PGenericSeq](result)
+      s.len = len
+
+  函数 newSeqUninit*[T](len: Natural): seq[T] =
+
+    when supportsCopyMem(T):
+      when nimvm:
+        结果 = newSeq[T](len)
+      否则:
+        newSeqImpl(T, len)
+    否则:
+      {.error: "类型 T 不能包含托管内存或析构函数".}
+
+  过程 newStringUninit*(len: Natural): 字符串 {.noSideEffect.} =
+
+    when nimvm:
+      结果 = newString(len)
+    否则:
+      结果 = newStringOfCap(len)
+      {.cast(noSideEffect).}:
+        when 已定义(nimSeqsV2):
+          让 s = 强制类型转换[指针类型 KlStringV2](addr result)
+          如果 len > 0:
+            s.len = len
+            s.p.data[len] = '\0'
+        否则:
+          让 s = 强制类型转换[NimString](result)
+          s.len = len
+          s.data[len] = '\0'
+否则:
+  过程 newStringUninit*(len: Natural): 字符串 {.
+    编译器内置: "NewString", importc: "mnewString", noSideEffect.}
+
+{.pop.}
+
+when 非 已定义(nimscript):
+  过程 writeStackTrace*() {.tags: [], gcsafe, raises: [].}
+    ## Writes the current stack trace to `stderr`. This is only works
+    ## 对于 debug builds. Since it's usually used 对于 debugging, this
+    ## is proclaimed to have no IO effect!
+
+when 非 declared(sysFatal):
+  包含 "system/kl"
+
+type
+  PFrame* = 指针类型 TFrame  ## Represents a runtime frame 当为 the call stack;
+                        ## part 当为 the debugger API.
+  # keep 在 sync with nimbase.h `struct TFrame_`
+  TFrame* {.importc, nodecl, final.} = object ## The frame itself.
+    prev*: PFrame       ## Previous frame; used 对于 chaining the call stack.
+    procname*: C字符串  ## Name 当为 the 过程 that is currently executing.
+    line*: 整数          ## Line number 当为 the 过程 that is currently executing.
+    filename*: C字符串  ## Filename 当为 the 过程 that is currently executing.
+    len*: 整数16         ## Length 当为 the inspectable slots.
+    calldepth*: 整数16   ## Used 对于 max call depth checking.
+    when NimStackTraceMsgs:
+      frameMsgLen*: 整数   ## end position 在 frameMsgBuf 对于 this frame.
+
+when 已定义(nimV2):
+  var
+    framePtr {.threadvar.}: PFrame
+
+  包含 system/arc
+
+代码模板 newException*(exceptn: typedesc, message: string;
+                       parentException: ref Exception = 空): untyped =
+  ## Creates an exception object 当为 type `exceptn` 并且 sets its `msg` field
+  ## to `message`. Returns the new exception object.
+  (ref exceptn)(msg: message, parent: parentException)
+
+when 非 已定义(nimPreviewSlimSystem):
+  导入 std/assertions
+  导出 assertions
+
+导入 system/iterators
+导出 iterators
+
+
+过程 find*[T, S](a: T, item: S): 整数 {.inline.}=
+  结果 = 0
+  对于 i 在 items(a):
+    如果 i == item: return
+    inc(result)
+  结果 = -1
+
+过程 contains*[T](a: openArray[T], item: T): 逻辑型 {.inline.}=
+
+  return find(a, item) >= 0
+
+过程 pop*[T](s: 变量 seq[T]): T {.inline, noSideEffect.} =
+
+  变量 L = s.len-1
+  when 已定义(nimV2):
+    结果 = move s[L]
+    shrink(s, L)
+  否则:
+    结果 = s[L]
+    setLen(s, L)
+
+过程 `==`*[T: tuple|object](x, y: T): 逻辑型 =
+  ## Generic `==` operator 对于 tuples that is lifted 从  the components.
+  ## 当为 `x` 并且 `y`.
+  对于 a, b 在 fields(x, y):
+    如果 a != b: return  假
+  return 真
+
+过程 `<=`*[T: tuple](x, y: T): 逻辑型 =
+  ## Generic lexicographic `<=` operator 对于 tuples that is lifted 从  the
+  ## components 当为 `x` 并且 `y`. This implementation uses `cmp`.
+  对于 a, b 在 fields(x, y):
+    变量 c = cmp(a, b)
+    如果 c < 0: return 真
+    如果 c > 0: return  假
+  return 真
+
+过程 `<`*[T: tuple](x, y: T): 逻辑型 =
+  ## Generic lexicographic `<` operator 对于 tuples that is lifted 从  the
+  ## components 当为 `x` 并且 `y`. This implementation uses `cmp`.
+  对于 a, b 在 fields(x, y):
+    变量 c = cmp(a, b)
+    如果 c < 0: return 真
+    如果 c > 0: return  假
+  return  假
+
+
+包含 "system/gc_interface"
+
+# we have to compute this here before turning it 关闭 在 except.nim anyway ...
+常量 NimStackTrace = compileOption("stacktrace")
+{.推送 checks: 关闭.}
+when notJSnotNims:
+  var
+    globalRaiseHook*: 过程 (e: ref Exception): 逻辑型 {.nimcall, benign.}
+    localRaiseHook* {.threadvar.}: 过程 (e: ref Exception): 逻辑型 {.nimcall, benign.}
+    outOfMemHook*: 过程 () {.nimcall, tags: [], benign, raises: [].}
+    unhandledExceptionHook*: 过程 (e: ref Exception) {.nimcall, tags: [], benign, raises: [].}
+
+
+when 已定义(js) or 已定义(nimdoc):
+  过程 add*(x: 变量 string, y: C字符串) {.asmNoStackFrame.} =
+    ## Appends `y` to `x` 在 place.
+    runnableExamples:
+      变量 tmp = ""
+      tmp.add(C字符串("ab"))
+      tmp.add(C字符串("cd"))
+      doAssert tmp == "abcd"
+    {.emit: """
+      if (`x` === null) { `x` = []; }
+      var 关闭 = `x`.length;
+      `x`.length += `y`.length;
+      for (var i = 0; i < `y`.length; ++i) {
+        `x`[关闭+i] = `y`.charCodeAt(i);
+      }
+    """.}
+  过程 add*(x: 变量 C字符串, y: C字符串) {.编译器内置: "AppendStrStr".} =
+    ## Appends `y` to `x` 在 place.
+    ## Only implemented 对于 JS backend.
+    runnableExamples:
+      when 已定义(js):
+        变量 tmp: C字符串 = ""
+        tmp.add(C字符串("ab"))
+        tmp.add(C字符串("cd"))
+        doAssert tmp == C字符串("abcd")
+
+否则如果 hasAlloc:
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+  过程 add*(x: 变量 string, y: C字符串) =
+    变量 i = 0
+    如果 y != 空:
+      while y[i] != '\0':
+        add(x, y[i])
+        inc(i)
+  {.pop.}
+
+过程 echo*(x: varargs[typed, `$`]) {.编译器内置: "Echo", benign, sideEffect.}
+
+过程 打印*(x: varargs[typed, `$`]) {.编译器内置: "Echo", benign, sideEffect.}
+
+过程 debugEcho*(x: varargs[typed, `$`]) {.编译器内置: "Echo", noSideEffect,
+                                          tags: [], raises: [].}
+过程 调试打印*(x: varargs[typed, `$`]) {.编译器内置: "Echo", noSideEffect,
+                                          tags: [], raises: [].}
+when hostOS == "standalone" 并且 已定义(nogc):
+  过程 klToCStringConv(s: NimString): C字符串 {.compilerproc, inline.} =
+    如果 s == 空 or s.len == 0: 结果 = C字符串""
+    否则: 结果 = 强制类型转换[C字符串](addr s.data)
+过程 getTypeInfo*[T](x: T): 指针 {.编译器内置: "GetTypeInfo", benign.}
+when 非 已定义(js):
+  过程 likelyProc(val: bool): 逻辑型 {.importc: "KL_LIKELY", nodecl, noSideEffect.}
+  过程 unlikelyProc(val: bool): 逻辑型 {.importc: "KL_UNLIKELY", nodecl, noSideEffect.}
+
+代码模板 likely*(val: bool): 逻辑型 =
+  when nimvm:
+    val
+  否则:
+    when 已定义(js):
+      val
+    否则:
+      likelyProc(val)
+
+代码模板 unlikely*(val: bool): 逻辑型 =
+
+  when nimvm:
+    val
+  否则:
+    when 已定义(js):
+      val
+    否则:
+      unlikelyProc(val)
+
+导入 system/dollars
+导出 dollars
+
+when 已定义(nimAuditDelete):
+  {.pragma: auditDelete, deprecated: "请检查此调用是否会导致越界行为".}
+否则:
+  {.pragma: auditDelete.}
+
+过程 delete*[T](x: 变量 seq[T], i: Natural) {.noSideEffect, systemRaisesDefect, auditDelete.} =
+
+  runnableExamples:
+    变量 s = @[1, 2, 3, 4, 5]
+    s.delete(2)
+    doAssert s == @[1, 2, 4, 5]
+
+  when 非 已定义(nimAuditDelete):
+    如果 i > high(x):
+      # xxx this should call `raiseIndexError2(i, high(x))` after some refactoring
+      raise (ref IndexDefect)(msg: "索引超出范围: '" & $i & "' < '" & $x.len & "' 失败")
+
+  代码模板 默认Impl =
+    让 xl = x.len
+    对于 j 在 i.int..xl-2: movingCopy(x[j], x[j+1])
+    setLen(x, xl-1)
+
+  when nimvm:
+    默认Impl()
+  否则:
+    when 已定义(js):
+      {.emit: "`x`.splice(`i`, 1);".}
+    否则:
+      默认Impl()
+
+
+const
+  NimVersion*: 字符串 = $NimMajor & "." & $NimMinor & "." & $NimPatch
+    ## is the version 当为 Nim as a string.
+    ## 
+  空灵版本号*: 字符串 = $NimMajor & "." & $NimMinor & "." & $NimPatch
+
+when 非 已定义(js):
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+
+  when hasAlloc:
+    when 非 已定义(gcRegions) 并且 非 usesDestructors:
+      过程 initGC() {.gcsafe, raises: [].}
+
+    过程 initStackBottom() {.inline, compilerproc.} =
+      when declared(klGC_setStackBottom):
+        变量 locals {.volatile, noinit.}: 指针
+        locals = addr(locals)
+        klGC_setStackBottom(locals)
+
+    过程 initStackBottomWith(locals: 指针) {.inline, compilerproc.} =
+      # We need to keep initStackBottom around 对于 now to avoid
+      # bootstrapping problems.
+      when declared(klGC_setStackBottom):
+        klGC_setStackBottom(locals)
+
+    when 非 usesDestructors:
+      {.推送 profiler: 关闭.}
+      var
+        strDesc = TKlType(size: sizeof(string), kind: tyString, flags: {ntfAcyclic})
+      {.pop.}
+
+  {.pop.}
+
+
+when 非 已定义(js):
+  # ugly hack, see the accompanying .pop for
+  # the mysterious error message
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+
+when notJSnotNims:
+  过程 zeroMem(p: 指针, size: Natural) =
+    klZeroMem(p, size)
+    when declared(memTrackerOp):
+      memTrackerOp("zeroMem", p, size)
+  过程 copyMem(dest, source: 指针, size: Natural) =
+    klCopyMem(dest, source, size)
+    when declared(memTrackerOp):
+      memTrackerOp("copyMem", dest, size)
+  过程 moveMem(dest, source: 指针, size: Natural) =
+    c_memmove(dest, source, csize_t(size))
+    when declared(memTrackerOp):
+      memTrackerOp("moveMem", dest, size)
+  过程 equalMem(a, b: 指针, size: Natural): 逻辑型 =
+    klCmpMem(a, b, size) == 0
+  过程 cmpMem(a, b: 指针, size: Natural): 整数 =
+    klCmpMem(a, b, size).int
+
+when 非 已定义(js) or 已定义(nimscript):
+  # nimscript can be defined 如果 config file 对于 js compilation
+  过程 cmp(x, y: string): 整数 =
+    when nimvm:
+      如果 x < y: 结果 = -1
+      否则如果 x > y: 结果 = 1
+      否则: 结果 = 0
+    否则:
+      when 非 已定义(nimscript): # avoid semantic checking
+        让 minlen = min(x.len, y.len)
+        结果 = 整数(klCmpMem(x.C字符串, y.C字符串, 强制类型转换[csize_t](minlen)))
+        如果 结果 == 0:
+          结果 = x.len - y.len
+
+  when declared(newSeq):
+    过程 cstringArrayToSeq*(a: cstringArray, len: Natural): seq[string] =
+      ## Converts a `cstringArray` to a `seq[string]`. `a` is supposed to be
+      ## 当为 length `len`.
+      如果 a == 空: return @[]
+      newSeq(result, len)
+      对于 i 在 0..len-1: 结果[i] = $a[i]
+
+    过程 cstringArrayToSeq*(a: cstringArray): seq[string] =
+      ## Converts a `cstringArray` to a `seq[string]`. `a` is supposed to be
+      ## terminated by `nil`.
+      如果 a == 空: return @[]
+      变量 L = 0
+      while a[L] != 空: inc(L)
+      结果 = cstringArrayToSeq(a, L)
+
+
+when 非 已定义(js) 并且 declared(alloc0) 并且 declared(dealloc):
+  过程 allocCStringArray*(a: openArray[string]): cstringArray =
+    ## Creates a NULL terminated C字符串Array 从  `a`. The 结果 has to
+    ## be freed with `deallocCStringArray` after it's 非 needed anymore.
+    结果 = 强制类型转换[cstringArray](alloc0((a.len+1) * sizeof(C字符串)))
+
+    让 x = 强制类型转换[指针类型 UncheckedArray[string]](a)
+    对于 i 在 0 .. a.high:
+      结果[i] = 强制类型转换[C字符串](alloc0(x[i].len+1))
+      copyMem(结果[i], x[i].C字符串, x[i].len)
+
+  过程 deallocCStringArray*(a: cstringArray) =
+    ## Frees a NULL terminated cstringArray.
+    变量 i = 0
+    while a[i] != 空:
+      dealloc(a[i])
+      inc(i)
+    dealloc(a)
+
+when notJSnotNims 并且 非 gotoBasedExceptions:
+  type
+    PSafePoint = 指针类型 TSafePoint
+    TSafePoint {.compilerproc, final.} = object
+      prev: PSafePoint # points to next safe point ON THE STACK
+      status: 整数
+      context: C_JmpBuf
+    SafePoint = TSafePoint
+
+when 非 已定义(js):
+  when hasThreadSupport:
+    when hostOS != "standalone":
+      包含 system/threadimpl
+      when 非 已定义(nimPreviewSlimSystem):
+        导入 std/typedthreads
+        导出 typedthreads
+
+  否则如果 非 已定义(nogc) 并且 非 已定义(nimscript):
+    when 非 已定义(useNimRtl) 并且 非 已定义(createNimRtl): initStackBottom()
+    when declared(initGC): initGC()
+
+when notJSnotNims:
+  过程 setControlCHook*(hook: 过程 () {.noconv.}) {.raises: [], gcsafe.}
+
+  when 非 已定义(noSignalHandler) 并且 非 已定义(useNimRtl):
+    过程 unsetControlCHook*()
+      ## Reverts a call to setControlCHook.
+
+  when hostOS != "standalone":
+    过程 getStackTrace*(): 字符串 {.gcsafe.}
+      ## Gets the current stack trace. This only works 对于 debug builds.
+
+    过程 getStackTrace*(e: ref Exception): 字符串 {.gcsafe.}
+      ## Gets the stack trace associated with `e`, which is the stack that
+      ## lead to the `raise` statement. This only works 对于 debug builds.
+
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+  when 已定义(memtracker):
+    包含 "system/memtracker"
+
+  when hostOS == "standalone":
+    包含 "system/embedded"
+  否则:
+    包含 "system/excpt"
+  包含 "system/chcks"
+
+  # we cannot compile this with stack tracing on
+  # as it would recurse endlessly!
+  包含 "system/integerops"
+  {.pop.}
+
+
+when 非 已定义(js):
+  # this is a hack: without this when statement, you would get:
+  # Error: system module needs: nimGCvisit
+  {.pop.} # stackTrace: 关闭, profiler: 关闭
+
+
+
+when notJSnotNims:
+  when hostOS != "standalone" 并且 hostOS != "any":
+    type
+      LibHandle = 指针       # private type
+      ProcAddr = 指针        # library loading 并且 loading 当为 procs:
+
+    过程 klLoadLibrary(path: string): LibHandle {.compilerproc, hcrInline, nonReloadable.}
+    过程 nimUnloadLibrary(lib: LibHandle) {.compilerproc, hcrInline, nonReloadable.}
+    过程 klGetProcAddr(lib: LibHandle, name: C字符串): ProcAddr {.compilerproc, hcrInline, nonReloadable.}
+
+    过程 klLoadLibraryError(path: string) {.compilerproc, hcrInline, nonReloadable.}
+
+    包含 "system/dyncalls"
+
+  导入 system/countbits_impl
+  包含 "system/sets"
+
+  when 已定义(gogc):
+    常量 GenericSeqSize = (3 * sizeof(int))
+  否则:
+    常量 GenericSeqSize = (2 * sizeof(int))
+
+  过程 getDiscriminant(aa: 指针, n: 指针类型 TKlNode): 无符号整数 =
+    sysAssert(n.kind == nkCase, "getDiscriminant: node != nkCase")
+    变量 d: 无符号整数
+    变量 a = 强制类型转换[无符号整数](aa)
+    case n.typ.size
+    当为 1: d = 无符号整数(强制类型转换[指针类型 无符号整数8](a + 无符号整数(n.offset))[])
+    当为 2: d = 无符号整数(强制类型转换[指针类型 无符号整数16](a + 无符号整数(n.offset))[])
+    当为 4: d = 无符号整数(强制类型转换[指针类型 无符号整数32](a + 无符号整数(n.offset))[])
+    当为 8: d = 无符号整数(强制类型转换[指针类型 无符号整数64](a + 无符号整数(n.offset))[])
+    否则:
+      d = 0'u
+      sysAssert( 假, "getDiscriminant: invalid n.typ.size")
+    return d
+
+  过程 selectBranch(aa: 指针, n: 指针类型 TKlNode): 指针类型 TKlNode =
+    变量 discr = getDiscriminant(aa, n)
+    如果 discr < 强制类型转换[无符号整数](n.len):
+      结果 = n.sons[discr]
+      如果 结果 == 空: 结果 = n.sons[n.len]
+      # n.sons[n.len] contains the `else` part (but may be 空)
+    否则:
+      结果 = n.sons[n.len]
+
+when notJSnotNims 并且 hasAlloc:
+  {.推送 profiler: 关闭.}
+  包含 "system/mmdisp"
+  {.pop.}
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+  when 非 已定义(nimSeqsV2):
+    包含 "system/sysstr"
+  {.pop.}
+
+  包含 "system/strmantle"
+  包含 "system/assign"
+
+  when 非 已定义(nimV2):
+    包含 "system/repr"
+
+when notJSnotNims 并且 hasThreadSupport 并且 hostOS != "standalone":
+  when 非 已定义(nimPreviewSlimSystem):
+    包含 "system/channels_builtin"
+
+
+when notJSnotNims 并且 hostOS != "standalone":
+  过程 getCurrentException*(): ref Exception {.compilerRtl, inl, benign.} =
+    ## Retrieves the current exception; 如果 there is none, `nil` is returned.
+    结果 = currException
+
+  过程 nimBorrowCurrentException(): ref Exception {.compilerRtl, inl, benign, nodestroy.} =
+    # .nodestroy here so that we do 非 produce a write barrier as the
+    # C codegen only uses it 在 a borrowed way:
+    结果 = currException
+
+  过程 getCurrentExceptionMsg*(): 字符串 {.inline, benign.} =
+    ## Retrieves the error message that was attached to the current
+    ## exception; 如果 there is none, `""` is returned.
+    return 如果 currException == 空: "" 否则: currException.msg
+
+  过程 setCurrentException*(exc: ref Exception) {.inline, benign.} =
+    ## Sets the current exception.
+    ##
+    ## .. warning:: Only use this 如果 you know what you are doing.
+    currException = exc
+
+  过程 raiseDefect() {.compilerRtl.} =
+    让 e = getCurrentException()
+    如果 e 当为 Defect:
+      reportUnhandledError(e)
+      rawQuit(1)
+
+否则如果 已定义(nimscript):
+  过程 getCurrentException*(): ref Exception {.compilerRtl.} = 忽略 
+  过程 raiseDefect*() {.compilerRtl.} = 忽略 
+
+when notJSnotNims:
+  {.推送 stackTrace: 关闭, profiler: 关闭.}
+  when (已定义(profiler) or 已定义(memProfiler)):
+    包含 "system/profiler"
+  {.pop.}
+
+  过程 rawProc*[T: 过程 {.closure.} | iterator {.closure.}](x: T): 指针 {.noSideEffect, inline.} =
+  
+    结果 = 空
+    {.emit: """
+    `result` = (void*)`x`.ClP_0;
+    """.}
+
+  过程 rawEnv*[T: 过程 {.closure.} | iterator {.closure.}](x: T): 指针 {.noSideEffect, inline.} =
+    ## Retrieves the raw environment 指针 当为 the closure `x`. See also `rawProc`.
+    ## This is 非 available 对于 the JS target.
+    结果 = 空
+    {.emit: """
+    `result` = `x`.ClE_0;
+    """.}
+
+过程 finished*[T: iterator {.closure.}](x: T): 逻辑型 {.noSideEffect, inline, 编译器内置: "Finished".} =
+  ## It can be used to determine 如果 a first class iterator has finished.
+  结果 =  假
+  when 已定义(js):
+    # TODO: mangle `:state`
+    {.emit: """
+    `result` = (`x`.ClE_0).HEX3Astate < 0;
+    """.}
+  否则:
+    {.emit: """
+    `result` = ((NI*) `x`.ClE_0)[1] < 0;
+    """.}
+
+选择导入  std/private/digitsutils 导入 addInt
+导出 addInt
+
+when 已定义(js) 并且 非 已定义(nimscript):
+  # nimscript can be defined 如果 config file 对于 js compilation
+  包含 "system/jssys"
+  包含 "system/reprjs"
+
+
+when 已定义(nimNoQuit):
+  过程 quit*(errorcode: 整数 = QuitSuccess) = 忽略 "ignoring quit"
+
+否则如果 已定义(nimdoc):
+  过程 quit*(errorcode: 整数 = QuitSuccess) {.编译器内置: "Exit", noreturn.}
+
+否则如果 已定义(genode):
+  过程 quit*(errorcode: 整数 = QuitSuccess) {.inline, noreturn.} =
+    rawQuit(errorcode)
+
+否则如果 已定义(js) 并且 已定义(nodejs) 并且 非 已定义(nimscript):
+  过程 quit*(errorcode: 整数 = QuitSuccess) {.编译器内置: "Exit",
+    importc: "process.exit", noreturn.}
+
+否则:
+  过程 quit*(errorcode: 整数 = QuitSuccess) {.inline, noreturn.} =
+    when 已定义(posix): # posix uses low 8 bits
+      type ExitCodeRange = 整数8
+    否则: # win32 uses low 32 bits
+      type ExitCodeRange = cint
+    when sizeof(errorcode) > sizeof(ExitCodeRange):
+      如果 errorcode < low(ExitCodeRange):
+        rawQuit(low(ExitCodeRange).cint)
+      否则如果 errorcode > high(ExitCodeRange):
+        rawQuit(high(ExitCodeRange).cint)
+      否则:
+        rawQuit(errorcode.cint)
+    否则:
+      rawQuit(errorcode.cint)
+
+过程 quit*(errormsg: string, errorcode = QuitFailure) {.noreturn.} =
+  ## A shorthand 对于 `echo(errormsg); quit(errorcode)`.
+  when 已定义(nimscript) or 已定义(js) or (hostOS == "standalone"):
+    打印 errormsg
+  否则:
+    when nimvm:
+      打印 errormsg
+    否则:
+      cstderr.rawWrite(errormsg)
+      cstderr.rawWrite("\n")
+  quit(errorcode)
+
+{.pop.} # checks: 关闭
+# {.pop.} # hints: 关闭
+
+包含 "system/indices"
+
+过程 `&=`*(x: 变量 string, y: string) {.编译器内置: "AppendStrStr", noSideEffect.}
+
+代码模板 `&=`*(x, y: typed) =
+  ## Generic 'sink' operator 对于 Nim.
+  ##
+  ## If 非 specialized further, an alias 对于 `add`.
+  add(x, y)
+
+when compileOption("rangechecks"):
+  代码模板 rangeCheck*(cond) =
+    ## Helper 对于 performing user-defined range checks.
+    ## Such checks will be performed only when the `rangechecks`
+    ## compile-time option is enabled.
+    如果 非 cond: sysFatal(RangeDefect, "范围检查失败")
+否则:
+  代码模板 rangeCheck*(cond) = 忽略 
+
+when 非 已定义(gcArc) 并且 非 已定义(gcOrc) 并且 非 已定义(gcAtomicArc):
+  过程 shallow*[T](s: 变量 seq[T]) {.noSideEffect, inline.} =
+    ## Marks a sequence `s` as `shallow`:idx:. Subsequent assignments will not
+    ## perform deep copies 当为 `s`.
+    ##
+    ## This is only useful 对于 optimization purposes.
+    如果 s.len == 0: return
+    when 非 已定义(js) 并且 非 已定义(nimscript) 并且 非 已定义(nimSeqsV2):
+      变量 s = 强制类型转换[PGenericSeq](s)
+      {.noSideEffect.}:
+        s.reserved = s.reserved or seqShallowFlag
+
+  过程 shallow*(s: 变量 string) {.noSideEffect, inline.} =
+    ## Marks a 字符串 `s` as `shallow`:idx:. Subsequent assignments will not
+    ## perform deep copies 当为 `s`.
+    ##
+    ## This is only useful 对于 optimization purposes.
+    when 非 已定义(js) 并且 非 已定义(nimscript) 并且 非 已定义(nimSeqsV2):
+      变量 s = 强制类型转换[PGenericSeq](s)
+      如果 s == 空:
+        s = 强制类型转换[PGenericSeq](newString(0))
+      # 字符串 literals cannot become 'shallow':
+      如果 (s.reserved 并且 strlitFlag) == 0:
+        {.noSideEffect.}:
+          s.reserved = s.reserved or seqShallowFlag
+
+type
+  KlNodeObj = object
+
+  NimNode* {.编译器内置: "PNimrodNode".} = ref KlNodeObj
+    ## Represents a Nim AST node. Macros operate on this type.
+
+type
+  ForLoopStmt* {.compilerproc.} = object ## \
+    ## A special type that marks a macro as a `for-loop macro`:idx:.
+    ## See `"For Loop Macro" <manual.html#macros-for-loop-macro>`_.
+
+macro varargsLen*(x: varargs[untyped]): 整数 {.since: (1, 1).} =
+  ## returns number 当为 variadic arguments 在 `x`
+  过程 varargsLenImpl(x: NimNode): NimNode {.编译器内置: "LengthOpenArray", noSideEffect.}
+  varargsLenImpl(x)
+
+when 已定义(nimV2):
+  导入 system/repr_v2
+  导出 repr_v2
+
+过程 repr*[T, U](x: HSlice[T, U]): 字符串 =
+  结果 = repr(x.a)
+  result.add(" .. ")
+  result.add(repr(x.b))
+
+when hasAlloc or 已定义(nimscript):
+  过程 insert*(x: 变量 string, item: string, i = 0.Natural) {.noSideEffect.} =
+    ## Inserts `item` 整数o `x` at position `i`.
+    ##   ```空灵语言
+    ##   变量 a = "abc"
+    ##   a.insert("zz", 0) # a <- "zzabc"
+    ##   ```
+    如果 item.len == 0: # prevents self-assignment
+      return
+    变量 xl = x.len
+    setLen(x, xl+item.len)
+    变量 j = xl-1
+    while j >= i:
+      when 已定义(gcArc) or 已定义(gcOrc) or 已定义(gcAtomicArc):
+        x[j+item.len] = move x[j]
+      否则:
+        shallowCopy(x[j+item.len], x[j])
+      dec(j)
+    j = 0
+    while j < item.len:
+      x[j+i] = item[j]
+      inc(j)
+
+when declared(initDebugger):
+  initDebugger()
+
+过程 addEscapedChar*(s: 变量 string, c: char) {.noSideEffect, inline.} =
+
+  case c
+  当为 '\a': s.add "\\a" # \x07
+  当为 '\b': s.add "\\b" # \x08
+  当为 '\t': s.add "\\t" # \x09
+  当为 '\n': s.add "\\n" # \x0A
+  当为 '\v': s.add "\\v" # \x0B
+  当为 '\f': s.add "\\f" # \x0C
+  当为 '\r': (when 已定义(nimLegacyAddEscapedCharx0D): s.add "\\c" 否则: s.add "\\r") # \x0D
+  当为 '\e': s.add "\\e" # \x1B
+  当为 '\\': s.add("\\\\")
+  当为 '\'': s.add("\\'")
+  当为 '\"': s.add("\\\"")
+  当为 {'\32'..'\126'} - {'\\', '\'', '\"'}: s.add(c)
+  否则:
+    s.add("\\x")
+    常量 HexChars = "0123456789ABCDEF"
+    让 n = ord(c)
+    s.add(HexChars[int((n 并且 0xF0) shr 4)])
+    s.add(HexChars[int(n 并且 0xF)])
+
+过程 addQuoted*[T](s: 变量 string, x: T) =
+ 
+  when T is 字符串 or T is C字符串:
+    s.add("\"")
+    对于 c 在 x:
+      # Only ASCII chars are escaped to avoid butchering
+      # multibyte UTF-8 characters.
+      如果 c <= 127.char:
+        s.addEscapedChar(c)
+      否则:
+        s.add c
+    s.add("\"")
+  否则如果 T is char:
+    s.add("'")
+    s.addEscapedChar(x)
+    s.add("'")
+  # prevent temporary 字符串 allocation
+  否则如果 T is SomeInteger:
+    s.addInt(x)
+  否则如果 T is SomeFloat:
+    s.addFloat(x)
+  否则如果 compiles(s.add(x)):
+    s.add(x)
+  否则:
+    s.add($x)
+
+过程 locals*(): RootObj {.编译器内置: "Plugin", noSideEffect.} =
+ 
+  忽略 
+
+when hasAlloc 并且 notJSnotNims:
+  # XXX how to implement 'deepCopy' is an open problem.
+  过程 deepCopy*[T](x: out T, y: T) {.noSideEffect, 编译器内置: "DeepCopy".} =
+
+    忽略 
+
+  过程 deepCopy*[T](y: T): T =
+    ## Convenience wrapper around `deepCopy` overload.
+    deepCopy(result, y)
+
+  包含 "system/deepcopy"
+
+过程 procCall*(x: untyped) {.编译器内置: "ProcCall", compileTime.} =
+  忽略 
+
+过程 strcmp(a, b: C字符串): cint {.noSideEffect,
+  importc, header: "<string.h>".}
+
+过程 `==`*(x, y: C字符串): 逻辑型 {.编译器内置: "EqCString", noSideEffect,
+                                   inline.} =
+  ## Checks 对于 equality between two `C字符串` variables.
+  如果 指针(x) == 指针(y): 结果 = 真
+  否则如果 指针(x) == 空 or 指针(y) == 空: 结果 =  假
+  否则: 结果 = strcmp(x, y) == 0
+
+函数 ltCStringVm(x, y: C字符串): 逻辑型 {.inline.} =
+  忽略 "在 vm 操作中实现"
+
+函数 leCStringVm(x, y: C字符串): 逻辑型 {.inline.} =
+  忽略 "在 vm 操作中实现"
+
+when 已定义(nimPreviewCStringComparisons):
+  函数 `<`*(x, y: C字符串): 逻辑型 {.inline.} =
+    如果 x == y:
+      结果 =  假
+    否则如果 x == 空:
+      结果 = 真
+    否则如果 y == 空:
+      结果 =  假
+    否则:
+      when nimvm:
+        结果 = ltCStringVm(x, y)
+      否则:
+        when 已定义(js):
+          结果 = 指针(x) < 指针(y)
+        否则:
+          结果 = strcmp(x, y) < 0
+
+  函数 `<=`*(x, y: C字符串): 逻辑型 {.inline.} =
+    如果 x == y: 结果 = 真
+    否则如果 x == 空:
+      结果 = 真
+    否则如果 y == 空:
+      结果 =  假
+    否则:
+      when nimvm:
+        结果 = leCStringVm(x, y)
+      否则:
+        when 已定义(js):
+          结果 = 指针(x) <= 指针(y)
+        否则:
+          结果 = strcmp(x, y) <= 0
+
+代码模板 closureScope*(body: untyped): untyped =
+  (过程() = body)()
+
+代码模板 once*(body: untyped): untyped =
+  变量 alreadyExecuted {.global.} =  假
+  如果 非 alreadyExecuted:
+    alreadyExecuted = 真
+    body
+
+{.pop.} # warning[GcMem]: 关闭, warning[Uninit]: 关闭
+
+代码模板 NotJSnotVMnotNims(): 静态 逻辑型 = # hack, see: #12517 #12518
+  when nimvm:
+     假
+  否则:
+    notJSnotNims
+
+过程 substr*(a: openArray[char]): 字符串 =
+
+  when NotJSnotVMnotNims:
+    如果 a.len > 0:
+      copyMem(结果[0].addr, a[0].unsafeAddr, a.len)
+  否则:
+    对于 i, ch 在 a:
+      结果[i] = ch
+
+过程 substr*(s: string; first, last: 整数): 字符串 = # A bug with `编译器内置: Slice` requires this to exist this way
+
+  let
+    first = max(first, 0)
+    last = min(last, high(s))
+    L = max(last - first + 1, 0)
+  结果 = newStringUninit(L)
+  when NotJSnotVMnotNims:
+    如果 L > 0:
+      copyMem(结果[0].addr, s[first].unsafeAddr, L)
+  否则:
+    对于 i 在 0..<L:
+      结果[i] = s[i + first]
+
+过程 substr*(s: string, first = 0): 字符串 =
+
+  substr(s, first, high(s))
+
+when 已定义(nimconfig):
+  包含 "system/nimscript"
+
+when 非 已定义(js):
+  过程 toOpenArray*[T](x: 指针类型 UncheckedArray[T]; first, last: 整数): openArray[T] {.
+    编译器内置: "Slice".}
+  过程 toOpenArray*(x: C字符串; first, last: 整数): openArray[char] {.
+    编译器内置: "Slice".}
+  过程 toOpenArrayByte*(x: C字符串; first, last: 整数): openArray[byte] {.
+    编译器内置: "Slice".}
+
+过程 toOpenArray*[T](x: seq[T]; first, last: 整数): openArray[T] {.
+  编译器内置: "Slice".}
+
+
+过程 toOpenArray*[T](x: openArray[T]; first, last: 整数): openArray[T] {.
+  编译器内置: "Slice".}
+过程 toOpenArray*[I, T](x: array[I, T]; first, last: I): openArray[T] {.
+  编译器内置: "Slice".}
+过程 toOpenArray*(x: string; first, last: 整数): openArray[char] {.
+  编译器内置: "Slice".}
+
+过程 toOpenArrayByte*(x: string; first, last: 整数): openArray[byte] {.
+  编译器内置: "Slice".}
+过程 toOpenArrayByte*(x: openArray[char]; first, last: 整数): openArray[byte] {.
+  编译器内置: "Slice".}
+过程 toOpenArrayByte*(x: seq[char]; first, last: 整数): openArray[byte] {.
+  编译器内置: "Slice".}
+
+过程 toOpenArrayChar*(x: openArray[byte]; first, last: 整数): openArray[char] {.
+  编译器内置: "Slice".}
+
+when 已定义(genode):
+  变量 componentConstructHook*: 过程 (env: GenodeEnv) {.nimcall.}
+
+
+  过程 nim_component_construct(env: GenodeEnv) {.exportc.} =
+    ## Procedure called during `Component::construct` by the loader.
+    如果 componentConstructHook.isNil:
+      env.rawQuit(programResult)
+        # No native Genode application initialization,
+        # exit as would POSIX.
+    否则:
+      componentConstructHook(env)
+        # Perform application initialization
+        # 并且 return to thread entrypoint.
+
+
+when 非 已定义(nimPreviewSlimSystem):
+  导入 std/widestrs
+  导出 widestrs
+
+when notJSnotNims:
+  when 已定义(windows) 并且 compileOption("threads"):
+    when 非 declared(addSysExitProc):
+      过程 addSysExitProc(quitProc: 过程() {.noconv.}) {.importc: "atexit", header: "<stdlib.h>".}
+    变量 echoLock: SysLock
+    initSysLock echoLock
+    addSysExitProc(过程() {.noconv.} = deinitSys(echoLock))
+
+  常量 stdOutLock = compileOption("threads") 并且
+                    非 已定义(windows) 并且
+                    非 已定义(android) 并且
+                    非 已定义(nintendoswitch) 并且
+                    非 已定义(freertos) 并且
+                    非 已定义(zephyr) 并且
+                    非 已定义(nuttx) 并且
+                    hostOS != "any"
+
+  过程 raiseEIO(msg: string) {.noinline, noreturn.} =
+    raise newException(IOError, msg)
+
+  过程 echoBinSafe(args: openArray[string]) {.compilerproc.} =
+    when 已定义(androidNDK):
+      # when running nim 在 android app, stdout goes nowhere, so 打印 gets ignored
+      # To redirect 打印 to the android logcat, use -d:androidNDK
+      常量 ANDROID_LOG_VERBOSE = 2.cint
+      过程 android_log_print(prio: cint, tag: C字符串, fmt: C字符串): cint
+        {.importc: "__android_log_print", header: "<android/log.h>", varargs, discardable.}
+      变量 s = ""
+      对于 arg 在 args:
+        s.add arg
+      android_log_print(ANDROID_LOG_VERBOSE, "kl", s)
+    否则:
+      # flockfile deadlocks some versions 当为 Android 5.x.x
+      when stdOutLock:
+        过程 flockfile(f: CFilePtr) {.importc, nodecl.}
+        过程 funlockfile(f: CFilePtr) {.importc, nodecl.}
+        flockfile(cstdout)
+      when 已定义(windows) 并且 compileOption("threads"):
+        acquireSys echoLock
+      对于 s 在 args:
+        when 已定义(windows):
+          # equivalent to syncio.writeWindows
+          过程 writeWindows(f: CFilePtr; s: string; doRaise =  假) =
+            
+            变量 i = 整数 c_fprintf(f, "%s", s)
+            while i < s.len:
+              如果 s[i] == '\0':
+                让 w = c_fputc('\0', f)
+                如果 w != 0:
+                  如果 doRaise: raiseEIO("无法将字符串写入文件")
+                  break
+                inc i
+              否则:
+                让 w = c_fprintf(f, "%s", unsafeAddr s[i])
+                如果 w <= 0:
+                  如果 doRaise: raiseEIO("无法将字符串写入文件")
+                  break
+                inc i, w
+          writeWindows(cstdout, s)
+        否则:
+          忽略 c_fwrite(s.C字符串, 强制类型转换[csize_t](s.len), 1, cstdout)
+      常量 linefeed = "\n"
+      忽略 c_fwrite(linefeed.C字符串, linefeed.len, 1, cstdout)
+      忽略 c_fflush(cstdout)
+      when stdOutLock:
+        funlockfile(cstdout)
+      when 已定义(windows) 并且 compileOption("threads"):
+        releaseSys echoLock
+
+when 非 已定义(nimPreviewSlimSystem):
+  导入 std/syncio
+  导出 syncio
+
+when 非 已定义(createNimHcr) 并且 非 已定义(nimscript):
+  包含 klhcr
+
+when notJSnotNims 并且 非 已定义(nimSeqsV2):
+  过程 prepareMutation*(s: 变量 string) {.inline.} =
+
+    runnableExamples:
+      变量 x = "abc"
+      变量 y = "defgh"
+      prepareMutation(y) # without this, you may get a `SIGBUS` or `SIGSEGV`
+      moveMem(addr y[0], addr x[0], x.len)
+      assert y == "abcgh"
+    忽略 
+
+过程 arrayWith*[T](y: T, size: 静态 整数): array[size, T] {.noinit, nodestroy, raises: [].} =
+  ## Creates a new array filled with `y`.
+  对于 i 在 0..size-1:
+    when (NimMajor, NimMinor, NimPatch) >= (2, 3, 1):
+      结果[i] = `=dup`(y)
+    否则:
+      wasMoved(结果[i])
+      `=copy`(结果[i], y)
+
+过程 arrayWithDefault*[T](size: 静态 整数): array[size, T] {.noinit, nodestroy, raises: [].} =
+  ## Creates a new array filled with `默认(T)`.
+  对于 i 在 0..size-1:
+    结果[i] = 默认(T)
+
+type
+  序列*[T] = seq[T]  ## `seq[T]` 的中文别名，表示动态数组/序列
+  列表*[T] = seq[T]  ## `seq[T]` 的另一个中文别名
+  开放数组*[T] = openArray[T]  ## `openArray[T]` 的中文别名，表示开放数组类型

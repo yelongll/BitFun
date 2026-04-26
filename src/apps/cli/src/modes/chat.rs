@@ -467,7 +467,7 @@ impl ChatMode {
                 if parts.len() > 1 {
                     chat_view.add_message(
                         "system".to_string(),
-                        format!("Warning: Agent switching feature coming soon\nTip: Use `bitfun chat --agent {}` to start a new session", parts[1]),
+                        format!("Warning: Agent switching feature coming soon\nTip: Use `空灵语言 chat --agent {}` to start a new session", parts[1]),
                     );
                 } else {
                     chat_view

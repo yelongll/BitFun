@@ -9,7 +9,7 @@
     },
     "agentCompanion": {
       "title": "Agent companion",
-      "subtitle": "Show BitFun companion in the collapsed chat input.",
+      "subtitle": "Show konglingcompanion in the collapsed chat input.",
       "enable": "Show Agent companion"
     }
   },
@@ -36,7 +36,7 @@
   "browserControl": {
     "sectionTitle": "Browser control",
     "sectionDescription": "Reuse your default browser with logins, cookies, and extensions.",
-    "desktopOnly": "Browser control is only available in the BitFun desktop app.",
+    "desktopOnly": "Browser control is only available in the konglingdesktop app.",
     "status": "Connection",
     "statusDesc": "",
     "notConnected": "Not connected",
@@ -48,7 +48,7 @@
     "restartFailed": "Failed to restart browser with debug mode enabled",
     "restartModal": {
       "title": "Enable browser debug mode",
-      "description": "{{browser}} is already running and the current instance was not started with the debug port enabled. BitFun needs to restart the browser in debug mode before it can control it.",
+      "description": "{{browser}} is already running and the current instance was not started with the debug port enabled. konglingneeds to restart the browser in debug mode before it can control it.",
       "warning": "This will close the current browser windows.",
       "cancel": "Cancel",
       "confirm": "Restart and enable debug",

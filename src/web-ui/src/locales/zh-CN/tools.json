@@ -187,7 +187,9 @@
       "selectEncoding": "选择编码",
       "selectLanguageModeHint": "选择语言模式（点击即切换）",
       "indentOptionSpaces": "空格: {{n}}",
-      "indentOptionTab": "Tab: {{n}}"
+      "indentOptionTab": "Tab: {{n}}",
+      "tableEditor": "表格编辑",
+      "codeEditor": "代码编辑"
     }
   },
   "terminal": {

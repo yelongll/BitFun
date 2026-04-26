@@ -38,4 +38,4 @@ pub use agentic::tools::registry::ToolRegistry;
 
 // Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const CORE_NAME: &str = "BitFun Core";
+pub const CORE_NAME: &str = "kongling Core";

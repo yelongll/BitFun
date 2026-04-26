@@ -290,7 +290,7 @@ async function ensureDesktopOpenSslIfNeeded() {
     return;
   }
 
-  printInfo('Windows: ensuring prebuilt OpenSSL (cached under .bitfun/cache/)');
+  printInfo('Windows: ensuring prebuilt OpenSSL (cached under .kongling/cache/)');
   try {
     const { ensureOpenSslWindows } = await import(
       pathToFileURL(path.join(__dirname, 'ensure-openssl-windows.mjs')).href
@@ -563,7 +563,7 @@ async function main() {
   };
   const modeLabel = modeLabelMap[mode] || 'Web';
   
-  printHeader(`BitFun ${modeLabel} Development`);
+  printHeader(`空灵语言 ${modeLabel} 开发环境`);
   printBlank();
 
   const totalSteps = desktopMode ? 4 : 3;

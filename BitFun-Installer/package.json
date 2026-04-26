@@ -3,7 +3,7 @@
   "version": "0.2.4",
   "private": true,
   "type": "module",
-  "description": "BitFun Custom Installer - Modern branded installation experience",
+  "description": "Kongling Custom Installer - Modern branded installation experience",
   "scripts": {
     "sync:model-i18n": "node scripts/sync-model-i18n.cjs",
     "sync:theme-i18n": "node scripts/sync-theme-i18n.cjs",

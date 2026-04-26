@@ -187,7 +187,9 @@
       "selectEncoding": "Select Encoding",
       "selectLanguageModeHint": "Select Language Mode (click to switch)",
       "indentOptionSpaces": "Spaces: {{n}}",
-      "indentOptionTab": "Tab: {{n}}"
+      "indentOptionTab": "Tab: {{n}}",
+      "tableEditor": "Table Editor",
+      "codeEditor": "Code Editor"
     }
   },
   "terminal": {

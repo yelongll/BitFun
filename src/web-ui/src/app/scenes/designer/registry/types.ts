@@ -28,7 +28,7 @@ export interface PropertyConfig {
   placeholder?: string;
   description?: string;
   group?: string;
-  condition?: string;
+  condition?: (elementProps: Record<string, unknown>) => boolean;
 }
 
 export interface EventConfig {

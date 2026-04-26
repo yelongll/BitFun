@@ -153,7 +153,7 @@ Important notes:
                     return ValidationResult {
                         result: false,
                         message: Some(
-                            "Tool context is required to resolve bitfun runtime URIs".to_string(),
+                            "Tool context is required to resolve kongling runtime URIs".to_string(),
                         ),
                         error_code: Some(400),
                         meta: None,

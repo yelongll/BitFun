@@ -21,7 +21,7 @@ use modes::exec::ExecMode;
 
 #[derive(Parser)]
 #[command(name = "bitfun")]
-#[command(about = "BitFun CLI - AI agent-driven command-line programming assistant", long_about = None)]
+#[command(about = "空灵语言 CLI - AI agent-driven command-line programming assistant", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -385,7 +385,7 @@ async fn main() -> Result<()> {
         }
 
         Some(Commands::Health) => {
-            println!("BitFun CLI is running normally");
+            println!("空灵语言 CLI is running normally");
             println!("Version: {}", env!("CARGO_PKG_VERSION"));
             println!("Config directory: {:?}", CliConfig::config_dir()?);
         }

@@ -1,13 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  MousePointer2,
-  Move,
   Square,
-  Type,
   Image,
-  Layout,
-  Layers,
   Trash2,
   Copy,
   Undo2,
@@ -23,14 +18,7 @@ import {
   ChevronDown,
   Grid3X3,
   Component,
-  ToggleLeft,
-  Minus,
-  CheckSquare,
-  CircleDot,
   List,
-  TextCursorInput,
-  RectangleHorizontal,
-  SlidersHorizontal,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -41,72 +29,29 @@ import {
   SendToBack,
   Group,
   Ungroup,
-  Palette,
-  Type as TypeIcon,
-  Square as BorderIcon,
   Code,
   Play,
   Save,
   FolderOpen,
-  X,
-  Download,
   HelpCircle,
-  Move3D,
-  Zap,
   Magnet,
   Table,
-  Badge,
   User,
   Loader,
   AlertCircle,
-  Link,
-  Video,
   Music,
   Globe,
-  Calendar,
-  Clock,
   FileText,
   Star,
-  Settings,
   Menu,
-  ArrowRight,
-  MoreHorizontal,
   Search,
-  Hash,
-  Key,
-  ThumbsUp,
-  Plus,
-  Minus as MinusIcon,
   ChevronUp,
-  ChevronDown as ChevronDownIcon,
   Bell,
-  MessageSquare,
-  SidebarOpen,
-  PanelBottom,
   ImagePlus,
   BarChart3,
-  GitBranch,
-  Timer,
-  FileCheck,
-  Sparkles,
-  Shield,
-  AlertTriangle,
-  Info,
   CheckCircle,
-  XCircle,
   Columns,
   Rows,
-  FormInput,
-  Sun,
-  Moon,
-  Cloud,
-  Umbrella,
-  Wind,
-  Flame,
-  Snowflake,
-  Leaf,
-  Droplets,
-  LayoutGrid,
   AlignHorizontalSpaceAround,
   AlignVerticalSpaceAround,
   SquareEqual,
@@ -117,19 +62,18 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
-import { open as dialogOpen, save as dialogSave } from '@tauri-apps/plugin-dialog';
+import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
 import { writeFile, readFile } from '@tauri-apps/plugin-fs';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
 import { globalAPI } from '@/infrastructure/api/service-api/GlobalAPI';
 import { fileSystemService } from '@/tools/file-system/services/FileSystemService';
 import { dirnameAbsolutePath } from '@/shared/utils/pathUtils';
 import DesignerComponentBox, { DesignerComponent } from './DesignerComponentBox';
-import DesignerPropertiesPanel from './DesignerPropertiesPanel';
+import DesignerPropertiesPanel, { CanvasSettings } from './DesignerPropertiesPanel';
 import { generateNimCode, NimCodeGeneratorOptions, getModuleName } from './NimCodeGenerator';
-import { componentRegistry } from './registry/ComponentRegistry';
 import './DesignerScene.scss';
 
-interface DesignerElement {
+export interface DesignerElement {
   id: string;
   type: string;
   name: string;
@@ -151,11 +95,10 @@ interface DesignerElement {
   ariaLabel?: string;
   ariaDescribedBy?: string;
   tabIndex?: number;
-  // ImGui Window Properties
   imguiWindowProps?: ImGuiWindowProps;
 }
 
-interface ImGuiWindowProps {
+export interface ImGuiWindowProps {
   // Window Flags
   noTitleBar?: boolean;
   noResize?: boolean;
@@ -204,14 +147,14 @@ interface ImGuiWindowProps {
   focus?: boolean;
 }
 
-interface ElementStyles {
+export interface ElementStyles {
   backgroundColor?: string;
   borderColor?: string;
   borderWidth?: number;
   borderRadius?: number;
   textColor?: string;
   fontSize?: number;
-  fontWeight?: string;
+  fontWeight?: string | number;
   opacity?: number;
   boxShadow?: string;
   paddingTop?: number;
@@ -224,6 +167,36 @@ interface ElementStyles {
   marginLeft?: number;
   textAlign?: 'left' | 'center' | 'right';
   zIndex?: number;
+  borderStyle?: 'none' | 'solid' | 'dashed' | 'dotted' | 'double';
+  borderTopWidth?: number;
+  borderRightWidth?: number;
+  borderBottomWidth?: number;
+  borderLeftWidth?: number;
+  borderTopColor?: string;
+  borderRightColor?: string;
+  borderBottomColor?: string;
+  borderLeftColor?: string;
+  borderTopLeftRadius?: number;
+  borderTopRightRadius?: number;
+  borderBottomLeftRadius?: number;
+  borderBottomRightRadius?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  display?: string;
+  position?: 'static' | 'relative' | 'absolute' | 'fixed' | 'sticky';
+  overflow?: 'visible' | 'hidden' | 'scroll' | 'auto';
+  overflowX?: 'visible' | 'hidden' | 'scroll' | 'auto';
+  overflowY?: 'visible' | 'hidden' | 'scroll' | 'auto';
+  fontFamily?: string;
+  lineHeight?: number | string;
+  letterSpacing?: number;
+  textDecoration?: 'none' | 'underline' | 'line-through' | 'overline';
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  cursor?: string;
+  transition?: string;
+  transform?: string;
 }
 
 export interface ElementEvents {
@@ -306,7 +279,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, elementId: null });
   const [groups, setGroups] = useState<Map<string, string[]>>(new Map());
   const [previewMode, setPreviewMode] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [_showHelpModal, setShowHelpModal] = useState(false);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<{
     isSelecting: boolean;
@@ -315,14 +288,14 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     endX: number;
     endY: number;
   } | null>(null);
-  const [canvasSettings, setCanvasSettings] = useState({
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>({
     id: 'canvas-main',
     width: 480,
     height: 360,
-    minWidth: undefined as number | undefined,
-    maxWidth: undefined as number | undefined,
-    minHeight: undefined as number | undefined,
-    maxHeight: undefined as number | undefined,
+    minWidth: undefined,
+    maxWidth: undefined,
+    minHeight: undefined,
+    maxHeight: undefined,
     backgroundColor: '#ffffff',
     name: '窗口1',
     title: '',
@@ -332,22 +305,18 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     borderWidth: 0,
     borderRadius: 0,
     opacity: 1,
-    x: 0,
-    y: 0,
-    fontSize: 14,
-    fontWeight: 'normal',
     boxShadow: '',
     paddingTop: 0,
     paddingRight: 0,
     paddingBottom: 0,
     paddingLeft: 0,
-    overflow: 'visible' as 'visible' | 'hidden' | 'scroll' | 'auto',
+    overflow: 'visible',
     ariaLabel: '',
     ariaDescribedBy: '',
     imguiWindowProps: {
       noCollapse: true,
       noTitleBar: true,
-    } as ImGuiWindowProps,
+    },
     windowIcon: '',
   });
   const [isCanvasSelected, setIsCanvasSelected] = useState(true);
@@ -390,7 +359,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     localStorage.setItem('designer-rightPanelWidth', String(rightPanelWidth));
   }, [rightPanelWidth]);
 
-  const selectedElement = selectedIds.size === 1 ? elements.find(el => el.id === Array.from(selectedIds)[0]) : null;
+  const selectedElement = selectedIds.size === 1 ? elements.find(el => el.id === Array.from(selectedIds)[0]) ?? null : null;
   const selectedElements = elements.filter(el => selectedIds.has(el.id));
 
   const saveHistory = useCallback((newElements: DesignerElement[]) => {
@@ -1914,7 +1883,7 @@ ${css}
   background-color: ${canvasSettings.backgroundColor};
 ${canvasSettings.borderWidth && canvasSettings.borderWidth > 0 ? `  border: ${canvasSettings.borderWidth}px solid ${canvasSettings.borderColor || '#cccccc'};\n` : ''}${canvasSettings.borderRadius ? `  border-radius: ${canvasSettings.borderRadius}px;\n` : ''}${canvasSettings.opacity !== undefined && canvasSettings.opacity < 1 ? `  opacity: ${canvasSettings.opacity};\n` : ''}${canvasSettings.boxShadow ? `  box-shadow: ${canvasSettings.boxShadow};\n` : ''}${(canvasSettings.paddingTop || canvasSettings.paddingRight || canvasSettings.paddingBottom || canvasSettings.paddingLeft) ? `  padding: ${canvasSettings.paddingTop || 0}px ${canvasSettings.paddingRight || 0}px ${canvasSettings.paddingBottom || 0}px ${canvasSettings.paddingLeft || 0}px;\n` : ''}\`;
 
-const ${canvasSettings.name.replace(/\s+/g, '')}: React.FC = () => {
+const ${canvasSettings.name?.replace(/\s+/g, '') || 'Window'}: React.FC = () => {
   return (
     <Container>
 `;
@@ -1948,13 +1917,13 @@ const ${canvasSettings.name.replace(/\s+/g, '')}: React.FC = () => {
   );
 };
 
-export default ${canvasSettings.name.replace(/\s+/g, '')};`;
+export default ${canvasSettings.name?.replace(/\s+/g, '') || 'Window'};`;
     
     return code;
   };
 
   const generateCSS = (): string => {
-    let css = `/* ${canvasSettings.name} - 设计器导出 CSS */
+    let css = `/* ${canvasSettings.name || 'Window'} - 设计器导出 CSS */
 
 .container {
   position: relative;
@@ -1971,39 +1940,6 @@ export default ${canvasSettings.name.replace(/\s+/g, '')};`;
     });
     
     return css;
-  };
-
-  const handleExport = () => {
-    let code = '';
-    let filename = '';
-    let type = '';
-    const name = canvasSettings.name.replace(/\s+/g, '');
-    
-    switch (exportFormat) {
-      case 'html':
-        code = generateHTML();
-        filename = `${name}.html`;
-        type = 'text/html';
-        break;
-      case 'react':
-        code = generateReact();
-        filename = `${name}.tsx`;
-        type = 'text/typescript';
-        break;
-      case 'css':
-        code = generateCSS();
-        filename = `${name}.css`;
-        type = 'text/css';
-        break;
-    }
-    
-    const blob = new Blob([code], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleSaveDesign = async () => {

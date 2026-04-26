@@ -237,7 +237,7 @@ impl ControlHubTool {
 
     fn description_text(desktop_enabled: bool) -> String {
         let desktop_domain_doc = if desktop_enabled {
-            r#"### domain: "desktop"  (Computer Use — only available in the BitFun desktop app)
+            r#"### domain: "desktop"  (Computer Use — only available in the kongling desktop app)
 
 #### desktop (AX-first, recommended for third-party apps)
 - New Codex-style flow that targets a specific application by name / bundle
@@ -384,7 +384,7 @@ impl ControlHubTool {
             r#"### domain: "desktop"
 - Not available in this session because Computer Use is disabled.
 - Do not attempt mouse, keyboard, OCR, display, or external desktop app control actions.
-- To enable these actions, turn on the `computer use` setting in session configuration and use the BitFun desktop app.
+- To enable these actions, turn on the `computer use` setting in session configuration and use the kongling desktop app.
 "#
         };
 
@@ -505,7 +505,7 @@ for control flow.
   host: {{ os, arch }}, schema_version }}`. Use it to confirm which domains are
   actually wired up on this runtime instead of guessing from the description.
 - `route_hint` (`{{ intent }}`) — heuristic mapping of a free-form user intent
-  ("把 BitFun 默认模型改成 Kimi") to a ranked list of candidate domains so the
+  ("把空灵语言 默认模型改成 Kimi") to a ranked list of candidate domains so the
   model has a sanity check before it commits to one. Always confirm with
   `meta.capabilities` and the domain docs; this is only a hint.
 
@@ -643,7 +643,7 @@ for control flow.
                     "domains": {
                         "desktop":  {
                             "available": desktop_available,
-                            "reason": if desktop_available { Value::Null } else { json!("Only available in the BitFun desktop app") },
+                            "reason": if desktop_available { Value::Null } else { json!("Only available in the kongling desktop app") },
                             "supports_ax_tree": desktop_ax_tree,
                             "supports_background_input": desktop_background_input,
                             "supports_interactive_view": desktop_interactive_view,
@@ -804,7 +804,7 @@ for control flow.
     ) -> BitFunResult<Vec<ToolResult>> {
         let host = context.computer_use_host.as_ref().ok_or_else(|| {
             BitFunError::tool(
-                "Desktop control is only available in the BitFun desktop app".to_string(),
+                "Desktop control is only available in the kongling desktop app".to_string(),
             )
         })?;
 
@@ -4156,7 +4156,7 @@ mod control_hub_tests {
             .block_on(tool.dispatch(
                 "meta",
                 "route_hint",
-                &json!({ "intent": "切换 BitFun 默认模型" }),
+                &json!({ "intent": "切换 空灵语言 默认模型" }),
                 &ctx,
             ))
             .unwrap();

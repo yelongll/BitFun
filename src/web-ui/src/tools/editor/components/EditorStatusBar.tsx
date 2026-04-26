@@ -4,7 +4,8 @@ import React from 'react';
 import { 
   AlertCircle,
   Loader2,
-  Zap
+  Zap,
+  Table
 } from 'lucide-react';
 import { Tooltip } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
@@ -35,6 +36,8 @@ export interface EditorStatusBarProps {
   isReadOnly?: boolean;
   /** LSP connection status */
   lspStatus?: 'connected' | 'disconnected' | 'connecting';
+  /** Whether table editor mode is active */
+  isTableEditor?: boolean;
   /** Language click callback */
   onLanguageClick?: (e: React.MouseEvent) => void;
   /** Encoding click callback */
@@ -43,6 +46,8 @@ export interface EditorStatusBarProps {
   onIndentClick?: (e: React.MouseEvent) => void;
   /** Position click callback */
   onPositionClick?: (e: React.MouseEvent) => void;
+  /** Table editor toggle callback */
+  onTableEditorToggle?: () => void;
 }
 
 /** Get friendly display name for language */
@@ -127,11 +132,13 @@ export const EditorStatusBar: React.FC<EditorStatusBarProps> = ({
   tabSize = 2,
   insertSpaces = true,
   isReadOnly = false,
+  isTableEditor = false,
   lspStatus,
   onLanguageClick,
   onEncodingClick,
   onIndentClick,
   onPositionClick,
+  onTableEditorToggle,
 }) => {
   const { t } = useI18n('tools');
   const lspInfo = getLspStatusInfo(lspStatus, t);
@@ -150,6 +157,17 @@ export const EditorStatusBar: React.FC<EditorStatusBarProps> = ({
   return (
     <div className="editor-status-bar">
       <div className="editor-status-bar__left">
+        {onTableEditorToggle && (
+          <Tooltip content={isTableEditor ? t('editor.statusBar.codeEditor') : t('editor.statusBar.tableEditor')} placement="top">
+            <div 
+              className={`editor-status-bar__item editor-status-bar__item--clickable ${isTableEditor ? 'editor-status-bar__item--active' : ''}`}
+              onClick={onTableEditorToggle}
+            >
+              <Table size={12} />
+              <span>{isTableEditor ? t('editor.statusBar.codeEditor') : t('editor.statusBar.tableEditor')}</span>
+            </div>
+          </Tooltip>
+        )}
         {isReadOnly && (
           <div className="editor-status-bar__item editor-status-bar__readonly">
             {t('editor.statusBar.readOnly')}

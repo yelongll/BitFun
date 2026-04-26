@@ -43,6 +43,7 @@ import { useI18n } from '@/infrastructure/i18n';
 import { EditorBreadcrumb } from './EditorBreadcrumb';
 import { EditorStatusBar } from './EditorStatusBar';
 import { EditorFloatingToolbar } from './EditorFloatingToolbar';
+import CodeTableEditor from './CodeTableEditor';
 
 const log = createLogger('CodeEditor');
 import {
@@ -147,6 +148,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   readOnly = false,
   showLineNumbers = true,
   showMinimap = true,
+  theme = 'vs-dark',
   className = '',
   onContentChange,
   onSave,
@@ -232,6 +234,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const [statusBarAnchorRect, setStatusBarAnchorRect] = useState<AnchorRect | null>(null);
   const [encoding, setEncoding] = useState<string>('UTF-8');
   const [largeFileMode, setLargeFileMode] = useState(false);
+  const [isTableEditor, setIsTableEditor] = useState(false);
   // Floating toolbar disabled - moved to tab bar
   const showFloatingToolbar = false;
   const [isRunning, setIsRunning] = useState(false);
@@ -2248,37 +2251,52 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       />
       
       <div className="code-editor-tool__content">
-        {/* Floating Toolbar */}
-        <EditorFloatingToolbar
-          isVisible={showFloatingToolbar && !readOnly}
-          position={{ x: 50, y: 60 }}
-          onRun={handleRun}
-          onDebug={handleDebug}
-          onBuild={handleBuild}
-          onStop={handleStop}
-          onRestart={handleRestart}
-          onFormat={handleFormat}
-          onOpenTerminal={handleOpenTerminal}
-          onOpenSettings={handleOpenSettings}
-          isRunning={isRunning}
-          isDebugging={isDebugging}
-          isBuilding={isBuilding}
-          language={detectedLanguage}
-          filePath={filePath}
-          runConfigs={runConfigs}
-          selectedConfig={selectedRunConfig}
-          onConfigChange={setSelectedRunConfig}
-        />
-        <div 
-          ref={containerRef} 
-          style={{ 
-            width: '100%', 
-            height: '100%',
-            overflow: 'hidden',
-            opacity: loading && showLoadingOverlay ? 0.3 : 1,
-            transition: 'opacity 0.2s'
-          }} 
-        />
+        {isTableEditor ? (
+          <CodeTableEditor
+            value={content}
+            onChange={(newContent) => {
+              setContent(newContent);
+              setHasChanges(newContent !== originalContentRef.current);
+              onContentChange?.(newContent, newContent !== originalContentRef.current);
+            }}
+            theme={theme === 'vs-light' ? 'light' : 'dark'}
+            readOnly={readOnly}
+            onCursorChange={(line, column) => setCursorPosition({ line, column })}
+          />
+        ) : (
+          <>
+            <EditorFloatingToolbar
+              isVisible={showFloatingToolbar && !readOnly}
+              position={{ x: 50, y: 60 }}
+              onRun={handleRun}
+              onDebug={handleDebug}
+              onBuild={handleBuild}
+              onStop={handleStop}
+              onRestart={handleRestart}
+              onFormat={handleFormat}
+              onOpenTerminal={handleOpenTerminal}
+              onOpenSettings={handleOpenSettings}
+              isRunning={isRunning}
+              isDebugging={isDebugging}
+              isBuilding={isBuilding}
+              language={detectedLanguage}
+              filePath={filePath}
+              runConfigs={runConfigs}
+              selectedConfig={selectedRunConfig}
+              onConfigChange={setSelectedRunConfig}
+            />
+            <div 
+              ref={containerRef} 
+              style={{ 
+                width: '100%', 
+                height: '100%',
+                overflow: 'hidden',
+                opacity: loading && showLoadingOverlay ? 0.3 : 1,
+                transition: 'opacity 0.2s'
+              }} 
+            />
+          </>
+        )}
       </div>
 
       {loading && showLoadingOverlay && (
@@ -2317,6 +2335,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         tabSize={editorConfig.tab_size || 2}
         insertSpaces={editorConfig.insert_spaces !== false}
         isReadOnly={readOnly}
+        isTableEditor={isTableEditor}
         lspStatus={
           enableLsp && lspExtensionRegistry.isFileSupported(filePath)
             ? (lspReady ? 'connected' : 'connecting')
@@ -2326,6 +2345,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         onIndentClick={(e) => openStatusBarPopover('indent', e)}
         onEncodingClick={(e) => openStatusBarPopover('encoding', e)}
         onLanguageClick={(e) => openStatusBarPopover('language', e)}
+        onTableEditorToggle={() => setIsTableEditor(!isTableEditor)}
       />
 
       {statusBarPopover === 'position' && statusBarAnchorRect && (

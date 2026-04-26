@@ -1,0 +1,441 @@
+Command-line switches
+All options that take a PATH or DIR argument are subject to path substitution:
+$nim: The global nim prefix path
+$lib: The stdlib path
+$homeand~: The user's home path
+$config: The directory of the module currently being compiled
+$projectname: The project file's name without file extension
+$projectpathand$projectdir: The project file's path
+$nimcache: The nimcache path
+Basic command-line switches are:
+Usage:
+nim command [options] [projectfile] [arguments]
+Command:
+compile, ccompile project with default code generator (C)
+rcompile to $nimcache/projname, run withargumentsusing backend specified by--backend(default: c)
+docgenerate the documentation for inputfile for backend specified by--backend(default: c)
+Arguments: arguments are passed to the program being run (if --run option is selected)
+Options:
+-p, --path:PATHadd path to search paths
+-d, --define:SYMBOL(:VAL)define a conditional symbol (Optionally: Define the value for that symbol, see: "compile time define pragmas")
+-u, --undef:SYMBOLundefine a conditional symbol
+-f, --forceBuild:on|offforce rebuilding of all modules
+--stackTrace:on|offturn stack tracing on|off
+--lineTrace:on|offturn line tracing on|off
+--threads:on|offturn support for multi-threading on|off
+-x, --checks:on|offturn all runtime checks on|off
+-a, --assertions:on|offturn assertions on|off
+--opt:none|speed|sizeoptimize not at all or for speed|size Note: use -d:release for a release build!
+--debugger:nativeuse native debugger (gdb)
+--app:console|gui|lib|staticlibgenerate a console app|GUI app|DLL|static library
+-r, --runrun the compiled program with given arguments
+--eval:cmdevaluate nim code directly; e.g.:nim --eval:"echo 1"defaults toe(nimscript) but customizable:nim r --eval:'for a in stdin.lines: echo a'
+--fullhelpshow all command line switches
+-h, --helpshow this help
+-v, --versionshow detailed version information
+Note, single letter options that take an argument require a colon. E.g. -p:PATH.
+Advanced command-line switches are:Advanced commands:
+compileToC, cccompile project with C code generator
+compileToCpp, cppcompile project to C++ code
+compileToOC, objccompile project to Objective C code
+jscompile project to Javascript
+erun a Nimscript file
+md2htmlconvert a Markdown file to HTML use--docCmd:skipto skip compiling snippets
+rst2htmlconvert a reStructuredText file to HTML use--docCmd:skipto skip compiling snippets
+md2texconvert a Markdown file to LaTeX
+rst2texconvert a reStructuredText file to LaTeX
+doc2texextract the documentation to a LaTeX file
+jsondocextract the documentation to a json file
+ctagscreate a tags file
+buildIndexbuild an index for the whole documentation
+genDependgenerate a DOT file containing the module dependency graph
+dumpdump all defined conditionals and search paths see also: --dump.format:json (useful with:| jq)
+checkchecks the project for syntax and semantics (can be combined with --defusages)
+Runtime checks (see -x):
+--objChecks:on|offturn obj conversion checks on|off
+--fieldChecks:on|offturn case variant field checks on|off
+--rangeChecks:on|offturn range checks on|off
+--boundChecks:on|offturn bound checks on|off
+--overflowChecks:on|offturn int over-/underflow checks on|off
+--floatChecks:on|offturn all floating point (NaN/Inf) checks on|off
+--nanChecks:on|offturn NaN checks on|off
+--infChecks:on|offturn Inf checks on|off
+Advanced options:
+--defusages:FILE,LINE,COLfind the definition and all usages of a symbol
+-o:FILE, --out:FILEset the output filename
+--outdir:DIRset the path where the output file will be written
+--usenimcachewill useoutdir=$$nimcache, whichever it resolves to after all options have been processed
+--stdout:on|offoutput to stdout
+--colors:on|offturn compiler messages coloring on|off
+--filenames:abs|canonical|legacyRelProjcustomize how filenames are rendered in compiler messages, defaults toabs(absolute)
+--processing:dots|filenames|offshow files as they're being processed by nim compiler
+--unitsep:on|offuse the ASCII unit separator (31) between error messages, useful for IDE-like tooling
+--declaredLocs:on|offshow declaration locations in messages
+--spellSuggest:numshow at mostnum >= 0spelling suggestions on typos. ifnumis not specified (orauto), return an implementation defined set of suggestions.
+--hints:on|off|liston|offenables or disables hints.listreports which hints are selected.
+--hint:X:on|offturn specific hint X on|off.hint:Xmeanshint:X:on, as with similar flags.allis the set of all hints (onlyall:offis supported).
+--hintAsError:X:on|offturn specific hint X into an error on|off
+-w:on|off|list, --warnings:on|off|liston|offenables or disables warnings.listreports which warnings are selected.
+--warning:X:on|offturn specific warning X on|off.warning:Xmeanswarning:X:on, as with similar flags.allis the set of all warning (onlyall:offis supported).
+--warningAsError:X:on|offturn specific warning X into an error on|off
+--styleCheck:off|hint|errorproduce hints or errors for Nim identifiers that do not adhere to Nim's official style guidehttps://nim-lang.org/docs/nep1.html
+--styleCheck:usagesonly enforce consistent spellings of identifiers, do not enforce the style on declarations
+--showAllMismatches:on|offshow all mismatching candidates in overloading resolution
+--lib:PATHset the system library path
+--import:PATHadd an automatically imported module see alsopatchFilein nimscript which offers more flexibility.
+--include:PATHadd an automatically included module
+--nimcache:PATHset the path used for generated files see alsohttps://nim-lang.org/docs/nimc.html#compiler-usage-generated-c-code-directory
+-c, --compileOnly:on|offcompile Nim files only; do not assemble or link
+--noLinking:on|offcompile Nim and generated files but do not link
+--noMain:on|offdo not generate a main procedure
+--genScript:on|offgenerate a compile script (in the 'nimcache' subdirectory named 'compile_$$project$$scriptext'), and a '.deps' file containing the dependencies; implies --compileOnly
+--os:SYMBOLset the target operating system (cross-compilation)
+--cpu:SYMBOLset the target processor (cross-compilation)
+--debuginfo:on|offenables debug information
+--mangle:nim|cppselectsnimorcppstyle name mangling, defaults tocpp
+-t, --passC:OPTIONpass an option to the C compiler
+-l, --passL:OPTIONpass an option to the linker
+--cc:SYMBOLspecify the C compiler
+--cincludes:DIRmodify the C compiler header search path
+--clibdir:DIRmodify the linker library search path
+--clib:LIBNAMElink an additional C library (you should omit platform-specific extensions)
+--projectdocument the whole project (doc)
+--docRoot:pathnim doc --docRoot:/foo --project --outdir:docs /foo/sub/main.nimgenerates: docs/sub/main.html if path == @pkg, will use nimble file enclosing dir if path == @path, will use first matching dir in--pathif path == @default (the default and most useful), will use best match among @pkg,@path. if these are nonexistent, will use project path
+-b, --backend:c|cpp|js|objcsets backend to use with commands likenim docornim r
+--docCmd:cmdifcmd == skip, skips runnableExamples else, runs runnableExamples with given options, e.g.:--docCmd:"-d:foo --threads:on"
+--docSeeSrcUrl:urlactivate 'see source' for doc command (see doc.item.seesrc in config/nimdoc.cfg)
+--docInternalalso generate documentation for non-exported symbols
+--rawturn off markup rendering for JSON docs
+--lineDir:on|offgeneration of #line directive on|off
+--embedsrc:on|offembeds the original source code as comments in the generated output
+--tlsEmulation:on|offturn thread local storage emulation on|off
+--implicitStatic:on|offturn implicit compile time evaluation on|off
+--trmacros:on|offturn term rewriting macros on|off
+--multimethods:on|offturn multi-methods on|off
+--hotCodeReloading:on|offturn support for hot code reloading on|off
+--excessiveStackTrace:on|offstack traces use full file paths
+--stackTraceMsgs:on|offenable user defined stack frame msgs viasetFrameMsg
+--skipCfg:on|offdo not read the nim installation's configuration file
+--skipUserCfg:on|offdo not read the user's configuration file
+--skipParentCfg:on|offdo not read the parent dirs' configuration files
+--skipProjCfg:on|offdo not read the project's configuration file
+--mm:orc|arc|refc|markAndSweep|boehm|go|none|regionsselect which memory management to use; default is 'orc'
+--exceptions:setjmp|cpp|goto|quirkyselect the exception handling implementation
+--index:on|off|onlydocgen: turn index file generation on|off (onlymeans not generate output files like HTML)
+--noImportdoc:on|offturn loading documentation.idxfiles on|off
+--putenv:key=valueset an environment variable
+--NimblePath:PATHadd a path for Nimble support
+--noNimblePathdeactivate the Nimble path
+--clearNimblePathempty the list of Nimble package search paths
+--cppCompileToNamespace:namespaceuse the provided namespace for the generated C++ code, if no namespace is provided "Nim" will be used
+--nimMainPrefix:prefixuse{prefix}NimMaininstead ofNimMainin the produced C/C++ code
+--expandMacro:MACROdump every generated AST from MACRO
+--expandArc:PROCNAMEshow how PROCNAME looks like after diverse optimizations before the final backend phase (mostly ARC/ORC specific)
+--excludePath:PATHexclude a path from the list of search paths
+--dynlibOverride:SYMBOLmarks SYMBOL so that dynlib:SYMBOL has no effect and can be statically linked instead; symbol matching is fuzzy so that --dynlibOverride:lua matches dynlib: "liblua.so.3"
+--dynlibOverrideAlldisables the effects of the dynlib pragma
+--listCmdlist the compilation commands; can be combined with--hint:exec:onand--hint:link:on
+--asmproduce assembler code
+--parallelBuild:0|1|...perform a parallel build value = number of processors (0 for auto-detect)
+--incremental:on|offonly recompile the changed modules (experimental!)
+--verbosity:0|1|2|3set Nim's verbosity level (1 is default)
+--errorMax:Nstop compilation after N errors; 0 means unlimited
+--maxLoopIterationsVM:Nset max iterations for all VM loops
+--maxCallDepthVM:Nset max call depth in the VM
+--experimental:$1enable experimental language feature
+--legacy:$2enable obsolete/legacy language feature
+--benchmarkVM:on|offturn benchmarking of VM code with cpuTime() on|off
+--profileVM:on|offturn compile time VM profiler on|off
+--panics:on|offturn panics into process terminations (default: off)
+--deepcopy:on|offenable 'system.deepCopy' for--mm:arc|orc
+--jsbigint64:on|offtoggle the use of BigInt for 64-bit integers for the JavaScript backend (default: on)
+--nimBasePattern:nimbase.hallows to specify a custom pattern fornimbase.h
+List of warnings
+Each warning can be activated individually with --warning:NAME:on|off or in a push pragma with {.warning[NAME]:on|off.}.
+Name	Description
+CannotOpenFile	Some file not essential for the compiler's working could not be opened.
+OctalEscape	The code contains an unsupported octal sequence.
+Deprecated	The code uses a deprecated symbol.
+ConfigDeprecated	The project makes use of a deprecated config file.
+SmallLshouldNotBeUsed	The letter 'l' should not be used as an identifier.
+EachIdentIsTuple	The code contains a confusing var declaration.
+CStringConv	Warn about dangerous implicit conversions to cstring.
+EnumConv	Warn about conversions from enum to enum.
+AnyEnumConv	Warn about any conversions to an enum type.
+HoleEnumConv	Warn about conversion to an enum with holes. These conversions are unsafe.
+ResultUsed	Warn about the usage of the built-in result variable.
+User	Some user-defined warning.
+List of hints
+Each hint can be activated individually with --hint:NAME:on|off or in a push pragma with {.hint[NAME]:on|off.}.
+Name	Description
+CC	Shows when the C compiler is called.
+CodeBegin	
+CodeEnd	
+CondTrue	
+Conf	A config file was loaded.
+ConvToBaseNotNeeded	
+ConvFromXtoItselfNotNeeded	
+Dependency	
+Exec	Program is executed.
+ExprAlwaysX	
+ExtendedContext	
+GCStats	Dumps statistics about the Garbage Collector.
+GlobalVar	Shows global variables declarations.
+Link	Linking phase.
+Name	
+Path	Search paths modifications.
+Pattern	
+Performance	
+Processing	Artifact being compiled.
+QuitCalled	
+Source	The source line that triggered a diagnostic message.
+StackTrace	
+Success, SuccessX	Successful compilation of a library or a binary.
+User	
+UserRaw	
+XDeclaredButNotUsed	Unused symbols in the code.
+Verbosity levels
+Level	Description
+0	Minimal output level for the compiler.
+1	Displays compilation of all the compiled files, including those imported by other modules or through the compile pragma. This is the default level.
+2	Displays compilation statistics, enumerates the dynamic libraries that will be loaded by the final binary, and dumps to standard output the result of applying a filter to the source code if any filter was used during compilation.
+3	In addition to the previous levels dumps a debug stack trace for compiler developers.
+Compile-time symbols
+Through the -d:x or --define:x switch you can define compile-time symbols for conditional compilation. The defined switches can be checked in source code with the when statement and defined proc. The typical use of this switch is to enable builds in release mode (-d:release) where optimizations are enabled for better performance. Another common use is the -d:ssl switch to activate SSL sockets.
+Additionally, you may pass a value along with the symbol: -d:x=y which may be used in conjunction with the compile-time define pragmas to override symbols during build time.
+Compile-time symbols are completely case insensitive and underscores are ignored too. --define:FOO and --define:foo are identical.
+Compile-time symbols starting with the nim prefix are reserved for the implementation and should not be used elsewhere.
+Name	Description
+nimStdSetjmp	Use the standard setjmp()/longjmp() library functions for setjmp-based exceptions. This is the default on most platforms.
+nimSigSetjmp	Use sigsetjmp()/siglongjmp() for setjmp-based exceptions.
+nimRawSetjmp	Use _setjmp()/_longjmp() on POSIX and _setjmp()/longjmp() on Windows, for setjmp-based exceptions. It's the default on BSDs and BSD-like platforms, where it's significantly faster than the standard functions.
+nimBuiltinSetjmp	Use __builtin_setjmp()/__builtin_longjmp() for setjmp-based exceptions. This will not work if an exception is being thrown and caught inside the same procedure. Useful for benchmarking.
+Configuration files
+Note: The project file name is the name of the .nim file that is passed as a command-line argument to the compiler.
+The nim executable processes configuration files in the following directories (in this order; later files overwrite previous settings):
+$nim/config/nim.cfg, /etc/nim/nim.cfg(UNIX) or<Nim's installation directory>\config\nim.cfg(Windows). This file can be skipped with the--skipCfgcommand line option.
+If environment variableXDG_CONFIG_HOMEis defined,$XDG_CONFIG_HOME/nim/nim.cfgor~/.config/nim/nim.cfg(POSIX) or%APPDATA%/nim/nim.cfg(Windows). This file can be skipped with the--skipUserCfgcommand line option.
+$parentDir/nim.cfgwhere$parentDirstands for any parent directory of the project file's path. These files can be skipped with the--skipParentCfgcommand-line option.
+$projectDir/nim.cfgwhere$projectDirstands for the project file's path. This file can be skipped with the--skipProjCfgcommand-line option.
+A project can also have a project-specific configuration file named$project.nim.cfgthat resides in the same directory as$project.nim. This file can be skipped with the--skipProjCfgcommand-line option.
+NimScript files can also be used for configuration.
+Command-line settings have priority over configuration file settings.
+The default build of a project is a debug build. To compile a release build define the release symbol:
+nim c -d:release myproject.nim
+To compile a dangerous release build define the danger symbol:
+nim c -d:danger myproject.nim
+Search path handling
+Nim has the concept of a global search path (PATH) that is queried to determine where to find imported modules or include files. If multiple files are found an ambiguity error is produced.
+nim dump shows the contents of the PATH.
+However before the PATH is used the current directory is checked for the file's existence. So if PATH contains $lib and $lib/bar and the directory structure looks like this:
+$lib/x.nim
+$lib/bar/x.nim
+foo/x.nim
+foo/main.nim
+other.nim
+And main imports x, foo/x is imported. If other imports x then both $lib/x.nim and $lib/bar/x.nim match but $lib/x.nim is used as it is the first match.
+Generated C code directory
+The generated files that Nim produces all go into a subdirectory called nimcache. Its full path is
+$XDG_CACHE_HOME/nim/$projectname(_r|_d)or~/.cache/nim/$projectname(_r|_d)on Posix
+$HOME\nimcache\$projectname(_r|_d)on Windows.
+The _r suffix is used for release builds, _d is for debug builds.
+This makes it easy to delete all generated files.
+The --nimcache compiler switch can be used to to change the nimcache directory.
+However, the generated C code is not platform-independent. C code generated for Linux does not compile on Windows, for instance. The comment on top of the C file lists the OS, CPU, and CC the file has been compiled for.
+Compiler Selection
+To change the compiler from the default compiler (at the command line):
+nim c --cc:llvm_gcc --compile_only myfile.nim
+This uses the configuration defined in config\nim.cfg for llvm_gcc.
+If nimcache already contains compiled code from a different compiler for the same project, add the -f flag to force all files to be recompiled.
+The default compiler is defined at the top of config\nim.cfg. Changing this setting affects the compiler used by koch to (re)build Nim.
+To use the CC environment variable, use nim c --cc:env myfile.nim. To use the CXX environment variable, use nim cpp --cc:env myfile.nim. --cc:env is available since Nim version 1.4.
+Cross-compilation
+To cross compile, use for example:
+nim c --cpu:i386 --os:linux --compileOnly --genScript myproject.nim
+Then move the C code and the compile script compile_myproject.sh to your Linux i386 machine and run the script.
+Another way is to make Nim invoke a cross compiler toolchain:
+nim c --cpu:arm --os:linux myproject.nim
+For cross compilation, the compiler invokes a C compiler named like $cpu.$os.$cc (for example arm.linux.gcc) with options defined in $cpu.$os.$cc.options.always. The configuration system is used to provide meaningful defaults. For example, for Linux on a 32-bit ARM CPU, your configuration file should contain something like:
+arm.linux.gcc.path = "/usr/bin"
+arm.linux.gcc.exe = "arm-linux-gcc"
+arm.linux.gcc.linkerexe = "arm-linux-gcc"
+arm.linux.gcc.options.always = "-w -fmax-errors=3"
+Cross-compilation for Windows
+To cross-compile for Windows from Linux or macOS using the MinGW-w64 toolchain:
+nim c -d:mingw myproject.nim
+# `nim r` also works, running the binary via `wine` or `wine64`:
+nim r -d:mingw --eval:'import os; echo "a" / "b"'
+Use --cpu:i386 or --cpu:amd64 to switch the CPU architecture.
+The MinGW-w64 toolchain can be installed as follows:
+apt install mingw-w64   # Ubuntu
+yum install mingw32-gcc
+yum install mingw64-gcc # CentOS - requires EPEL
+brew install mingw-w64  # OSX
+Cross-compilation for Android
+There are two ways to compile for Android: terminal programs (Termux) and with the NDK (Android Native Development Kit).
+The first one is to treat Android as a simple Linux and use Termux to connect and run the Nim compiler directly on android as if it was Linux. These programs are console-only programs that can't be distributed in the Play Store.
+Use regular nim c inside termux to make Android terminal programs.
+Normal Android apps are written in Java, to use Nim inside an Android app you need a small Java stub that calls out to a native library written in Nim using the NDK. You can also use native-activity to have the Java stub be auto-generated for you.
+Use nim c -c --cpu:arm --os:android -d:androidNDK --noMain:on to generate the C source files you need to include in your Android Studio project. Add the generated C files to CMake build script in your Android project. Then do the final compile with Android Studio which uses Gradle to call CMake to compile the project.
+Because Nim is part of a library it can't have its own C-style main() so you would need to define your own android_main and init the Java environment, or use a library like SDL2 or GLFM to do it. After the Android stuff is done, it's very important to call NimMain() in order to initialize Nim's garbage collector and to run the top level statements of your program.
+proc NimMain() {.importc.}
+proc glfmMain*(display: ptr GLFMDisplay) {.exportc.} =
+  NimMain() # initialize garbage collector memory, types and stack
+The name NimMain can be influenced via the --nimMainPrefix:prefix switch. Use --nimMainPrefix:MyLib and the function to call is named MyLibNimMain.
+Cross-compilation for iOS
+To cross-compile for iOS you need to be on a macOS computer and use XCode. Normal languages for iOS development are Swift and Objective C. Both of these use LLVM and can be compiled into object files linked together with C, C++ or Objective C code produced by Nim.
+Use nim c -c --os:ios --noMain:on to generate C files and include them in your XCode project. Then you can use XCode to compile, link, package and sign everything.
+Because Nim is part of a library it can't have its own C-style main() so you would need to define main that calls autoreleasepool and UIApplicationMain to do it, or use a library like SDL2 or GLFM. After the iOS setup is done, it's very important to call NimMain() to initialize Nim's garbage collector and to run the top-level statements of your program.
+proc NimMain() {.importc.}
+proc glfmMain*(display: ptr GLFMDisplay) {.exportc.} =
+  NimMain() # initialize garbage collector memory, types and stack
+Note: XCode's "make clean" gets confused about the generated nim.c files, so you need to clean those files manually to do a clean build.
+The name NimMain can be influenced via the --nimMainPrefix:prefix switch. Use --nimMainPrefix:MyLib and the function to call is named MyLibNimMain.
+Cross-compilation for Nintendo Switch
+Simply add --os:nintendoswitch to your usual nim c or nim cpp command and set the passC and passL command line switches to something like:
+nim c ... --d:nimAllocPagesViaMalloc --mm:orc --passC="-I$DEVKITPRO/libnx/include" ...
+--passL="-specs=$DEVKITPRO/libnx/switch.specs -L$DEVKITPRO/libnx/lib -lnx"
+or setup anim.cfgfile like so:
+#nim.cfg
+--mm:orc
+--d:nimAllocPagesViaMalloc
+--define:nimInheritHandles
+--passC="-I$DEVKITPRO/libnx/include"
+--passL="-specs=$DEVKITPRO/libnx/switch.specs -L$DEVKITPRO/libnx/lib -lnx"
+The devkitPro setup must be the same as the default with their new installer here for Mac/Linux or here for Windows.
+For example, with the above-mentioned config:
+nim c --os:nintendoswitch switchhomebrew.nim
+This will generate a file called switchhomebrew.elf which can then be turned into an nro file with the elf2nro tool in the devkitPro release. Examples can be found at the nim-libnx github repo.
+There are a few things that don't work because the devkitPro libraries don't support them. They are:
+Waiting for a subprocess to finish. A subprocess can be started, but right now it can't be waited on, which sort of makes subprocesses a bit hard to use
+Dynamic calls. Switch OS (Horizon) doesn't support dynamic libraries, so dlopen/dlclose are not available.
+mqueue. Sadly there are no mqueue headers.
+ucontext. No headers for these either. No coroutines for now :(
+nl_types. No headers for this.
+As mmap is not supported, the nimAllocPagesViaMalloc option has to be used.
+GPU Compilation
+Compiling for GPU computation can be achieved with --cc:nvcc for CUDA with nvcc, or with --cc:hipcc for AMD GPUs with HIP. Both compilers require building for C++ with nim cpp.
+Here's a very simple CUDA kernel example using emit, which can be compiled with nim cpp --cc:nvcc --define:"useMalloc" hello_kernel.nim assuming you have the CUDA toolkit installed.
+{.emit: """
+__global__ void add(int a, int b) {
+  int c;
+  c = a + b;
+}
+""".}
+
+proc main() =
+  {.emit: """
+  add<<<1,1>>>(2,7);
+  """.}
+
+main()
+DLL generation
+Note: The same rules apply to lib*.so shared object files on UNIX. For better readability only the DLL version is described here.
+Nim supports the generation of DLLs. However, there must be only one instance of the GC per process/address space. This instance is contained in nimrtl.dll. This means that every generated Nim DLL depends on nimrtl.dll. To generate the "nimrtl.dll" file, use the command:
+nim c -d:release lib/nimrtl.nim
+To link against nimrtl.dll use the command:
+nim c -d:useNimRtl myprog.nim
+Additional compilation switches
+The standard library supports a growing number of useX conditional defines affecting how some features are implemented. This section tries to give a complete list.
+Define	Effect
+release	Turns on the optimizer. More aggressive optimizations are possible, e.g.: --passC:-ffast-math (but see issue #10305)
+danger	Turns off all runtime checks and turns on the optimizer.
+useFork	Makes osproc use fork instead of posix_spawn.
+useNimRtl	Compile and link against nimrtl.dll.
+useMalloc	Makes Nim use C's malloc instead of Nim's own memory manager, albeit prefixing each allocation with its size to support clearing memory on reallocation. This only works with --mm:none, --mm:arc and --mm:orc.
+useRealtimeGC	Enables support of Nim's GC for soft realtime systems. See the documentation of the refc for further information.
+logGC	Enable GC logging to stdout.
+nodejs	The JS target is actually node.js.
+ssl	Enables OpenSSL support for the sockets module.
+memProfiler	Enables memory profiling for the native GC.
+uClibc	Use uClibc instead of libc. (Relevant for Unix-like OSes)
+checkAbi	When using types from C headers, add checks that compare what's in the Nim file with what's in the C header. This may become enabled by default in the future.
+tempDir	This symbol takes a string as its value, like --define:tempDir:/some/temp/path to override the temporary directory returned by os.getTempDir(). The value should end with a directory separator character. (Relevant for the Android platform)
+useShPath	This symbol takes a string as its value, like --define:useShPath:/opt/sh/bin/sh to override the path for the sh binary, in cases where it is not located in the default location /bin/sh.
+noSignalHandler	Disable the crash handler from system.nim.
+globalSymbols	Load all {.dynlib.} libraries with the RTLD_GLOBAL flag on Posix systems to resolve symbols in subsequently loaded libraries.
+lto	Enable link-time optimization in the backend compiler and linker.
+lto_incremental	Enable link-time optimization and additionally enable incremental linking for compilers that support it. Currently only clang and vcc.
+strip	Strip debug symbols added by the backend compiler from the executable.
+heaptrack	Track memory allocations using heaptrack
+Additional Features
+This section describes Nim's additional features that are not listed in the Nim manual. Some of the features here only make sense for the C code generator and are subject to change.
+LineDir option
+The --lineDir option can be turned on or off. If turned on the generated C code contains #line directives. This may be helpful for debugging with GDB.
+StackTrace option
+If the --stackTrace option is turned on, the generated C contains code to ensure that proper stack traces are given if the program crashes or some uncaught exception is raised.
+LineTrace option
+The --lineTrace option implies the stackTrace option. If turned on, the generated C contains code to ensure that proper stack traces with line number information are given if the program crashes or an uncaught exception is raised.
+DynlibOverride
+By default Nim's dynlib pragma causes the compiler to generate GetProcAddress (or their Unix counterparts) calls to bind to a DLL. With the dynlibOverride command line switch this can be prevented and then via --passL the static library can be linked against. For instance, to link statically against Lua this command might work on Linux:
+nim c --dynlibOverride:lua --passL:liblua.lib program.nim
+Backend language options
+The typical compiler usage involves using the compile or c command to transform a .nim file into one or more .c files which are then compiled with the platform's C compiler into a static binary. However, there are other commands to compile to C++, Objective-C, or JavaScript. More details can be read in the Nim Backend Integration document.
+Nim documentation tools
+Nim provides the doc command to generate HTML documentation from .nim source files. Only exported symbols will appear in the output. For more details see the docgen documentation.
+Nim idetools integration
+Nim provides language integration with external IDEs through the idetools command. See the documentation of idetools for further information.
+Nim for embedded systems
+While the default Nim configuration is targeted for optimal performance on modern PC hardware and operating systems with ample memory, it is very well possible to run Nim code and a good part of the Nim standard libraries on small embedded microprocessors with only a few kilobytes of memory.
+A good start is to use the any operating target together with the malloc memory allocator and the arc garbage collector. For example:
+nim c --os:any --mm:arc -d:useMalloc [...] x.nim
+--mm:arcwill enable the reference counting memory management instead of the default garbage collector. This enables Nim to use heap memory which is required for strings and seqs, for example.
+The--os:anytarget makes sure Nim does not depend on any specific operating system primitives. Your platform should support only some basic ANSI C librarystdlibandstdiofunctions which should be available on almost any platform.
+The-d:useMallocoption configures Nim to use only the standard C memory manage primitivesmalloc(), free(), realloc().
+If your platform does not provide these functions it should be trivial to provide an implementation for them and link these to your program.
+For targets with very restricted memory, it might be beneficial to pass some additional flags to both the Nim compiler and the C compiler and/or linker to optimize the build for size. For example, the following flags can be used when targeting a gcc compiler:
+--opt:size -d:lto -d:strip
+
+The --opt:size flag instructs Nim to optimize code generation for small size (with the help of the C compiler), the -d:lto flags enable link-time optimization in the compiler and linker, the -d:strip strips debug symbols.
+Check the Cross-compilation section for instructions on how to compile the program for your target.
+nimAllocPagesViaMalloc
+Nim's default allocator is based on TLSF, this algorithm was designed for embedded devices. This allocator gets blocks/pages of memory via a currently undocumented osalloc API which usually uses POSIX's mmap call. On many environments mmap is not available but C's malloc is. You can use the nimAllocPagesViaMalloc define to use malloc instead of mmap. nimAllocPagesViaMalloc is currently only supported with --mm:arc or --mm:orc. (Since version 1.6)
+nimPage256 / nimPage512 / nimPage1k
+Adjust the page size for Nim's GC allocator. This enables using nimAllocPagesViaMalloc on devices with less RAM. The default page size requires too much RAM to work.
+Recommended settings:
+< 32 kB of RAM usenimPage256
+< 512 kB of RAM usenimPage512
+< 2 MB of RAM usenimPage1k
+Initial testing hasn't shown much difference between 512B or 1kB page sizes in terms of performance or latency. Using nimPages256 will limit the total amount of allocatable RAM.
+nimMemAlignTiny
+Sets MemAlign to 4 bytes which reduces the memory alignment to better match some embedded devices.
+Thread stack size
+Nim's thread API provides a simple wrapper around more advanced RTOS task features. Customizing the stack size and stack guard size can be done by setting -d:nimThreadStackSize=16384 or -d:nimThreadStackGuard=32.
+Currently only Zephyr, NuttX and FreeRTOS support these configurations.
+Nim for realtime systems
+See the --mm:arc or --mm:orc memory management settings in MM for further information.
+Signal handling in Nim
+The Nim programming language has no concept of Posix's signal handling mechanisms. However, the standard library offers some rudimentary support for signal handling, in particular, segmentation faults are turned into fatal errors that produce a stack trace. This can be disabled with the -d:noSignalHandler switch.
+Optimizing for Nim
+Nim has no separate optimizer, but the C code that is produced is very efficient. Most C compilers have excellent optimizers, so usually it is not needed to optimize one's code. Nim has been designed to encourage efficient code: The most readable code in Nim is often the most efficient too.
+However, sometimes one has to optimize. Do it in the following order:
+switch off the embedded debugger (it is slow!)
+turn on the optimizer and turn off runtime checks
+profile your code to find where the bottlenecks are
+try to find a better algorithm
+do low-level optimizations
+This section can only help you with the last item.
+Optimizing string handling
+String assignments are sometimes expensive in Nim: They are required to copy the whole string. However, the compiler is often smart enough to not copy strings. Due to the argument passing semantics, strings are never copied when passed to subroutines. The compiler does not copy strings that are a result of a procedure call, because the callee returns a new string anyway. Thus it is efficient to do:
+var s = procA() # assignment will not copy the string; procA allocates a new
+                # string already
+However, it is not efficient to do:
+var s = varA    # assignment has to copy the whole string into a new buffer!
+For let symbols a copy is not always necessary:
+let s = varA    # may only copy a pointer if it safe to do so
+The compiler optimizes string case statements: A hashing scheme is used for them if several different string constants are used. So code like this is reasonably efficient:
+case normalize(k.key)
+of "name": c.name = v
+of "displayname": c.displayName = v
+of "version": c.version = v
+of "os": c.oses = split(v, {';'})
+of "cpu": c.cpus = split(v, {';'})
+of "authors": c.authors = split(v, {';'})
+of "description": c.description = v
+of "app":
+  case normalize(v)
+  of "console": c.app = appConsole
+  of "gui": c.app = appGUI
+  else: quit(errorStr(p, "expected: console or gui"))
+of "license": c.license = UnixToNativePath(k.value)
+else: quit(errorStr(p, "unknown variable: " & k.key))

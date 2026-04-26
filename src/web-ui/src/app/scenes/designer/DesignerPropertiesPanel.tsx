@@ -12,7 +12,6 @@ import {
   Trash2,
   Group,
   Layers,
-  Square,
   Image as ImageIcon,
   Zap,
   Code,
@@ -24,140 +23,19 @@ import { DynamicPropertyPanel } from './DynamicPropertyPanel';
 import { eventCodeService } from './EventCodeService';
 import { editorJumpService } from '@/shared/services/EditorJumpService';
 import { globalAPI } from '@/infrastructure/api/service-api/GlobalAPI';
+import type { 
+  DesignerElement, 
+  ElementStyles, 
+  ElementEvents, 
+  ImGuiWindowProps 
+} from './DesignerScene';
 
-export interface ImGuiWindowProps {
-  // Window Flags
-  noTitleBar?: boolean;
-  noResize?: boolean;
-  noMove?: boolean;
-  noScrollbar?: boolean;
-  noScrollWithMouse?: boolean;
-  noCollapse?: boolean;
-  alwaysAutoResize?: boolean;
-  noBackground?: boolean;
-  noSavedSettings?: boolean;
-  noMouseInputs?: boolean;
-  menuBar?: boolean;
-  horizontalScrollbar?: boolean;
-  noFocusOnAppearing?: boolean;
-  noBringToFrontOnFocus?: boolean;
-  alwaysVerticalScrollbar?: boolean;
-  alwaysHorizontalScrollbar?: boolean;
-  noNavInputs?: boolean;
-  noNavFocus?: boolean;
-  noNav?: boolean;
-  noInputs?: boolean;
-  unsavedDocument?: boolean;
-  noDocking?: boolean;
-  // Window Properties
-  posX?: number;
-  posY?: number;
-  posCond?: 'always' | 'once' | 'firstUseEver' | 'appearing';
-  pivotX?: number;
-  pivotY?: number;
-  sizeWidth?: number;
-  sizeHeight?: number;
-  sizeCond?: 'always' | 'once' | 'firstUseEver' | 'appearing';
-  minWidth?: number;
-  minHeight?: number;
-  maxWidth?: number;
-  maxHeight?: number;
-  contentWidth?: number;
-  contentHeight?: number;
-  collapsed?: boolean;
-  collapsedCond?: 'always' | 'once' | 'firstUseEver' | 'appearing';
-  bgAlpha?: number;
-  scrollX?: number;
-  scrollY?: number;
-  dockId?: number;
-  dockCond?: 'always' | 'once' | 'firstUseEver' | 'appearing';
-  focus?: boolean;
-}
-
-export interface DesignerElement {
-  id: string;
-  type: string;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  props: Record<string, unknown>;
-  title?: string;
-  description?: string;
-  className?: string;
-  dataAttributes?: Record<string, string>;
-  ariaLabel?: string;
-  ariaDescribedBy?: string;
-  tabIndex?: number;
-  styles?: {
-    backgroundColor?: string;
-    textColor?: string;
-    borderColor?: string;
-    borderWidth?: number;
-    borderRadius?: number;
-    opacity?: number;
-    boxShadow?: string;
-    fontSize?: number;
-    fontWeight?: string | number;
-    textAlign?: 'left' | 'center' | 'right';
-    zIndex?: number;
-    paddingTop?: number;
-    paddingRight?: number;
-    paddingBottom?: number;
-    paddingLeft?: number;
-    marginTop?: number;
-    marginRight?: number;
-    marginBottom?: number;
-    marginLeft?: number;
-    borderStyle?: 'none' | 'solid' | 'dashed' | 'dotted' | 'double';
-    borderTopWidth?: number;
-    borderRightWidth?: number;
-    borderBottomWidth?: number;
-    borderLeftWidth?: number;
-    borderTopColor?: string;
-    borderRightColor?: string;
-    borderBottomColor?: string;
-    borderLeftColor?: string;
-    borderTopLeftRadius?: number;
-    borderTopRightRadius?: number;
-    borderBottomLeftRadius?: number;
-    borderBottomRightRadius?: number;
-    minWidth?: number;
-    maxWidth?: number;
-    minHeight?: number;
-    maxHeight?: number;
-    display?: string;
-    position?: 'static' | 'relative' | 'absolute' | 'fixed' | 'sticky';
-    overflow?: 'visible' | 'hidden' | 'scroll' | 'auto';
-    overflowX?: 'visible' | 'hidden' | 'scroll' | 'auto';
-    overflowY?: 'visible' | 'hidden' | 'scroll' | 'auto';
-    fontFamily?: string;
-    lineHeight?: number | string;
-    letterSpacing?: number;
-    textDecoration?: 'none' | 'underline' | 'line-through' | 'overline';
-    textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
-    cursor?: string;
-    transition?: string;
-    transform?: string;
-  };
-  events?: {
-    onClick?: string;
-    onDoubleClick?: string;
-    onMouseEnter?: string;
-    onMouseLeave?: string;
-    onFocus?: string;
-    onBlur?: string;
-    onKeyDown?: string;
-    onKeyUp?: string;
-    onChange?: string;
-  };
-  locked?: boolean;
-  hidden?: boolean;
-  groupId?: string;
-  // ImGui Window Properties
-  imguiWindowProps?: ImGuiWindowProps;
-}
+export type { 
+  DesignerElement, 
+  ElementStyles, 
+  ElementEvents, 
+  ImGuiWindowProps 
+};
 
 export interface CanvasSettings {
   imguiWindowProps?: ImGuiWindowProps;
@@ -1215,14 +1093,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onClick || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onClick: e.target.value }
+                      value={selectedElement?.events?.onClick || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onClick: e.target.value }
                       })}
                       placeholder="点击事件处理"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onClick')}
@@ -1238,14 +1116,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onDoubleClick || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onDoubleClick: e.target.value }
+                      value={selectedElement?.events?.onDoubleClick || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onDoubleClick: e.target.value }
                       })}
                       placeholder="双击事件处理"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onDoubleClick')}
@@ -1261,14 +1139,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onMouseEnter || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onMouseEnter: e.target.value }
+                      value={selectedElement?.events?.onMouseEnter || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onMouseEnter: e.target.value }
                       })}
                       placeholder="鼠标进入事件"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onMouseEnter')}
@@ -1284,14 +1162,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onMouseLeave || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onMouseLeave: e.target.value }
+                      value={selectedElement?.events?.onMouseLeave || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onMouseLeave: e.target.value }
                       })}
                       placeholder="鼠标离开事件"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onMouseLeave')}
@@ -1307,14 +1185,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onChange || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onChange: e.target.value }
+                      value={selectedElement?.events?.onChange || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onChange: e.target.value }
                       })}
                       placeholder="值变化事件"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onChange')}
@@ -1330,14 +1208,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onFocus || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onFocus: e.target.value }
+                      value={selectedElement?.events?.onFocus || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onFocus: e.target.value }
                       })}
                       placeholder="获得焦点事件"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onFocus')}
@@ -1353,14 +1231,14 @@ const DesignerPropertiesPanel: React.FC<DesignerPropertiesPanelProps> = ({
                   <div className="designer-properties__event-input">
                     <input
                       type="text"
-                      value={selectedElement.events?.onBlur || ''}
-                      onChange={(e) => updateElement(selectedElement.id, {
-                        events: { ...selectedElement.events, onBlur: e.target.value }
+                      value={selectedElement?.events?.onBlur || ''}
+                      onChange={(e) => selectedElement && updateElement(selectedElement.id, {
+                        events: { ...selectedElement?.events, onBlur: e.target.value }
                       })}
                       placeholder="失去焦点事件"
                       className="designer-properties__input"
                     />
-                    {selectedElement.name && filePath && windowName && (
+                    {selectedElement?.name && filePath && windowName && (
                       <button
                         className="designer-properties__event-btn"
                         onClick={() => handleGenerateEvent('onBlur')}

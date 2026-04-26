@@ -211,9 +211,9 @@
 
 ---
 
-## 七、与 BitFun 工具型 MiniApp 的契合度
+## 七、与 空灵语言 工具型 MiniApp 的契合度
 
-绝大多数 BitFun 用户产出的小应用是**工具型**（regex 调试 / git 视图 / 编码自拍 / 计算器…），它们的设计调性应当：
+绝大多数 空灵语言 用户产出的小应用是**工具型**（regex 调试 / git 视图 / 编码自拍 / 计算器…），它们的设计调性应当：
 
 - 信息密度高、操作路径短
 - 配色冷静（首选 `--bitfun-*` 主题）
@@ -253,4 +253,4 @@
 - `MiniApp/Demo/git-graph/` — 复杂应用拆模块的范例（`ui/components`, `ui/panels`, `ui/services`）
 - `MiniApp/Demo/icon-design-system/` — 设计系统型应用范例
 
-读它们的 `style.css` 顶部注释和 `meta.json` 的 `i18n` 块，是最快理解"BitFun 味道"的方式。
+读它们的 `style.css` 顶部注释和 `meta.json` 的 `i18n` 块，是最快理解"空灵语言 味道"的方式。

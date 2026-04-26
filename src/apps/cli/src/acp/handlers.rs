@@ -164,7 +164,7 @@ async fn handle_session_new(
     );
 
     tracing::info!(
-        "Created BitFun session for ACP: acp_id={}, bitfun_id={}",
+        "Created Kongling session for ACP: acp_id={}, kongling_id={}",
         acp_session.acp_session_id,
         session.session_id
     );

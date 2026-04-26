@@ -735,7 +735,7 @@ impl FeishuBot {
             "header": {
                 "title": {
                     "tag": "plain_text",
-                    "content": "BitFun Remote Connect",
+                    "content": "空灵语言 Remote Connect",
                 }
             },
             "elements": elements,

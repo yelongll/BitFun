@@ -36,11 +36,11 @@ impl GenerativeUITool {
     }
 
     fn bitfun_design_system_reminder() -> &'static str {
-        "BitFun design-system reminder: when the widget should feel native to the host BitFun app, style it with BitFun theme tokens instead of hard-coded design values. Prefer CSS variables such as `var(--color-bg-primary)`, `var(--color-bg-secondary)`, `var(--color-bg-scene)`, `var(--color-bg-elevated)`, `var(--color-text-primary)`, `var(--color-text-secondary)`, `var(--color-text-muted)`, `var(--color-accent-500)`, `var(--color-accent-600)`, `var(--border-subtle)`, `var(--border-base)`, `var(--border-medium)`, `var(--element-bg-subtle)`, `var(--element-bg-soft)`, `var(--element-bg-base)`, `var(--element-bg-medium)`, `var(--shadow-*)`, `var(--radius-*)`, `var(--spacing-*)`, `var(--motion-*)`, `var(--easing-*)`, `var(--font-sans)`, and `var(--font-mono)`. Support both `bitfun-dark` and `bitfun-light`; do not assume dark-only, purple-only, or landing-page styling. Favor compact desktop workbench layouts, panel/card surfaces, strong information hierarchy, and reusable BitFun component patterns. Avoid hard-coded colors, arbitrary spacing, giant hero sections, fake mobile chrome, and full marketing-page shells; prefer understated, premium UI with layered surfaces, restrained contrast, subtle borders, and do not use thick left-accent emphasis blocks."
+        "kongling design-system reminder: when the widget should feel native to the host kongling app, style it with kongling theme tokens instead of hard-coded design values. Prefer CSS variables such as `var(--color-bg-primary)`, `var(--color-bg-secondary)`, `var(--color-bg-scene)`, `var(--color-bg-elevated)`, `var(--color-text-primary)`, `var(--color-text-secondary)`, `var(--color-text-muted)`, `var(--color-accent-500)`, `var(--color-accent-600)`, `var(--border-subtle)`, `var(--border-base)`, `var(--border-medium)`, `var(--element-bg-subtle)`, `var(--element-bg-soft)`, `var(--element-bg-base)`, `var(--element-bg-medium)`, `var(--shadow-*)`, `var(--radius-*)`, `var(--spacing-*)`, `var(--motion-*)`, `var(--easing-*)`, `var(--font-sans)`, and `var(--font-mono)`. Support both `bitfun-dark` and `bitfun-light`; do not assume dark-only, purple-only, or landing-page styling. Favor compact desktop workbench layouts, panel/card surfaces, strong information hierarchy, and reusable kongling component patterns. Avoid hard-coded colors, arbitrary spacing, giant hero sections, fake mobile chrome, and full marketing-page shells; prefer understated, premium UI with layered surfaces, restrained contrast, subtle borders, and do not use thick left-accent emphasis blocks."
     }
 
     fn bitfun_widget_scaffold_reminder() -> &'static str {
-        "BitFun widget scaffold reminder: the host iframe already provides reusable utility classes. Prefer these host classes before inventing a new visual language: `bf-root`, `bf-stack`, `bf-row`, `bf-row-wrap`, `bf-toolbar`, `bf-section`, `bf-section-header`, `bf-title`, `bf-subtitle`, `bf-eyebrow`, `bf-card`, `bf-panel`, `bf-card-accent`, `bf-grid`, `bf-kpi`, `bf-kpi-label`, `bf-kpi-value`, `bf-kpi-meta`, `bf-badge`, `bf-badge-accent`, `bf-badge-success`, `bf-badge-warning`, `bf-badge-error`, `bf-button`, `bf-button-primary`, `bf-input`, `bf-textarea`, `bf-select`, `bf-list`, `bf-list-item`, `bf-table-wrap`, `bf-table`, `bf-empty`, `bf-divider`, `bf-code`, and `bf-mono`. Generate markup that composes these classes first, and only add small local CSS when the scaffold is insufficient."
+        "kongling widget scaffold reminder: the host iframe already provides reusable utility classes. Prefer these host classes before inventing a new visual language: `bf-root`, `bf-stack`, `bf-row`, `bf-row-wrap`, `bf-toolbar`, `bf-section`, `bf-section-header`, `bf-title`, `bf-subtitle`, `bf-eyebrow`, `bf-card`, `bf-panel`, `bf-card-accent`, `bf-grid`, `bf-kpi`, `bf-kpi-label`, `bf-kpi-value`, `bf-kpi-meta`, `bf-badge`, `bf-badge-accent`, `bf-badge-success`, `bf-badge-warning`, `bf-badge-error`, `bf-button`, `bf-button-primary`, `bf-input`, `bf-textarea`, `bf-select`, `bf-list`, `bf-list-item`, `bf-table-wrap`, `bf-table`, `bf-empty`, `bf-divider`, `bf-code`, and `bf-mono`. Generate markup that composes these classes first, and only add small local CSS when the scaffold is insufficient."
     }
 
     fn combined_reminder() -> String {
@@ -222,21 +222,21 @@ impl GenerativeUITool {
 
         if selected_theme_id == "system" {
             return Some(format!(
-                "BitFun active theme selection: system. Exact runtime resolution is host-dependent, so do not assume one palette. {}",
+                "kongling active theme selection: system. Exact runtime resolution is host-dependent, so do not assume one palette. {}",
                 Self::baseline_theme_context()
             ));
         }
 
         if let Some(snapshot) = Self::builtin_theme_snapshot(&selected_theme_id) {
             return Some(format!(
-                "BitFun active theme snapshot: {}. {}",
+                "kongling active theme snapshot: {}. {}",
                 Self::format_theme_snapshot(&snapshot),
                 Self::baseline_theme_context()
             ));
         }
 
         Some(format!(
-            "BitFun active theme selection: {}. Backend does not have an exact built-in snapshot for this theme, so use BitFun CSS variables strictly and avoid hard-coded fallback palettes. {}",
+            "kongling active theme selection: {}. Backend does not have an exact built-in snapshot for this theme, so use kongling CSS variables strictly and avoid hard-coded fallback palettes. {}",
             selected_theme_id,
             Self::baseline_theme_context()
         ))

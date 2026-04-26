@@ -9,7 +9,7 @@
     },
     "agentCompanion": {
       "title": "Agent 伙伴",
-      "subtitle": "在收起的会话输入框中显示BitFun伙伴。",
+      "subtitle": "在收起的会话输入框中显示空灵AI伙伴。",
       "enable": "显示 Agent 伙伴"
     }
   },
@@ -19,7 +19,7 @@
   },
   "computerUse": {
     "sectionTitle": "Computer use（桌面自动化）",
-    "sectionDescription": "在 BitFun 桌面端允许助理截取屏幕并控制键鼠；需多模态模型理解画面。",
+    "sectionDescription": "在 空灵语言 桌面端允许助理截取屏幕并控制键鼠；需多模态模型理解画面。",
     "enable": "启用 Computer use",
     "enableDesc": "关闭时，任何会话模式都不会启用 ComputerUse 工具。",
     "accessibility": "辅助功能",
@@ -30,13 +30,13 @@
     "notGranted": "未授权",
     "openSettings": "系统设置",
     "refreshStatus": "刷新状态",
-    "desktopOnly": "Computer use 仅在 BitFun 桌面应用中可用。",
+    "desktopOnly": "Computer use 仅在 空灵语言 桌面应用中可用。",
     "platformNote": "说明"
   },
   "browserControl": {
     "sectionTitle": "浏览器控制",
     "sectionDescription": "复用你的默认浏览器，保留登录态、Cookie 和扩展。",
-    "desktopOnly": "浏览器控制仅在 BitFun 桌面应用中可用。",
+    "desktopOnly": "浏览器控制仅在 空灵语言 桌面应用中可用。",
     "status": "连接状态",
     "statusDesc": "",
     "notConnected": "未连接",
@@ -48,7 +48,7 @@
     "restartFailed": "重启浏览器并启用调试失败",
     "restartModal": {
       "title": "启用浏览器调试模式",
-      "description": "检测到 {{browser}} 已在运行，当前实例未启用调试端口。要让 BitFun 控制浏览器，需要先重启浏览器并以调试模式启动。",
+      "description": "检测到 {{browser}} 已在运行，当前实例未启用调试端口。要让 空灵语言 控制浏览器，需要先重启浏览器并以调试模式启动。",
       "warning": "此操作会关闭当前浏览器窗口。",
       "cancel": "取消",
       "confirm": "重启并启用调试",

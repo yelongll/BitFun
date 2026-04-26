@@ -2,11 +2,11 @@
 
 
 export const APP_INFO = {
-  name: 'BitFun',
+  name: '空灵语言',
   version: '1.0.0',
   description: 'AI code analysis and visualization tool',
-  author: 'BitFun Team',
-  homepage: 'https://bitfun.dev'
+  author: '空灵语言 Team',
+  homepage: 'https://kongling.dev'
 } as const;
 
 

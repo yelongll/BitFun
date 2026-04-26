@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Palette, Layout, Zap, SlidersHorizontal, Box, Code2 } from 'lucide-react';
 import { componentRegistry } from './registry';
-import type { PropertyConfig, ComponentDefinition } from './registry';
+import type { PropertyConfig } from './registry';
 import { DesignerElement } from './DesignerPropertiesPanel';
 import { eventCodeService, EVENT_LABELS } from './EventCodeService';
 import { editorJumpService } from '@/shared/services/EditorJumpService';
@@ -104,7 +104,6 @@ const PropertyEditor: React.FC<{
 
       case 'event':
         const eventType = config.key.replace('events.', '');
-        const eventLabel = EVENT_LABELS[eventType] || eventType;
         const functionName = elementName ? eventCodeService.generateEventFunctionName(elementName, eventType) : '';
         
         const handleEventButtonClick = async () => {
@@ -201,7 +200,7 @@ const PropertyEditor: React.FC<{
       case 'select':
         return (
           <select
-            value={(currentValue as string | number) || config.defaultValue || ''}
+            value={(currentValue as string | number) ?? (config.defaultValue as string | number) ?? ''}
             onChange={(e) => onChange(e.target.value)}
             className="designer-properties__select"
           >
@@ -218,7 +217,6 @@ const PropertyEditor: React.FC<{
         const max = config.max ?? 100;
         const step = config.step ?? 1;
         const displayValue = ((currentValue as number) ?? config.defaultValue ?? min);
-        const percentage = ((displayValue - min) / (max - min)) * 100;
 
         return (
           <div className="designer-properties__range-row">
@@ -254,7 +252,7 @@ const PropertyEditor: React.FC<{
 export const DynamicPropertyPanel: React.FC<DynamicPropertyPanelProps> = ({
   element,
   updateElement,
-  t,
+  t: _t,
   filePath,
   windowName,
 }) => {
@@ -309,7 +307,7 @@ export const DynamicPropertyPanel: React.FC<DynamicPropertyPanelProps> = ({
 
   // 获取属性值
   const getPropertyValue = (key: string): unknown => {
-    return getNestedValue(element as Record<string, unknown>, key);
+    return getNestedValue({ ...element } as Record<string, unknown>, key);
   };
 
   // 获取标签页图标

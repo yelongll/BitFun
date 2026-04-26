@@ -67,7 +67,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let welcome_msg = WsMessage::Event {
         event: "connection_established".to_string(),
         payload: serde_json::json!({
-            "server": "BitFun Server",
+            "server": "空灵语言 Server",
             "version": env!("CARGO_PKG_VERSION"),
             "timestamp": chrono::Utc::now().timestamp(),
         }),

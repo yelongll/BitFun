@@ -1,8 +1,8 @@
 /**
- * BitFun Installer build script.
+ * konglingInstaller build script.
  *
  * Steps:
- * 1. Build BitFun main app (optional).
+ * 1. Build Kongling main app (optional).
  * 2. Prepare installer payload from built app binaries.
  * 3. Build installer app (Tauri).
  *
@@ -59,7 +59,7 @@ function run(cmd, cwd = ROOT) {
 
 function printHelpAndExit() {
   console.log(`
-BitFun Installer build script
+Kongling Installer build script
 
 Usage:
   node scripts/build-installer.cjs [options]
@@ -67,7 +67,7 @@ Usage:
 Options:
   --mode <fast|release>  Build mode (default: release)
   --fast                 Alias for --mode fast
-  --skip-app-build       Skip building main BitFun app
+  --skip-app-build       Skip building main konglingapp
   --dev                  Run installer with tauri dev instead of tauri build
                          and allow placeholder payload fallback
   --help, -h             Show this help
@@ -193,9 +193,9 @@ if (isDev) {
   log("Installer run mode: release (strict payload validation)");
 }
 
-// Step 1: Build main BitFun app.
+// Step 1: Build main konglingapp.
 if (!skipAppBuild) {
-  log("Step 1: Building BitFun main application...");
+  log("Step 1: Building konglingmain application...");
   run(getMainAppBuildCommand(buildMode), BITFUN_ROOT);
 } else {
   log("Step 1: Skipped (--skip-app-build)");
@@ -215,7 +215,7 @@ for (const p of possiblePaths) {
 
 if (!appExePath && STRICT_PAYLOAD_VALIDATION) {
   error(
-    "Could not find built BitFun executable for payload. Build the desktop app first or run with --dev for local debug."
+    "Could not find built konglingexecutable for payload. Build the desktop app first or run with --dev for local debug."
   );
 }
 

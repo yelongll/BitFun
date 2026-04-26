@@ -45,7 +45,7 @@ function isFileMissingError(error: unknown): boolean {
   return /does not exist|no such file|not found/i.test(message);
 }
 
-const DEFAULT_AGENT_NAME = 'BitFun Agent';
+const DEFAULT_AGENT_NAME = '空灵语言 Agent';
 
 type RightPanelView = 'info' | 'personaDoc';
 

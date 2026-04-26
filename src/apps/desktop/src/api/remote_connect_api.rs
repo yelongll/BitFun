@@ -345,7 +345,7 @@ pub async fn remote_connect_get_methods() -> Result<Vec<ConnectionMethodInfo>, S
                 id: "bitfun_server".into(),
                 name: "BitFun Server".into(),
                 available: true,
-                description: "Official BitFun relay".into(),
+                description: "Official 空灵语言 relay".into(),
             },
             ConnectionMethod::CustomServer { url } => ConnectionMethodInfo {
                 id: "custom_server".into(),

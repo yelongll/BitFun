@@ -1,11 +1,11 @@
-# BitFun 簡體中文語言包
+# 空灵语言 簡體中文語言包
 # Chinese Traditional (zh-TW) Fluent Translation File
 
 # ==================== 通用 ====================
-app-name = BitFun
+app-name = 空灵语言
 app-version = 版本 { $version }
 loading = 加載中...
-welcome = 歡迎使用 BitFun
+welcome = 歡迎使用 空灵语言
 
 # ==================== 操作 ====================
 action-confirm = 確認

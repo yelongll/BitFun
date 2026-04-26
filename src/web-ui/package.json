@@ -2,7 +2,7 @@
   "name": "@bitfun/web-ui",
   "version": "0.2.4",
   "private": true,
-  "description": "BitFun Web UI - 支持 Desktop 和 Server 两种部署方式",
+  "description": "空灵语言 Web UI - 支持 Desktop 和 Server 两种部署方式",
   "type": "module",
   "scripts": {
     "dev": "vite",

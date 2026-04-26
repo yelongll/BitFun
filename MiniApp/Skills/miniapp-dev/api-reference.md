@@ -6,7 +6,7 @@
 
 ## 能力边界（先看这一节）
 
-MiniApp **能且只能**用以下 API，没有任何"通用 BitFun 后端通道"。生成代码前请先确认你需要的能力在表内：
+MiniApp **能且只能**用以下 API，没有任何"通用 空灵语言 后端通道"。生成代码前请先确认你需要的能力在表内：
 
 - `app.fs.*` —— 文件系统（受 `permissions.fs.read/write` 限制）
 - `app.shell.exec` —— 子进程命令行（受 `permissions.shell.allow` 命令名白名单限制）
@@ -19,10 +19,10 @@ MiniApp **能且只能**用以下 API，没有任何"通用 BitFun 后端通道"
 - `app.call('xxx', ...)` + `worker.js` —— 自定义 Node 后端（仅 `node.enabled = true` 时）
 - `app.theme / locale / on*` —— 主题与 i18n
 
-**框架不暴露**的 BitFun 后端能力（截至当前版本）：WorkspaceService（结构化搜索 / 索引）、GitService（结构化 status/diff/blame）、TerminalService、Session/AgenticSystem、LSP / Snapshot / Mermaid / Skills / Browser / Computer Use / Config 等。需要这些能力时：
+**框架不暴露**的 空灵语言 后端能力（截至当前版本）：WorkspaceService（结构化搜索 / 索引）、GitService（结构化 status/diff/blame）、TerminalService、Session/AgenticSystem、LSP / Snapshot / Mermaid / Skills / Browser / Computer Use / Config 等。需要这些能力时：
 
 1. 能用裸命令行解决就用 `app.shell.exec`（如 git → 在 `permissions.shell.allow` 加 `"git"`，参考 `builtin-coding-selfie`）；
-2. 只是要读 BitFun 工作区里的文件就用 `app.fs.*`（把 `{workspace}` 加到 `permissions.fs.read`）；
+2. 只是要读 空灵语言 工作区里的文件就用 `app.fs.*`（把 `{workspace}` 加到 `permissions.fs.read`）；
 3. 必须真正调用某个内部服务 → 暂不支持，请先记录到需求池，**不要**自己 hack 一个 worker 去模拟服务行为。
 
 ## 标准 Node.js API（通过 require() shim）

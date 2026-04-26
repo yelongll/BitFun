@@ -1,4 +1,4 @@
-//! BitFun Relay Server
+//! 空灵语言 Relay Server
 //!
 //! Standalone binary that runs the relay as a network service.
 //! Uses `DiskAssetStore` for filesystem-backed mobile-web file storage.
@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cfg = RelayConfig::from_env();
-    info!("BitFun Relay Server v{}", env!("CARGO_PKG_VERSION"));
+    info!("空灵语言 Relay Server v{}", env!("CARGO_PKG_VERSION"));
 
     let room_manager = RoomManager::new();
     let asset_store = Arc::new(DiskAssetStore::new(&cfg.room_web_dir));

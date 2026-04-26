@@ -1,4 +1,4 @@
-Analyze this BitFun usage data and find a memorable moment.
+Analyze this 空灵语言 usage data and find a memorable moment.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {

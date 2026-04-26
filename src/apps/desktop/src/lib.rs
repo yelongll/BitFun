@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-//! BitFun Desktop - Tauri-based desktop application with TransportAdapter architecture
+//! 空灵语言 Desktop - Tauri-based desktop application with TransportAdapter architecture
 
 pub mod api;
 pub mod computer_use;
@@ -84,7 +84,7 @@ pub async fn run() {
     let log_targets = logging::build_log_targets(&log_config);
     let session_log_dir = log_config.session_log_dir.clone();
 
-    eprintln!("=== BitFun Desktop Starting ===");
+    eprintln!("=== 空灵语言 桌面端 启动中 ===");
 
     let step_started = Instant::now();
     if let Err(e) = bitfun_core::service::config::initialize_global_config().await {
@@ -317,7 +317,7 @@ pub async fn run() {
 
             logging::spawn_log_cleanup_task();
 
-            log::info!("BitFun Desktop started successfully");
+            log::info!("空灵语言 Desktop started successfully");
             Ok(())
         })
         .on_window_event({

@@ -63,7 +63,6 @@ export function generateButtonCode(el: DesignerElement, ctx: CodeGenerationConte
   const icon = (props.icon as string) || '';
   const iconPosition = (props.iconPosition as string) || 'left';
   const href = (props.href as string) || '';
-  const target = (props.target as string) || '_self';
   const title = (el.title as string) || '';
   const x = el.x || 0;
   const y = el.y || 0;
@@ -538,7 +537,7 @@ export function generateComponentCode(el: DesignerElement, ctx: CodeGenerationCo
     case 'toggle':
       return generateToggleCode(el, ctx);
     default:
-      const definition = componentRegistry.getComponent(el.type);
+      const definition = componentRegistry.get(el.type);
       if (definition) {
         return generateCustomComponentCode(el, ctx, definition);
       }

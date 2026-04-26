@@ -1,10 +1,12 @@
-import type { Options } from '@wdio/types';
+import type { Options } from '@wdio/local-runner';
 import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
+
+declare const browser: WebdriverIO.Browser;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -181,7 +183,7 @@ async function waitForEmbeddedDriverReady(timeoutMs: number = 30000): Promise<vo
 
 async function waitForWebviewDocumentReady(timeoutMs: number = 30000): Promise<void> {
   const startedAt = Date.now();
-  let lastError = 'BitFun app shell is not ready';
+  let lastError = '空灵语言 app shell is not ready';
 
   while (Date.now() - startedAt < timeoutMs) {
     let sessionId: string | null = null;
@@ -193,7 +195,7 @@ async function waitForWebviewDocumentReady(timeoutMs: number = 30000): Promise<v
         await deleteProbeSession(sessionId);
         return;
       }
-      lastError = 'BitFun app shell is not ready';
+      lastError = '空灵语言 app shell is not ready';
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -291,7 +293,7 @@ async function startDevServer(): Promise<void> {
 
   const spawnOptions = {
     cwd: projectRoot(),
-    stdio: ['ignore', 'pipe', 'pipe'] as const,
+    stdio: ['ignore', 'pipe', 'pipe'] as ('ignore' | 'pipe')[],
     env: {
       ...process.env,
       TAURI_DEV_HOST: DEV_SERVER_HOST,
@@ -336,15 +338,15 @@ async function startDevServer(): Promise<void> {
   }
   ownsDevServer = true;
 
-  devServerProcess.stdout?.on('data', (data: Buffer) => {
+  devServerProcess?.stdout?.on('data', (data: Buffer) => {
     console.log(`[dev-server] ${data.toString().trim()}`);
   });
 
-  devServerProcess.stderr?.on('data', (data: Buffer) => {
+  devServerProcess?.stderr?.on('data', (data: Buffer) => {
     console.error(`[dev-server] ${data.toString().trim()}`);
   });
 
-  devServerProcess.on('exit', (code, signal) => {
+  devServerProcess?.on('exit', (code, signal) => {
     console.log(`[dev-server] exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`);
     devServerProcess = null;
     ownsDevServer = false;
@@ -372,7 +374,7 @@ async function startBitFunApp(): Promise<void> {
 
   stopBitFunApp();
 
-  console.log(`Starting BitFun with embedded WebDriver on port ${DRIVER_PORT}`);
+  console.log(`Starting 空灵语言 with embedded WebDriver on port ${DRIVER_PORT}`);
   console.log(`Application: ${appPath}`);
 
   bitfunApp = spawn(appPath, [], {
@@ -403,7 +405,11 @@ async function startBitFunApp(): Promise<void> {
 }
 
 function sharedAfterTest(): Options.Testrunner['afterTest'] {
-  return async function afterTest(test, _context, { error, passed }) {
+  return async function afterTest(
+    test: { title: string; fullTitle?: string; parent?: string },
+    _context: unknown,
+    { error, passed }: { error?: Error; passed: boolean }
+  ) {
     const isRealFailure = !passed && !!error;
     if (!isRealFailure) {
       return;
@@ -501,7 +507,7 @@ export function createEmbeddedConfig(specs: string[], label: string): Options.Te
     },
 
     afterSession: function afterSession() {
-      console.log('Stopping BitFun app...');
+      console.log('Stopping 空灵语言 app...');
       stopBitFunApp();
     },
 

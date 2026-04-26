@@ -12,7 +12,7 @@
       "notAbsolute": "安裝路徑必須是絕對路徑（例如 C:\\…）。",
       "filesystemRoot": "不能安裝到磁盤根目錄，請選擇磁盤下的某個文件夾。",
       "pathNotDirectory": "所選路徑已存在但不是文件夾。",
-      "directoryMustBeEmptyOrBitfun": "安裝目錄必須為空，或已包含 BitFun 安裝。",
+      "directoryMustBeEmptyOrKongling": "安裝目錄必須為空，或已包含 Kongling 安裝。",
       "inspectDirectoryFailed": "無法讀取安裝目錄，請檢查權限後重試。",
       "directoryNotWritable": "安裝目錄不可寫入。請更換路徑，或以管理員身份運行安裝器（見下方說明）。",
       "parentNotWritable": "上級目錄不可寫入。系統目錄（如 Program Files）通常需要管理員權限（見下方說明）。",
@@ -77,7 +77,7 @@
     "providers": {
       "openbitfun": {
         "name": "OpenBitFun",
-        "description": "OpenBitFun 大模型平臺"
+        "description": "Open空灵語言大模型平臺"
       },
       "gemini": {
         "name": "Google Gemini",
@@ -208,14 +208,14 @@
   "complete": {
     "title": "完成",
     "heading": "安裝完成",
-    "ready": "BitFun 已準備就緒。",
+    "ready": "空灵語言已準備就緒。",
     "autoLaunch": "將自動啟動應用。",
-    "launchFinish": "啟動 BitFun",
+    "launchFinish": "啟動空灵語言",
     "finish": "完成"
   },
   "uninstall": {
-    "title": "卸載 BitFun",
-    "subtitle": "將移除 BitFun 及其集成項（快捷方式、右鍵菜單、PATH）。",
+    "title": "卸載空灵語言",
+    "subtitle": "將移除 空灵語言及其集成項（快捷方式、右鍵菜單、PATH）。",
     "installPath": "安裝目錄",
     "inlineHint": "將清理集成與安裝目錄",
     "pathUnknown": "未檢測到安裝目錄",
