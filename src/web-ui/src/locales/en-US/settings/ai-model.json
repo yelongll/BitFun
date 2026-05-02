@@ -49,6 +49,7 @@
     "noPresetModels": "No models available. Fetch the model list or enter a model name manually",
     "backToSelection": "Back to provider selection",
     "selectModel": "Select model",
+    "selectAll": "Select All",
     "multiSelectHint": "Supports multi-select. After selection, configure context window, max output tokens, and reasoning per model.",
     "searchOrInputModel": "Search or enter model name...",
     "inputModelName": "Enter model name...",

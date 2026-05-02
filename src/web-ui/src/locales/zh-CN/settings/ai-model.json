@@ -49,6 +49,7 @@
     "noPresetModels": "暂无可用模型，请获取模型列表或手动输入模型名",
     "backToSelection": "返回选择提供商",
     "selectModel": "选择模型",
+    "selectAll": "全选",
     "multiSelectHint": "支持多选；选中后可分别设置每个模型的上下文窗口、最大输出 Tokens 和推理配置",
     "searchOrInputModel": "搜索或输入模型名称...",
     "inputModelName": "输入自定义模型名称...",
