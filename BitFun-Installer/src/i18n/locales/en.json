@@ -59,6 +59,7 @@
     "description": "Configure and manage AI model providers",
     "providerLabel": "Select Model Provider",
     "selectProvider": "or select a preset provider",
+    "selectAll": "Select All",
     "customProvider": "Custom Configuration",
     "getApiKey": "Get API Key",
     "modelNamePlaceholder": "Enter model name...",

@@ -59,6 +59,7 @@
     "description": "配置和管理 AI 模型提供商",
     "providerLabel": "选择模型提供商",
     "selectProvider": "或选择预设提供商",
+    "selectAll": "全选",
     "customProvider": "自定义配置",
     "getApiKey": "获取 API Key",
     "modelNamePlaceholder": "输入自定义模型名称...",
