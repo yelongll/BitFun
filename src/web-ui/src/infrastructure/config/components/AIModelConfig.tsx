@@ -1851,6 +1851,17 @@ const AIModelConfig: React.FC = () => {
                         renderValue={renderModelPickerValue}
                         className={selectedModelValues.length > 0 ? 'bitfun-ai-model-config__model-picker-select bitfun-ai-model-config__model-picker-select--has-value' : 'bitfun-ai-model-config__model-picker-select'}
                       />
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => {
+                          const allModelNames = availableModelOptions.map(opt => String(opt.value));
+                          syncSelectedModelDrafts(allModelNames, editingConfig);
+                        }}
+                        title={t('common.selectAll')}
+                      >
+                        {t('common.selectAll')}
+                      </Button>
                     </div>
                     <div className="bitfun-ai-model-config__manual-model-entry">
                       <Input
@@ -1959,6 +1970,19 @@ const AIModelConfig: React.FC = () => {
                         size="small"
                         onOpenChange={handleModelSelectionOpenChange}
                       />
+                      {!editingConfig.id && (
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={() => {
+                            const allModelNames = availableModelOptions.map(opt => String(opt.value));
+                            syncSelectedModelDrafts(allModelNames, editingConfig, false);
+                          }}
+                          title={t('common.selectAll')}
+                        >
+                          {t('common.selectAll')}
+                        </Button>
+                      )}
                     </div>
                     <div className="bitfun-ai-model-config__manual-model-entry">
                       <Input
