@@ -365,6 +365,36 @@
   }
 }
 
+.copy-btn {
+  color: var(--color-text-muted);
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-accent-500);
+    box-shadow: none;
+  }
+}
+
+.rerun-btn {
+  color: var(--color-text-muted);
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-success);
+    box-shadow: none;
+  }
+}
+
+.edit-run-btn {
+  color: var(--color-text-muted);
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-accent-500);
+    box-shadow: none;
+  }
+}
+
 /* ========== Execution output container (streaming) ========== */
 .terminal-execution-output,
 .terminal-result-output {
