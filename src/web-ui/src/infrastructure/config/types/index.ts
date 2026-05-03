@@ -175,6 +175,7 @@ export interface AIConfig {
   tool_confirmation_timeout_secs?: number | null;
   skip_tool_confirmation?: boolean;
   computer_use_enabled?: boolean;
+  max_rounds?: number;
 }
 
 export interface StoredModeConfigItem {
@@ -211,6 +212,10 @@ export interface SkillInfo {
   dirName: string;
   isBuiltin: boolean;
   groupKey?: string | null;
+  /** True when this skill is shadowed by a higher-priority skill with the same name. */
+  isShadowed?: boolean;
+  /** Key of the skill that shadows this one (if any). */
+  shadowedByKey?: string | null;
 }
 
 export interface ModeSkillInfo extends SkillInfo {

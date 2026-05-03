@@ -22,6 +22,7 @@ import { useVirtualItems, useActiveSession, useVisibleTurnInfo, type VisibleTurn
 import type { FlowChatConfig } from '../../types/flow-chat';
 import type { LineRange } from '@/component-library';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
+import { isAcpFlowSession } from '../../utils/acpSession';
 import './ModernFlowChatContainer.scss';
 
 interface ModernFlowChatContainerProps {
@@ -52,6 +53,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
   const virtualListRef = useRef<VirtualMessageListRef>(null);
   const chatScopeRef = useRef<HTMLDivElement>(null);
   const { workspacePath } = useWorkspaceContext();
+  const allowUserMessageRollback = !isAcpFlowSession(activeSession);
   const {
     exploreGroupStates,
     onExploreGroupToggle: handleExploreGroupToggle,
@@ -60,6 +62,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     onCollapseGroup: handleCollapseGroup,
   } = useExploreGroupState(virtualItems);
   const { handleToolConfirm, handleToolReject } = useFlowChatToolActions();
+
   const { handleFileViewRequest } = useFlowChatFileActions({
     workspacePath,
     onFileViewRequest,
@@ -85,6 +88,16 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     virtualListRef,
   });
 
+  const handleContinueTurn = useCallback(async (sessionId: string, _turnId: string) => {
+    try {
+      const manager = FlowChatManager.getInstance();
+      await manager.continueDialogTurn(sessionId);
+    } catch (_e) {
+      const { notificationService } = await import('@/shared/notification-system');
+      notificationService.error('Failed to continue turn. Please try starting a new dialog.', { duration: 3000 });
+    }
+  }, []);
+
   const contextValue: FlowChatContextValue = useMemo(() => ({
     onFileViewRequest: handleFileViewRequest,
     onTabOpen,
@@ -94,6 +107,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     onToolReject: handleToolReject,
     sessionId: activeSession?.sessionId,
     activeSessionOverride: activeSession,
+    allowUserMessageRollback,
     config: {
       enableMarkdown: true,
       autoScroll: true,
@@ -111,6 +125,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     searchQuery,
     searchMatchIndices,
     searchCurrentMatchVirtualIndex,
+    onContinueTurn: handleContinueTurn,
   }), [
     handleFileViewRequest,
     onTabOpen,
@@ -119,6 +134,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     handleToolConfirm,
     handleToolReject,
     activeSession,
+    allowUserMessageRollback,
     config,
     exploreGroupStates,
     handleExploreGroupToggle,
@@ -128,6 +144,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     searchQuery,
     searchMatchIndices,
     searchCurrentMatchVirtualIndex,
+    handleContinueTurn,
   ]);
 
   const turnSummaries = useMemo<FlowChatHeaderTurnSummary[]>(() => {

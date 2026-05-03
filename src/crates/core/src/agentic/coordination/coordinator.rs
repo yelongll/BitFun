@@ -1256,6 +1256,8 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     duration_ms: outcome.duration_ms,
                     subagent_parent_info: None,
                     partial_recovery_reason: None,
+                    success: Some(true),
+                    finish_reason: Some("complete".to_string()),
                 })
                 .await;
 
@@ -2355,6 +2357,26 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             execution_engine: self.execution_engine.clone(),
             dialog_turn_id: dialog_turn_id.clone(),
         };
+
+        // Emit DialogTurnStarted with subagent_parent_info so the frontend can
+        // associate the subagent session ID with the parent tool (enabling the
+        // "ignore timeout" feature for deep-review subagents).
+        let user_input_text = initial_messages
+            .first()
+            .map(|m| match &m.content {
+                MessageContent::Text(text) => text.clone(),
+                _ => String::new(),
+            })
+            .unwrap_or_default();
+        self.emit_event(AgenticEvent::DialogTurnStarted {
+            session_id: session_id.clone(),
+            turn_id: dialog_turn_id.clone(),
+            turn_index: 0,
+            user_input: user_input_text,
+            original_user_input: None,
+            user_message_metadata: None,
+            subagent_parent_info: subagent_parent_info.clone().map(Into::into),
+        }).await;
 
         let subagent_workspace = Self::build_workspace_binding(&session.config).await;
         let subagent_services = Self::build_workspace_services(&subagent_workspace).await;

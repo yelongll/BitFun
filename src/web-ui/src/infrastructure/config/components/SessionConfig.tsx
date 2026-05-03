@@ -65,12 +65,14 @@ const SessionConfig: React.FC = () => {
   const [skipToolConfirmation, setSkipToolConfirmation] = useState(true);
   const [executionTimeout, setExecutionTimeout] = useState('');
   const [confirmationTimeout, setConfirmationTimeout] = useState('');
+  const [maxRounds, setMaxRounds] = useState<number>(200);
   const [toolExecConfigLoading, setToolExecConfigLoading] = useState(false);
 
   const [computerUseEnabled, setComputerUseEnabled] = useState(false);
   const [computerUseAccess, setComputerUseAccess] = useState(false);
   const [computerUseScreen, setComputerUseScreen] = useState(false);
   const [computerUseBusy, setComputerUseBusy] = useState(false);
+  const [computerUseStatusLoading, setComputerUseStatusLoading] = useState(false);
 
   // ── Browser control state ───────────────────────────────────────────────
   const [browserCdpAvailable, setBrowserCdpAvailable] = useState(false);
@@ -78,6 +80,7 @@ const SessionConfig: React.FC = () => {
   const [browserVersion, setBrowserVersion] = useState<string | null>(null);
   const [browserPageCount, setBrowserPageCount] = useState(0);
   const [browserControlBusy, setBrowserControlBusy] = useState(false);
+  const [browserStatusLoading, setBrowserStatusLoading] = useState(false);
   const [platform, setPlatform] = useState<string>('');
   const [browserRestartPrompt, setBrowserRestartPrompt] = useState<BrowserControlLaunchResponse | null>(null);
 
@@ -90,6 +93,7 @@ const SessionConfig: React.FC = () => {
 
   const refreshComputerUseStatus = useCallback(async (): Promise<boolean> => {
     if (!IS_TAURI_DESKTOP) return false;
+    setComputerUseStatusLoading(true);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const s = await invoke<ComputerUseStatusPayload>('computer_use_get_status');
@@ -100,11 +104,14 @@ const SessionConfig: React.FC = () => {
     } catch (error) {
       log.error('computer_use_get_status failed', error);
       return false;
+    } finally {
+      setComputerUseStatusLoading(false);
     }
   }, []);
 
   const refreshBrowserControlStatus = useCallback(async () => {
     if (!IS_TAURI_DESKTOP) return;
+    setBrowserStatusLoading(true);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const s = await invoke<{
@@ -120,8 +127,27 @@ const SessionConfig: React.FC = () => {
       setBrowserPageCount(s.pageCount);
     } catch (error) {
       log.error('browser_control_get_status failed', error);
+    } finally {
+      setBrowserStatusLoading(false);
     }
   }, []);
+
+  const refreshDesktopStatus = useCallback((computerUseCfg: boolean | null | undefined) => {
+    if (!IS_TAURI_DESKTOP) {
+      setComputerUseEnabled(computerUseCfg ?? false);
+      return;
+    }
+
+    void refreshComputerUseStatus().then((ok) => {
+      if (!ok) setComputerUseEnabled(computerUseCfg ?? false);
+    });
+
+    void refreshBrowserControlStatus();
+
+    void systemAPI.getSystemInfo()
+      .then((info) => setPlatform(info.platform || ''))
+      .catch((error) => log.warn('getSystemInfo failed', error));
+  }, [refreshComputerUseStatus, refreshBrowserControlStatus]);
 
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
@@ -135,6 +161,7 @@ const SessionConfig: React.FC = () => {
         confirmTimeout,
         debugConfigData,
         computerUseCfg,
+        maxRoundsValue,
       ] = await Promise.all([
         aiExperienceConfigService.getSettingsAsync(),
         configManager.getConfig<AIModelConfig[]>('ai.models') || [],
@@ -144,6 +171,7 @@ const SessionConfig: React.FC = () => {
         configManager.getConfig<number | null>('ai.tool_confirmation_timeout_secs'),
         configManager.getConfig<DebugModeConfig>('ai.debug_mode_config'),
         configManager.getConfig<boolean>('ai.computer_use_enabled'),
+        configManager.getConfig<number>('ai.max_rounds'),
       ]);
 
       setSettings(loadedSettings);
@@ -152,28 +180,17 @@ const SessionConfig: React.FC = () => {
       setSkipToolConfirmation(skipConfirm ?? true);
       setExecutionTimeout(execTimeout != null ? String(execTimeout) : '');
       setConfirmationTimeout(confirmTimeout != null ? String(confirmTimeout) : '');
+      setMaxRounds(maxRoundsValue ?? 200);
       if (debugConfigData) setDebugConfig(debugConfigData);
 
-      if (IS_TAURI_DESKTOP) {
-        const ok = await refreshComputerUseStatus();
-        if (!ok) setComputerUseEnabled(computerUseCfg ?? false);
-        await refreshBrowserControlStatus();
-        try {
-          const info = await systemAPI.getSystemInfo();
-          setPlatform(info.platform || '');
-        } catch (error) {
-          log.warn('getSystemInfo failed', error);
-        }
-      } else {
-        setComputerUseEnabled(computerUseCfg ?? false);
-      }
+      refreshDesktopStatus(computerUseCfg);
     } catch (error) {
       log.error('Failed to load session config data', error);
       setSettings(await aiExperienceConfigService.getSettingsAsync());
     } finally {
       setIsLoading(false);
     }
-  }, [refreshComputerUseStatus, refreshBrowserControlStatus]);
+  }, [refreshDesktopStatus]);
 
   useEffect(() => {
     loadAllData();
@@ -368,6 +385,22 @@ const SessionConfig: React.FC = () => {
     }
   };
 
+  const handleMaxRoundsChange = async (value: string) => {
+    const trimmedValue = value.trim();
+    if (trimmedValue !== '') {
+      const numValue = parseInt(trimmedValue, 10);
+      if (Number.isNaN(numValue) || numValue < 1) return;
+      setMaxRounds(numValue);
+      try {
+        await configManager.setConfig('ai.max_rounds', numValue);
+        notificationService.success(t('messages.saveSuccess'), { duration: 2000 });
+      } catch (error) {
+        log.error('Failed to save max_rounds config', error);
+        notificationService.error(t('messages.saveFailed'));
+      }
+    }
+  };
+
   // ── Debug config handlers ────────────────────────────────────────────────
 
   const updateDebugConfig = useCallback((updates: Partial<DebugModeConfig>) => {
@@ -499,6 +532,15 @@ const SessionConfig: React.FC = () => {
   const enabledModels = models.filter((m: AIModelConfig) => m.enabled);
   const sessionTitleModelId = funcAgentModels[AGENT_SESSION_TITLE] || 'fast';
   const templateEntries = getTemplateEntries();
+  const computerUseAccessLabel = computerUseStatusLoading
+    ? t('loading.text')
+    : computerUseAccess ? t('computerUse.granted') : t('computerUse.notGranted');
+  const computerUseScreenLabel = computerUseStatusLoading
+    ? t('loading.text')
+    : computerUseScreen ? t('computerUse.granted') : t('computerUse.notGranted');
+  const browserStatusLabel = browserCdpAvailable
+    ? `${browserKind} · ${browserPageCount} ${t('browserControl.tabs')}`
+    : browserStatusLoading ? t('loading.text') : t('browserControl.notConnected');
 
   if (isLoading || !settings) {
     return (
@@ -608,6 +650,19 @@ const SessionConfig: React.FC = () => {
               />
             </div>
           </ConfigPageRow>
+          <ConfigPageRow label={t('maxRounds.label')} description={t('maxRounds.description')} align="center">
+            <div className="bitfun-func-agent-config__row-control">
+              <NumberInput
+                value={maxRounds}
+                onChange={(val) => handleMaxRoundsChange(String(val))}
+                min={1}
+                max={10000}
+                step={10}
+                size="small"
+                variant="compact"
+              />
+            </div>
+          </ConfigPageRow>
         </ConfigPageSection>
 
         {/* ── Computer use (desktop) ─────────────────────────────── */}
@@ -624,7 +679,7 @@ const SessionConfig: React.FC = () => {
                   <Switch
                     checked={computerUseEnabled}
                     onChange={(e) => handleComputerUseEnabledChange(e.target.checked)}
-                    disabled={computerUseBusy}
+                    disabled={computerUseBusy || computerUseStatusLoading}
                     size="small"
                   />
                 </div>
@@ -647,8 +702,8 @@ const SessionConfig: React.FC = () => {
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <span className={computerUseAccess ? 'bitfun-func-agent-config__perm-status--granted' : undefined}>
-                      {computerUseAccess ? t('computerUse.granted') : t('computerUse.notGranted')}
+                    <span className={!computerUseStatusLoading && computerUseAccess ? 'bitfun-func-agent-config__perm-status--granted' : undefined}>
+                      {computerUseAccessLabel}
                     </span>
                     <IconButton
                       type="button"
@@ -656,7 +711,7 @@ const SessionConfig: React.FC = () => {
                       variant="ghost"
                       aria-label={t('computerUse.refreshStatus')}
                       tooltip={t('computerUse.refreshStatus')}
-                      disabled={computerUseBusy}
+                      disabled={computerUseBusy || computerUseStatusLoading}
                       onClick={() => void refreshComputerUseStatus()}
                     >
                       <RefreshCw size={14} />
@@ -666,7 +721,7 @@ const SessionConfig: React.FC = () => {
                     className="bitfun-func-agent-config__row-action-btn"
                     size="small"
                     variant="secondary"
-                    disabled={computerUseBusy}
+                    disabled={computerUseBusy || computerUseStatusLoading}
                     onClick={() => void handleComputerUseOpenSettings('accessibility')}
                   >
                     {t('computerUse.openSettings')}
@@ -691,8 +746,8 @@ const SessionConfig: React.FC = () => {
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <span className={computerUseScreen ? 'bitfun-func-agent-config__perm-status--granted' : undefined}>
-                      {computerUseScreen ? t('computerUse.granted') : t('computerUse.notGranted')}
+                    <span className={!computerUseStatusLoading && computerUseScreen ? 'bitfun-func-agent-config__perm-status--granted' : undefined}>
+                      {computerUseScreenLabel}
                     </span>
                     <IconButton
                       type="button"
@@ -700,7 +755,7 @@ const SessionConfig: React.FC = () => {
                       variant="ghost"
                       aria-label={t('computerUse.refreshStatus')}
                       tooltip={t('computerUse.refreshStatus')}
-                      disabled={computerUseBusy}
+                      disabled={computerUseBusy || computerUseStatusLoading}
                       onClick={() => void refreshComputerUseStatus()}
                     >
                       <RefreshCw size={14} />
@@ -710,7 +765,7 @@ const SessionConfig: React.FC = () => {
                     className="bitfun-func-agent-config__row-action-btn"
                     size="small"
                     variant="secondary"
-                    disabled={computerUseBusy}
+                    disabled={computerUseBusy || computerUseStatusLoading}
                     onClick={() => void handleComputerUseOpenSettings('screen_capture')}
                   >
                     {t('computerUse.openSettings')}
@@ -759,12 +814,10 @@ const SessionConfig: React.FC = () => {
                     title={browserCdpAvailable && browserVersion ? `${browserKind} ${browserVersion}` : undefined}
                   >
                     <span
-                      className={browserCdpAvailable ? 'bitfun-func-agent-config__perm-status--granted' : undefined}
+                      className={!browserStatusLoading && browserCdpAvailable ? 'bitfun-func-agent-config__perm-status--granted' : undefined}
                       style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
                     >
-                      {browserCdpAvailable
-                        ? `${browserKind} · ${browserPageCount} ${t('browserControl.tabs')}`
-                        : t('browserControl.notConnected')}
+                      {browserStatusLabel}
                     </span>
                     <IconButton
                       type="button"
@@ -772,7 +825,7 @@ const SessionConfig: React.FC = () => {
                       variant="ghost"
                       aria-label={t('browserControl.refreshStatus')}
                       tooltip={t('browserControl.refreshStatus')}
-                      disabled={browserControlBusy}
+                      disabled={browserControlBusy || browserStatusLoading}
                       onClick={() => void refreshBrowserControlStatus()}
                     >
                       <RefreshCw size={14} />
@@ -783,7 +836,7 @@ const SessionConfig: React.FC = () => {
                       className="bitfun-func-agent-config__row-action-btn"
                       size="small"
                       variant="secondary"
-                      disabled={browserControlBusy}
+                      disabled={browserControlBusy || browserStatusLoading}
                       onClick={() => void handleBrowserControlLaunch()}
                     >
                       {t('browserControl.connect')}

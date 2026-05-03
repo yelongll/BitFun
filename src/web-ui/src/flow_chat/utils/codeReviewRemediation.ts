@@ -1,8 +1,10 @@
 import type {
   CodeReviewReportSectionsData,
+  DecisionContext,
   RemediationGroupId,
   ReviewMode,
 } from './codeReviewReport';
+import { normalizeDecisionEntry } from './codeReviewReport';
 
 export interface CodeReviewRemediationSummary {
   overall_assessment?: string;
@@ -34,10 +36,14 @@ export interface CodeReviewRemediationData {
 export interface ReviewRemediationItem {
   id: string;
   index: number;
+  groupIndex: number;
   plan: string;
   issue?: CodeReviewRemediationIssue;
+  /** Index of the best-matching issue in the report's `issues` array, or -1. */
+  issueIndex: number;
   groupId?: RemediationGroupId;
   requiresDecision?: boolean;
+  decisionContext?: DecisionContext;
   defaultSelected: boolean;
 }
 
@@ -49,20 +55,54 @@ export const REMEDIATION_GROUP_ORDER: RemediationGroupId[] = [
   'verification',
 ];
 
-function nonEmpty(values?: Array<string | undefined | null>): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
+/**
+ * Find the best-matching issue index for a remediation plan text.
+ * Matches by extracting file paths from the plan and checking issue.file.
+ * Falls back to category matching, then to overall position order.
+ */
+function findMatchingIssueIndex(
+  plan: string,
+  issues: CodeReviewRemediationIssue[] | undefined,
+  positionHint: number,
+): number {
+  if (!issues || issues.length === 0) return -1;
 
-  for (const value of values ?? []) {
-    const trimmed = value?.trim();
-    if (!trimmed || seen.has(trimmed)) {
-      continue;
+  const planLower = plan.toLowerCase();
+
+  // Strategy 1: match by file path mentioned in plan
+  for (let i = 0; i < issues.length; i++) {
+    const issue = issues[i];
+    if (issue.file && planLower.includes(issue.file.toLowerCase())) {
+      return i;
     }
-    seen.add(trimmed);
-    result.push(trimmed);
   }
 
-  return result;
+  // Strategy 2: match by category keyword in plan
+  for (let i = 0; i < issues.length; i++) {
+    const issue = issues[i];
+    if (issue.category && planLower.includes(issue.category.toLowerCase())) {
+      return i;
+    }
+  }
+
+  // Strategy 3: match by issue title keywords (significant words)
+  for (let i = 0; i < issues.length; i++) {
+    const issue = issues[i];
+    if (issue.title) {
+      const titleWords = issue.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      const matchCount = titleWords.filter(w => planLower.includes(w)).length;
+      if (matchCount >= Math.ceil(titleWords.length * 0.5) && matchCount >= 2) {
+        return i;
+      }
+    }
+  }
+
+  // Strategy 4: positional hint (for legacy data where plans and issues are 1:1 ordered)
+  if (positionHint < issues.length) {
+    return positionHint;
+  }
+
+  return -1;
 }
 
 function hasConcreteFixSignal(issue?: CodeReviewRemediationIssue): boolean {
@@ -95,20 +135,41 @@ function buildStructuredRemediationItems(
     return [];
   }
 
+  const issues = reviewData.issues;
   const items: ReviewRemediationItem[] = [];
+  let globalIssueOffset = 0;
 
   for (const groupId of REMEDIATION_GROUP_ORDER) {
-    for (const plan of nonEmpty(remediationGroups[groupId])) {
+    const rawEntries = remediationGroups[groupId];
+    if (!rawEntries || !Array.isArray(rawEntries) || rawEntries.length === 0) {
+      continue;
+    }
+
+    let groupIndex = 0;
+    for (const raw of rawEntries) {
+      // Normalize: needs_decision entries may be structured objects or plain strings
+      const isDecision = groupId === 'needs_decision';
+      const normalized = isDecision ? normalizeDecisionEntry(raw as string | DecisionContext) : null;
+      const plan = isDecision && normalized ? normalized.plan : String(raw).trim();
+      if (!plan) {
+        continue;
+      }
+
       const index = items.length;
-      const requiresDecision = groupId === 'needs_decision';
+      const issueIndex = findMatchingIssueIndex(plan, issues, globalIssueOffset);
       items.push({
         id: `remediation-${groupId}-${index}`,
         index,
+        groupIndex,
         plan,
+        issueIndex,
         groupId,
-        requiresDecision,
+        requiresDecision: isDecision,
+        decisionContext: isDecision ? normalized ?? undefined : undefined,
         defaultSelected: groupId === 'must_fix',
       });
+      groupIndex++;
+      globalIssueOffset++;
     }
   }
 
@@ -132,10 +193,13 @@ export function buildReviewRemediationItems(
     }
 
     const issue = reviewData.issues?.[index];
+    const issueIndex = issue ? index : findMatchingIssueIndex(trimmedPlan, reviewData.issues, index);
     items.push({
       id: `remediation-${index}`,
       index,
+      groupIndex: index,
       plan: trimmedPlan,
+      issueIndex,
       ...(issue ? { issue } : {}),
       defaultSelected: shouldSelectByDefault(reviewData, issue),
     });
@@ -158,11 +222,29 @@ function formatIssueLocation(issue: CodeReviewRemediationIssue): string {
   return issue.line ? `${issue.file}:${issue.line}` : issue.file;
 }
 
-function formatIssueForPrompt(item: ReviewRemediationItem): string {
+function formatIssueForPrompt(item: ReviewRemediationItem, decisionSelection?: number): string {
   const issue = item.issue;
+  const decisionCtx = item.decisionContext;
+
+  // Build decision context line if available
+  const decisionLines: string[] = [];
+  if (decisionCtx) {
+    decisionLines.push(`   Decision: ${decisionCtx.question}`);
+    if (decisionCtx.options && decisionCtx.options.length > 0) {
+      if (decisionSelection != null) {
+        decisionLines.push(`   User chose option ${decisionSelection + 1}: ${decisionCtx.options[decisionSelection]}`);
+      } else if (decisionCtx.recommendation != null) {
+        decisionLines.push(`   Recommended option ${decisionCtx.recommendation + 1}: ${decisionCtx.options[decisionCtx.recommendation]}`);
+      }
+    }
+  }
+
   if (!issue) {
     const groupLabel = item.groupId ? ` [${item.groupId}]` : '';
-    return `${item.index + 1}.${groupLabel} No directly-linked issue. Plan: ${item.plan}`;
+    return [
+      `${item.index + 1}.${groupLabel} No directly-linked issue. Plan: ${item.plan}`,
+      ...decisionLines,
+    ].filter(Boolean).join('\n');
   }
 
   return [
@@ -170,6 +252,7 @@ function formatIssueForPrompt(item: ReviewRemediationItem): string {
     `   Description: ${issue.description ?? 'N/A'}`,
     `   Suggestion: ${issue.suggestion ?? item.plan}`,
     issue.validation_note ? `   Validation: ${issue.validation_note}` : undefined,
+    ...decisionLines,
   ].filter(Boolean).join('\n');
 }
 
@@ -177,6 +260,7 @@ export function buildSelectedRemediationPrompt(params: {
   reviewData: CodeReviewRemediationData;
   selectedIds: Set<string>;
   rerunReview: boolean;
+  decisionSelections?: Record<string, number>;
 }): string {
   return buildSelectedReviewRemediationPrompt({
     ...params,
@@ -190,6 +274,7 @@ export function buildSelectedReviewRemediationPrompt(params: {
   rerunReview: boolean;
   reviewMode: ReviewMode;
   completedItems?: string[];
+  decisionSelections?: Record<string, number>;
 }): string {
   if (params.selectedIds.size === 0) {
     return '';
@@ -206,7 +291,7 @@ export function buildSelectedReviewRemediationPrompt(params: {
     .map((item, index) => `${index + 1}. ${item.plan}`)
     .join('\n');
   const issuesBlock = selectedItems
-    .map(formatIssueForPrompt)
+    .map((item) => formatIssueForPrompt(item, params.decisionSelections?.[item.id]))
     .join('\n\n');
   const isDeepReview = params.reviewMode === 'deep';
   const reviewLabel = isDeepReview ? 'Deep Review' : 'Code Review';

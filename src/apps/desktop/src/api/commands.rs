@@ -8,6 +8,11 @@ use crate::api::path_target::{
     get_path_metadata, path_exists, read_text_file, rename_path, resolve_desktop_path_target,
     write_text_file, DesktopPathTarget,
 };
+use crate::api::search_api::{
+    group_search_results, search_file_contents_via_workspace_search,
+    search_metadata_from_content_result, should_use_workspace_search, SearchMetadataResponse,
+};
+use crate::api::workspace_activation::spawn_workspace_background_warmup;
 use bitfun_core::infrastructure::{
     BatchedFileSearchProgressSink, FileSearchResult, FileSearchResultGroup, FileTreeNode,
     SearchMatchType,
@@ -204,6 +209,8 @@ struct SearchCompleteEvent {
     limit: usize,
     truncated: bool,
     total_results: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    search_metadata: Option<SearchMetadataResponse>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -262,6 +269,7 @@ fn emit_search_complete(
     limit: usize,
     truncated: bool,
     total_results: usize,
+    search_metadata: Option<SearchMetadataResponse>,
 ) {
     if let Err(error) = app_handle.emit(
         FILE_SEARCH_COMPLETE_EVENT,
@@ -271,6 +279,7 @@ fn emit_search_complete(
             limit,
             truncated,
             total_results,
+            search_metadata,
         },
     ) {
         warn!(
@@ -311,18 +320,24 @@ struct SearchCommandResponse {
     results: Vec<serde_json::Value>,
     limit: usize,
     truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    search_metadata: Option<SearchMetadataResponse>,
 }
 
 fn serialize_search_response(
     outcome: bitfun_core::infrastructure::FileSearchOutcome,
     limit: usize,
+    search_metadata: Option<SearchMetadataResponse>,
 ) -> serde_json::Value {
     serde_json::to_value(SearchCommandResponse {
         results: serialize_search_results(outcome.results),
         limit,
         truncated: outcome.truncated,
+        search_metadata,
     })
-    .unwrap_or_else(|_| serde_json::json!({ "results": [], "limit": limit, "truncated": false }))
+    .unwrap_or_else(|_| {
+        serde_json::json!({ "results": [], "limit": limit, "truncated": false, "searchMetadata": null })
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -594,7 +609,17 @@ async fn clear_active_workspace_context(state: &State<'_, AppState>, app: &AppHa
     #[cfg(not(target_os = "macos"))]
     let _ = app;
 
+    let previous_workspace_path = state.workspace_path.read().await.clone();
     *state.workspace_path.write().await = None;
+
+    if let Some(previous_workspace_path) = previous_workspace_path {
+        let root_str = previous_workspace_path.to_string_lossy().to_string();
+        if !is_remote_path(root_str.trim()).await {
+            state
+                .workspace_search_service
+                .schedule_repo_release(previous_workspace_path);
+        }
+    }
 
     if let Some(ref pool) = state.js_worker_pool {
         pool.stop_all().await;
@@ -635,34 +660,6 @@ async fn apply_active_workspace_context(
     // Remote workspace roots are POSIX paths on the SSH host — not writable local directories on
     // Windows. Snapshot hooks already skip file tracking for registered remote paths; avoid
     // creating `/.bitfun` (or drive root) here which fails with access denied.
-    let root_str = workspace_info.root_path.to_string_lossy().to_string();
-    let skip_local_snapshot = workspace_info.workspace_kind == WorkspaceKind::Remote
-        || is_remote_path(root_str.trim()).await;
-    if !skip_local_snapshot {
-        if let Err(e) = bitfun_core::service::snapshot::initialize_snapshot_manager_for_workspace(
-            workspace_info.root_path.clone(),
-            None,
-        )
-        .await
-        {
-            warn!(
-                "Failed to initialize snapshot system: path={}, error={}",
-                workspace_info.root_path.display(),
-                e
-            );
-        }
-    } else {
-        debug!(
-            "Skipping local snapshot manager init for remote/non-local workspace root_path={}",
-            workspace_info.root_path.display()
-        );
-    }
-
-    state
-        .agent_registry
-        .load_custom_subagents(&workspace_info.root_path)
-        .await;
-
     if let Err(e) = state
         .ai_rules_service
         .set_workspace(workspace_info.root_path.clone())
@@ -674,6 +671,8 @@ async fn apply_active_workspace_context(
             e
         );
     }
+
+    spawn_workspace_background_warmup(&*state, workspace_info.clone());
 
     #[cfg(target_os = "macos")]
     {
@@ -2295,6 +2294,8 @@ pub async fn search_files(
         include_directories: request.include_directories,
     };
 
+    let use_workspace_search =
+        request.search_content && should_use_workspace_search(&request.root_path).await;
     let result = if request.search_content {
         let filename_outcome = state
             .filesystem_service
@@ -2314,20 +2315,35 @@ pub async fn search_files(
         if filename_results.len() >= max_results {
             Ok(filename_results)
         } else {
-            let mut content_outcome = state
-                .filesystem_service
-                .search_file_contents(
+            let remaining = max_results - filename_results.len();
+            let mut content_outcome = if use_workspace_search {
+                search_file_contents_via_workspace_search(
+                    &state,
                     &request.root_path,
                     &request.pattern,
-                    FileSearchOptions {
-                        include_content: true,
-                        include_directories: false,
-                        max_results: Some(max_results - filename_results.len()),
-                        ..options
-                    },
-                    cancel_flag,
+                    request.case_sensitive,
+                    request.use_regex,
+                    request.whole_word,
+                    remaining,
                 )
-                .await?;
+                .await
+                .map(|result| result.outcome)?
+            } else {
+                state
+                    .filesystem_service
+                    .search_file_contents(
+                        &request.root_path,
+                        &request.pattern,
+                        FileSearchOptions {
+                            include_content: true,
+                            include_directories: false,
+                            max_results: Some(remaining),
+                            ..options
+                        },
+                        cancel_flag,
+                    )
+                    .await?
+            };
             if filename_outcome.truncated || content_outcome.truncated {
                 debug!(
                     "Legacy search truncated: root_path={}, pattern={}, search_content={}, limit={}",
@@ -2406,7 +2422,7 @@ pub async fn search_filenames(
                 limit,
                 outcome.truncated
             );
-            Ok(serialize_search_response(outcome, limit))
+            Ok(serialize_search_response(outcome, limit, None))
         }
         Err(error) => {
             error!(
@@ -2438,14 +2454,33 @@ pub async fn search_file_contents(
         include_directories: false,
     };
 
-    let result = state
-        .filesystem_service
-        .search_file_contents(&request.root_path, &request.pattern, options, cancel_flag)
-        .await;
+    let result = if should_use_workspace_search(&request.root_path).await {
+        search_file_contents_via_workspace_search(
+            &state,
+            &request.root_path,
+            &request.pattern,
+            request.case_sensitive,
+            request.use_regex,
+            request.whole_word,
+            limit,
+        )
+        .await
+        .map(|result| {
+            let search_metadata = search_metadata_from_content_result(&result);
+            (result.outcome, Some(search_metadata))
+        })
+    } else {
+        state
+            .filesystem_service
+            .search_file_contents(&request.root_path, &request.pattern, options, cancel_flag)
+            .await
+            .map(|outcome| (outcome, None))
+            .map_err(|error| format!("Failed to search file contents: {}", error))
+    };
     unregister_search(&state, search_id.as_deref());
 
     match result {
-        Ok(outcome) => {
+        Ok((outcome, search_metadata)) => {
             info!(
                 "Content search completed: root_path={}, pattern={}, results_count={}, limit={}, truncated={}",
                 request.root_path,
@@ -2454,7 +2489,7 @@ pub async fn search_file_contents(
                 limit,
                 outcome.truncated
             );
-            Ok(serialize_search_response(outcome, limit))
+            Ok(serialize_search_response(outcome, limit, search_metadata))
         }
         Err(error) => {
             error!(
@@ -2537,6 +2572,7 @@ pub async fn start_search_filenames_stream(
                     limit,
                     outcome.truncated,
                     count_search_result_groups(&outcome.results),
+                    None,
                 );
             }
             Err(error) => {
@@ -2584,9 +2620,14 @@ pub async fn start_search_file_contents_stream(
     };
 
     let filesystem_service = state.filesystem_service.clone();
+    let workspace_search_service = state.workspace_search_service.clone();
     let active_searches = state.active_searches.clone();
     let root_path = request.root_path.clone();
     let pattern = request.pattern.clone();
+    let case_sensitive = request.case_sensitive;
+    let use_regex = request.use_regex;
+    let whole_word = request.whole_word;
+    let use_workspace_search = should_use_workspace_search(&root_path).await;
     let response_search_id = search_id.clone();
     let progress_search_id = search_id.clone();
     let progress_app_handle = app_handle.clone();
@@ -2604,20 +2645,77 @@ pub async fn start_search_file_contents_stream(
     ));
 
     tokio::spawn(async move {
-        let result = filesystem_service
-            .search_file_contents_with_progress(
-                &root_path,
-                &pattern,
-                options,
-                cancel_flag,
-                Some(progress_sink),
-            )
-            .await;
+        let result = if use_workspace_search {
+            let result = workspace_search_service
+                .search_content(bitfun_core::service::search::ContentSearchRequest {
+                    repo_root: root_path.clone().into(),
+                    search_path: None,
+                    pattern: pattern.clone(),
+                    output_mode: bitfun_core::service::search::ContentSearchOutputMode::Content,
+                    case_sensitive,
+                    use_regex,
+                    whole_word,
+                    multiline: false,
+                    before_context: 0,
+                    after_context: 0,
+                    max_results: Some(limit),
+                    globs: Vec::new(),
+                    file_types: Vec::new(),
+                    exclude_file_types: Vec::new(),
+                })
+                .await
+                .map(|result| {
+                    let search_metadata = search_metadata_from_content_result(&result);
+                    (result.outcome, Some(search_metadata))
+                });
+
+            if let Ok((outcome, _)) = &result {
+                if !cancel_flag
+                    .as_ref()
+                    .is_some_and(|flag| flag.load(Ordering::Relaxed))
+                {
+                    for group in group_search_results(outcome.results.clone()) {
+                        bitfun_core::infrastructure::FileSearchProgressSink::report(
+                            progress_sink.as_ref(),
+                            group,
+                        );
+                    }
+                    bitfun_core::infrastructure::FileSearchProgressSink::flush(
+                        progress_sink.as_ref(),
+                    );
+                }
+            }
+
+            result.map_err(|error| {
+                bitfun_core::util::errors::BitFunError::service(format!(
+                    "Failed to search file contents via workspace search: {}",
+                    error
+                ))
+            })
+        } else {
+            filesystem_service
+                .search_file_contents_with_progress(
+                    &root_path,
+                    &pattern,
+                    options,
+                    cancel_flag.clone(),
+                    Some(progress_sink),
+                )
+                .await
+                .map(|outcome| (outcome, None))
+        };
 
         unregister_search_registry(&active_searches, Some(&search_id));
 
+        if cancel_flag
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            return;
+        }
+
         match result {
-            Ok(outcome) => {
+            Ok((outcome, search_metadata)) => {
                 info!(
                     "Content search stream completed: root_path={}, pattern={}, results_count={}, limit={}, truncated={}",
                     root_path,
@@ -2633,6 +2731,7 @@ pub async fn start_search_file_contents_stream(
                     limit,
                     outcome.truncated,
                     count_search_result_groups(&outcome.results),
+                    search_metadata,
                 );
             }
             Err(error) => {

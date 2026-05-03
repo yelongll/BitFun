@@ -11,6 +11,7 @@ use bitfun_core::agentic::tools::computer_use_capability::set_computer_use_deskt
 use bitfun_core::agentic::tools::computer_use_host::ComputerUseHostRef;
 use bitfun_core::infrastructure::ai::AIClientFactory;
 use bitfun_core::infrastructure::{get_path_manager_arc, try_get_path_manager_arc};
+use bitfun_core::service::search::get_global_workspace_search_service;
 use bitfun_core::service::workspace::get_global_workspace_service;
 use bitfun_core::util::{elapsed_ms, TimingCollector};
 use bitfun_transport::{TauriTransportAdapter, TransportAdapter};
@@ -27,6 +28,7 @@ use tauri::Manager;
 // Re-export API
 pub use api::*;
 
+use api::acp_client_api::*;
 use api::ai_rules_api::*;
 use api::clipboard_file_api::*;
 use api::commands::*;
@@ -41,6 +43,7 @@ use api::lsp_api::*;
 use api::lsp_workspace_api::*;
 use api::mcp_api::*;
 use api::runtime_api::*;
+use api::search_api::*;
 use api::session_api::*;
 use api::skill_api::*;
 use api::snapshot_service::*;
@@ -162,7 +165,7 @@ pub async fn run() {
 
     setup_panic_hook();
 
-    let run_result = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(logging::build_log_plugin(log_targets))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -312,6 +315,7 @@ pub async fn run() {
             }
 
             init_mcp_servers(app_handle.clone());
+            init_acp_clients(app_handle.clone());
 
             init_services(app_handle.clone(), startup_log_level);
 
@@ -321,22 +325,12 @@ pub async fn run() {
             Ok(())
         })
         .on_window_event({
-            static CLEANUP_DONE: AtomicBool = AtomicBool::new(false);
-
             move |window, event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if let tauri::WindowEvent::CloseRequested { .. } = event {
                     if window.label() == "main" {
-                        if CLEANUP_DONE
-                            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                            .is_ok()
-                        {
+                        if perform_process_exit_cleanup() {
                             log::info!("Main window close requested, cleaning up");
-                            bitfun_core::util::process_manager::cleanup_all_processes();
-                            api::remote_connect_api::cleanup_on_exit();
-
                             window.app_handle().exit(0);
-                        } else {
-                            api.prevent_close();
                         }
                     }
                 }
@@ -410,6 +404,9 @@ pub async fn run() {
             search_files,
             search_filenames,
             search_file_contents,
+            search_get_repo_status,
+            search_build_index,
+            search_rebuild_index,
             start_search_filenames_stream,
             start_search_file_contents_stream,
             cancel_search,
@@ -588,6 +585,20 @@ pub async fn run() {
             api::mcp_api::start_mcp_remote_oauth,
             api::mcp_api::get_mcp_remote_oauth_session,
             api::mcp_api::cancel_mcp_remote_oauth,
+            initialize_acp_clients,
+            get_acp_clients,
+            probe_acp_client_requirements,
+            predownload_acp_client_adapter,
+            install_acp_client_cli,
+            stop_acp_client,
+            load_acp_json_config,
+            save_acp_json_config,
+            submit_acp_permission_response,
+            create_acp_flow_session,
+            start_acp_dialog_turn,
+            cancel_acp_dialog_turn,
+            get_acp_session_options,
+            set_acp_session_model,
             lsp_initialize,
             lsp_start_server_for_file,
             lsp_stop_server,
@@ -776,9 +787,22 @@ pub async fn run() {
             api::debug_api::debug_open_devtools,
             api::debug_api::debug_close_devtools,
         ])
-        .run(tauri::generate_context!());
-    if let Err(e) = run_result {
-        log::error!("Error while running tauri application: {}", e);
+        .build(tauri::generate_context!());
+
+    match app {
+        Ok(app) => {
+            app.run(|_app_handle, event| {
+                if matches!(
+                    event,
+                    tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+                ) {
+                    perform_process_exit_cleanup();
+                }
+            });
+        }
+        Err(e) => {
+            log::error!("Error while running tauri application: {}", e);
+        }
     }
 }
 
@@ -791,6 +815,7 @@ async fn init_agentic_system() -> anyhow::Result<(
     Arc<bitfun_core::service::token_usage::TokenUsageService>,
 )> {
     use bitfun_core::agentic::*;
+    use bitfun_core::service::config::get_global_config_service;
 
     let ai_client_factory = AIClientFactory::get_global().await?;
 
@@ -828,12 +853,27 @@ async fn init_agentic_system() -> anyhow::Result<(
         event_queue.clone(),
         tool_pipeline.clone(),
     ));
+    
+    // Get execution config from global settings
+    let exec_config = match get_global_config_service().await {
+        Ok(config_service) => {
+            match config_service.get_config::<bitfun_core::service::config::types::GlobalConfig>(None).await {
+                Ok(global_config) => execution::ExecutionEngineConfig {
+                    max_rounds: global_config.ai.max_rounds,
+                    ..Default::default()
+                },
+                Err(_) => Default::default(),
+            }
+        },
+        Err(_) => Default::default(),
+    };
+    
     let execution_engine = Arc::new(execution::ExecutionEngine::new(
         round_executor,
         event_queue.clone(),
         session_manager.clone(),
         context_compressor,
-        Default::default(),
+        exec_config,
     ));
 
     let coordinator = Arc::new(coordination::ConversationCoordinator::new(
@@ -907,6 +947,17 @@ fn init_mcp_servers(app_handle: tauri::AppHandle) {
     });
 }
 
+fn init_acp_clients(app_handle: tauri::AppHandle) {
+    tokio::spawn(async move {
+        let state: tauri::State<'_, api::AppState> = app_handle.state();
+        if let Some(service) = state.acp_client_service.as_ref() {
+            if let Err(error) = service.initialize_all().await {
+                log::warn!("Failed to initialize ACP clients: {}", error);
+            }
+        }
+    });
+}
+
 fn setup_panic_hook() {
     std::panic::set_hook(Box::new(move |panic_info| {
         let location = panic_info
@@ -946,8 +997,53 @@ fn setup_panic_hook() {
             log::error!("  3) Run as administrator");
         }
 
+        perform_process_exit_cleanup();
         std::process::exit(1);
     }));
+}
+
+fn perform_process_exit_cleanup() -> bool {
+    static CLEANUP_DONE: AtomicBool = AtomicBool::new(false);
+
+    if CLEANUP_DONE
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return false;
+    }
+
+    if let Some(search_service) = get_global_workspace_search_service() {
+        let shutdown_thread = std::thread::Builder::new()
+            .name("workspace-search-shutdown".to_string())
+            .spawn(move || {
+                match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(runtime) => {
+                        runtime.block_on(async move {
+                            search_service.shutdown_all_daemons().await;
+                        });
+                    }
+                    Err(error) => {
+                        log::warn!(
+                            "Failed to create runtime for workspace search shutdown: {}",
+                            error
+                        );
+                    }
+                }
+            });
+
+        if let Err(error) = shutdown_thread {
+            log::warn!(
+                "Failed to spawn workspace search shutdown thread: {}",
+                error
+            );
+        }
+    }
+    bitfun_core::util::process_manager::cleanup_all_processes();
+    api::remote_connect_api::cleanup_on_exit();
+    true
 }
 
 fn start_event_loop_with_transport(

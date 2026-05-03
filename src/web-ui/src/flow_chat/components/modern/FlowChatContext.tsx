@@ -21,6 +21,7 @@ export interface FlowChatContextValue {
   // Session info
   sessionId?: string;
   activeSessionOverride?: Session | null;
+  allowUserMessageRollback?: boolean;
 
   // Config
   config?: FlowChatConfig;
@@ -56,6 +57,9 @@ export interface FlowChatContextValue {
   searchQuery?: string;
   searchMatchIndices?: ReadonlySet<number>;
   searchCurrentMatchVirtualIndex?: number;
+
+  // Continue dialog turn when max_rounds is reached
+  onContinueTurn?: (sessionId: string, turnId: string) => void;
 }
 
 export const FlowChatContext = createContext<FlowChatContextValue>({});
@@ -66,5 +70,4 @@ export const FlowChatContext = createContext<FlowChatContextValue>({});
 export const useFlowChatContext = () => {
   return useContext(FlowChatContext);
 };
-
 

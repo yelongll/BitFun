@@ -13,6 +13,7 @@ import AIModelConfig from '../../../infrastructure/config/components/AIModelConf
 import SessionConfig from '../../../infrastructure/config/components/SessionConfig';
 import AIRulesMemoryConfig from '../../../infrastructure/config/components/AIRulesMemoryConfig';
 import McpToolsConfig from '../../../infrastructure/config/components/McpToolsConfig';
+import AcpAgentsConfig from '../../../infrastructure/config/components/AcpAgentsConfig';
 import EditorConfig from '../../../infrastructure/config/components/EditorConfig';
 import BasicsConfig from '../../../infrastructure/config/components/BasicsConfig';
 import DesignerConfig from '../../../infrastructure/config/components/DesignerConfig';
@@ -44,6 +45,7 @@ const SettingsScene: React.FC = () => {
     case 'review':           Content = ReviewConfig;         break;
     case 'ai-context':       Content = AIRulesMemoryConfig; break;
     case 'mcp-tools':        Content = McpToolsConfig;      break;
+    case 'acp-agents':       Content = AcpAgentsConfig;     break;
     case 'editor':           Content = EditorConfig;         break;
     case 'designer':         Content = DesignerConfig;       break;
   }

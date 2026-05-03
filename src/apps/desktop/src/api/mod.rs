@@ -1,5 +1,6 @@
 //! API layer module
 
+pub mod acp_client_api;
 pub mod agentic_api;
 pub mod ai_memory_api;
 pub mod ai_rules_api;
@@ -30,6 +31,7 @@ pub mod path_target;
 pub mod project_context_api;
 pub mod remote_connect_api;
 pub mod runtime_api;
+pub mod search_api;
 pub mod session_api;
 pub mod session_storage_path;
 pub mod skill_api;
@@ -41,5 +43,6 @@ pub mod subagent_api;
 pub mod system_api;
 pub mod terminal_api;
 pub mod tool_api;
+pub mod workspace_activation;
 
 pub use app_state::{AppState, AppStatistics, HealthStatus, RemoteWorkspace};

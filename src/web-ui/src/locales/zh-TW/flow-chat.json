@@ -36,6 +36,9 @@
       "title": "拖拽調整面板大小 | 雙擊切換模式 | 當前: {{mode}}"
     }
   },
+  "runtimeStatus": {
+    "waitingForModelResponse": "等待模型回應..."
+  },
   "session": {
     "new": "新建會話",
     "newCode": "新建 Code 會話",
@@ -366,14 +369,29 @@
     "fixCompleted": "修復完成",
     "fixFailed": "修復失敗",
     "fixTimeout": "修復超時",
+    "fixInterrupted": "修復已中斷，還剩 {{count}} 項。",
+    "continueFix": "繼續修復 {{count}} 項",
+    "skipRemaining": "跳過剩餘項",
     "reviewError": "審核出錯",
     "dismiss": "關閉",
     "close": "關閉",
+    "minimize": "收起",
+    "restore": "打開 {{label}}",
+    "fixAndReviewRunning": "正在修復\u0026準備重審...",
+    "minimizedDeep": "深度審核",
+    "minimizedStandard": "程式碼審核",
+    "minimizedFix": "正在修復",
+    "minimizedFixReview": "修復並重審中",
+    "minimizedFixCompleted": "修復完成",
+    "minimizedFixFailed": "需要處理",
+    "minimizedReviewInterrupted": "審核已中斷",
+    "minimizedResume": "正在繼續審核",
     "showCustomInput": "補充說明",
     "hideCustomInput": "收起說明",
     "customInstructionsPlaceholder": "描述修復的額外要求或上下文信息...",
     "fillBackInput": "填入輸入框",
     "fillBackInputHint": "將選中的修復計劃填入輸入框，供手動編輯",
+    "fixCompletedMessage": "所有修復已成功應用。",
     "replaceInputConfirmTitle": "替換當前輸入？",
     "replaceInputConfirmMessage": "輸入框中已有文本，填入計劃將替換當前草稿內容。",
     "replaceInputConfirmAction": "替換輸入",
@@ -396,7 +414,41 @@
     "diagnosticsErrorType": "錯誤類型",
     "diagnosticsDescription": "錯誤描述",
     "diagnosticsSuggestedActions": "建議操作",
-    "diagnosticsTechnicalDetails": "技術詳情"
+    "diagnosticsTechnicalDetails": "技術詳情",
+    "reviewInterruptedWithReason": "深度審核已中斷：{{reason}}",
+    "resumeBlockedWithReason": "無法繼續：{{reason}}",
+    "resumeFailedWithReason": "繼續失敗：{{reason}}",
+    "reviewErrorWithReason": "審核出錯：{{reason}}",
+    "retryResume": "重試",
+    "retryWithDifferentModel": "嘗試其他模型",
+    "viewPartialResults": "查看部分結果",
+    "hidePartialResults": "隱藏部分結果",
+    "partialResultsDescription": "{{completed}}/{{total}} 個 reviewer 已完成",
+    "partialIssues": "發現 {{count}} 個問題",
+    "partialRemediationItems": "{{count}} 個修復項",
+    "contextOverflowTitle": "上下文超出限制，請選擇處理方式：",
+    "longRunningHint": "審核仍在進行中，可能需要更長時間...",
+    "elapsedTime": "已運行 {{time}}",
+    "showRecoveryPlan": "顯示恢復計劃",
+    "hideRecoveryPlan": "隱藏恢復計劃",
+    "recoveryPreserve": "{{count}} 個已完成的 reviewer 將保留",
+    "recoveryRerun": "{{count}} 個 reviewer 將重新運行",
+    "recoverySkip": "{{count}} 個 reviewer 將被跳過",
+    "degradation": {
+      "reduceReviewers": "僅運行核心 reviewer",
+      "reduceReviewersDesc": "跳過額外 reviewer，只保留核心 reviewer",
+      "reduceReviewersPending": "精簡 reviewer 模式將在後續版本中支持",
+      "compressContext": "壓縮上下文後重試",
+      "compressContextDesc": "壓縮已完成的 reviewer 結果以釋放上下文空間",
+      "compressContextPending": "上下文壓縮將在後續版本中支持",
+      "viewPartial": "查看部分結果",
+      "viewPartialDesc": "查看已完成的 reviewer 結果"
+    },
+    "launchError": {
+      "modelConfig": "無法創建審核會話，請檢查模型配置",
+      "network": "網絡連接中斷，審核未能啟動",
+      "unknown": "審核啟動失敗，請重試"
+    }
   },
   "reviewActionBar": {
     "reviewCompletedStandard": "審核已完成",
@@ -405,7 +457,8 @@
     "fixAndReviewRequestDisplayStandard": "修復程式碼審核問題並重新審核",
     "fixRequestDisplayDeep": "開始修復深度審核問題",
     "fixAndReviewRequestDisplayDeep": "修復深度審核問題並重新審核",
-    "needsDecisionTag": "需決策"
+    "needsDecisionTag": "需決策",
+    "noIssuesFound": "未發現問題，做得不錯！"
   },
   "deepReviewConsent": {
     "windowTitle": "深度審核",
@@ -420,7 +473,8 @@
     "time": "運行期間可以繼續工作；只有整個深度審核在後台完成時才會通知你。",
     "dontShowAgain": "下次不再提示",
     "cancel": "取消",
-    "confirm": "開始深度審核"
+    "confirm": "開始深度審核",
+    "estimatedTokens": "預計消耗：{{min}} - {{max}} tokens"
   },
   "flowChatHeader": {
     "turnList": "輪次列表",
@@ -562,6 +616,9 @@
       "failed": "失敗",
       "confirmExecute": "確認執行",
       "cancel": "取消",
+      "copyCommand": "複製 Git 命令",
+      "commandCopied": "Git 命令已複製",
+      "copyCommandFailed": "複製 Git 命令失敗",
       "expandOutput": "展開輸出",
       "collapseOutput": "收起輸出",
       "noOutput": "(無輸出)",
@@ -619,6 +676,9 @@
       "inputPlaceholder": "輸入命令...",
       "commandEmptyWarning": "命令為空，無法執行",
       "executeCommandTitle": "執行命令",
+      "copyCommand": "複製命令",
+      "commandCopied": "命令已複製",
+      "copyCommandFailed": "複製命令失敗",
       "cancel": "取消",
       "interrupt": "中斷命令執行",
       "openInPanel": "在右側面板打開Terminal",
@@ -693,7 +753,8 @@
       "searching": "正在搜索 \"{{term}}\"...",
       "preparingSearch": "準備搜索 \"{{term}}\"",
       "clickToOpenLink": "點擊打開鏈接",
-      "noTitle": "無標題"
+      "noTitle": "無標題",
+      "summaryAvailable": "有搜索摘要"
     },
     "todoWrite": {
       "tasksCount": "{{count}} 項任務",
@@ -899,11 +960,16 @@
       "toolBatchComplete": "工具批次完成",
       "manualTrigger": "手動觸發",
       "autoTrigger": "自動觸發",
+      "afterAiResponse": "AI 回覆後",
       "contextCompressionFailed": "上下文壓縮失敗",
       "contextCompression": "上下文壓縮:",
-      "localFallbackHeader": "模型請求異常，已改用本地結構化裁剪",
+      "localFallbackHeader": "模型請求異常，改用本地壓縮",
       "localFallbackNotice": "本次壓縮無法使用模型生成總結，因此改用了本地結構化裁剪。",
-      "noSummaryNotice": "本次壓縮沒有生成額外的總結內容。"
+      "noSummaryNotice": "本次壓縮沒有生成額外的總結內容。",
+      "tokenChange": "{{before}} → {{after}} tokens",
+      "savingsTag": "節省 {{saved}} · 壓縮率 {{ratio}}%",
+      "compressingContext": "正在壓縮上下文...",
+      "compressionCount": "第 {{count}} 次壓縮"
     },
     "globSearch": {
       "parsingPattern": "解析搜索模式中...",
@@ -1030,6 +1096,7 @@
       "preparingReview": "準備代碼審核",
       "reviewFailed": "代碼審核失敗：{{error}}",
       "unknownError": "未知錯誤",
+      "noIssues": "無問題",
       "collapseDetails": "收起詳情",
       "expandDetails": "展開詳情",
       "overallAssessment": "總體評估",
@@ -1046,6 +1113,24 @@
       "reviewerIssues": "{{count}} 個問題",
       "reviewerIssuesUnknown": "問題數量不可用",
       "reviewerTeamSummary": "{{total}} 位審核者 · {{completed}} 已完成 · {{degraded}} 需關注",
+      "severities": {
+        "critical": "嚴重",
+        "high": "高",
+        "medium": "中",
+        "low": "低",
+        "info": "資訊"
+      },
+      "reviewerStatuses": {
+        "completed": "已完成",
+        "timed_out": "已逾時",
+        "cancelled_by_user": "使用者已取消",
+        "cancelled": "已取消",
+        "failed": "失敗",
+        "skipped": "已跳過",
+        "running": "運行中",
+        "partial": "部分完成",
+        "unknown": "未知"
+      },
       "sectionItemCount": "{{count}} 項",
       "remediationPlan": "修復計劃",
       "sections": {
@@ -1112,11 +1197,14 @@
         "noSelectionHint": "至少選擇一項修復計劃後才能開始修復。",
         "ungrouped": "其他",
         "startFix": "開始修復",
-        "fixAndReview": "修復後重新審核",
+        "fixAndReview": "修復\\u0026重審",
         "cancel": "取消",
         "fixUnavailable": "無法開始修復：審核會話不可用。",
         "fixRequestDisplay": "開始修復深度審核問題",
-        "fixAndReviewRequestDisplay": "修復深度審核問題並重新審核"
+        "fixAndReviewRequestDisplay": "修復深度審核問題並重新審核",
+        "recommended": "推薦",
+        "expandOptions": "查看選項",
+        "collapseOptions": "收起選項"
       },
       "riskLevels": {
         "low": "低風險",
@@ -1313,5 +1401,9 @@
         "prompt": "請幫我做一個預算規劃。\n\n背景：\n- 預算週期（按月/按季度/按項目）：\n- 總預算：\n- 固定支出：\n- 可變支出：\n- 目標（省錢/更可控/為某目標攢錢）：\n\n請輸出：\n1) 預算分類與比例建議\n2) 具體到類別的預算表（可複製到表格）\n3) 超支預案與調整規則\n4) 每週/每月覆盤清單"
       }
     }
+  },
+  "subagent": {
+    "showingLines": "當前僅顯示 {{shown}} / {{total}} 行",
+    "showAll": "顯示全部"
   }
 }

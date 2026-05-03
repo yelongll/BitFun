@@ -8,6 +8,10 @@ const eventBusEmitMock = vi.hoisted(() => vi.fn());
 const confirmWarningMock = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: vi.fn(),
+  },
   useTranslation: () => ({
     t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key,
   }),
@@ -58,12 +62,50 @@ vi.mock('@/component-library/components/ConfirmDialog/confirmService', () => ({
 vi.mock('@/shared/notification-system', () => ({
   notificationService: {
     error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
   },
 }));
 
 vi.mock('@/shared/utils/logger', () => ({
   createLogger: () => ({
     error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
+vi.mock('../../store/FlowChatStore', () => ({
+  flowChatStore: {
+    getState: () => ({
+      sessions: new Map(),
+      activeSessionId: null,
+    }),
+    subscribe: () => () => {},
+  },
+}));
+
+vi.mock('../../utils/deepReviewExperience', () => ({
+  aggregateReviewerProgress: () => [],
+  buildReviewerProgressSummary: () => null,
+  extractPartialReviewData: () => null,
+  buildErrorAttribution: () => null,
+  buildRecoveryPlan: () => null,
+  evaluateDegradationOptions: () => [],
+}));
+
+vi.mock('../../services/DeepReviewContinuationService', () => ({
+  continueDeepReviewSession: vi.fn(),
+}));
+
+vi.mock('@/shared/ai-errors/aiErrorPresenter', () => ({
+  getAiErrorPresentation: () => ({
+    category: 'network',
+    titleKey: 'test',
+    messageKey: 'test',
+    diagnostics: 'test diagnostics',
+    actions: [],
   }),
 }));
 
@@ -277,7 +319,7 @@ describeWithJsdom('DeepReviewActionBar', () => {
     expect(useReviewActionBarStore.getState().dismissed).toBe(true);
   });
 
-  it('dismisses action bar when close button is clicked', async () => {
+  it('minimizes action bar when close button is clicked', async () => {
     const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
 
     useReviewActionBarStore.getState().showActionBar({
@@ -294,7 +336,7 @@ describeWithJsdom('DeepReviewActionBar', () => {
       root.render(<DeepReviewActionBar />);
     });
 
-    const closeButton = container.querySelector('.deep-review-action-bar__close');
+    const closeButton = container.querySelector('.deep-review-action-bar__controls-btn');
     expect(closeButton).toBeTruthy();
 
     await act(async () => {
@@ -302,7 +344,38 @@ describeWithJsdom('DeepReviewActionBar', () => {
       await Promise.resolve();
     });
 
-    expect(useReviewActionBarStore.getState().dismissed).toBe(true);
+    const state = useReviewActionBarStore.getState();
+    expect(state.dismissed).toBe(false);
+    expect(state.minimized).toBe(true);
+  });
+
+  it('shows distinct progress text after starting fix and re-review', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+
+    useReviewActionBarStore.getState().showActionBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      reviewData: {
+        summary: { recommended_action: 'request_changes' },
+        remediation_plan: ['Fix issue 1'],
+      },
+      phase: 'review_completed',
+    });
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    const fixAndReviewButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Fix and re-review'));
+    expect(fixAndReviewButton).toBeTruthy();
+
+    await act(async () => {
+      fixAndReviewButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Fixing and preparing re-review...');
   });
 
   it('marks completed remediation items when fix completes', async () => {

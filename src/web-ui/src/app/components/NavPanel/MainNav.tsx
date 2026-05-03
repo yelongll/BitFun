@@ -610,7 +610,7 @@ const MainNav: React.FC<MainNavProps> = ({
                     aria-expanded={workspaceMenuOpen}
                     onClick={toggleWorkspaceMenu}
                   >
-                    <Plus size={13} />
+                    <Plus size="var(--bitfun-nav-row-action-icon-size)" />
                   </button>
                 </Tooltip>
               </div>

@@ -20,12 +20,14 @@ import { Terminal, Play, X, ExternalLink, Square } from 'lucide-react';
 import { createTerminalTab } from '@/shared/utils/tabUtils';
 import { BaseToolCard, ToolCardHeader } from './BaseToolCard';
 import { CompactToolCard, CompactToolCardHeader } from './CompactToolCard';
-import { CubeLoading, IconButton, Tooltip } from '../../component-library';
+import { CubeLoading, IconButton } from '../../component-library';
 import { TerminalOutputRenderer } from '@/tools/terminal/components';
 import { createLogger } from '@/shared/utils/logger';
 import { useToolCardHeightContract, type ToolCardCollapseReason } from './useToolCardHeightContract';
 import { getTerminalViewState, type TerminalViewState } from './terminalToolCardState';
 import { ToolTimeoutIndicator } from './ToolTimeoutIndicator';
+import { ToolCardCopyAction, ToolCardHeaderActions } from './ToolCardHeaderActions';
+import { ToolCommandPreview } from './ToolCommandPreview';
 import './TerminalToolCard.scss';
 
 const log = createLogger('TerminalToolCard');
@@ -350,6 +352,10 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
 
   const showConfirmButtons = status === 'pending_confirmation';
   const canExecuteCommand = Boolean(command?.trim());
+  const getCopyCommandText = useCallback(
+    () => (typeof command === 'string' ? command : ''),
+    [command],
+  );
 
   const viewState = useMemo(() => {
     return getTerminalViewState({
@@ -422,28 +428,14 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
 
   const handleCardClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.terminal-action-btn, .terminal-confirm-actions')) {
+    if (target.closest('.tool-card-header-actions, .terminal-action-btn, .terminal-confirm-actions')) {
       return;
     }
 
     toggleExpanded();
   }, [toggleExpanded]);
 
-  const renderStatusIcon = () => {
-    if (terminalSessionId) {
-      return (
-        <IconButton
-          className="terminal-action-btn external-btn"
-          variant="ghost"
-          size="xs"
-          onClick={handleOpenInPanel}
-          tooltip={t('toolCards.terminal.openInPanel')}
-        >
-          <ExternalLink size={12} />
-        </IconButton>
-      );
-    }
-
+  const renderLoadingStatusIcon = () => {
     if (viewState.isLoading) {
       return <CubeLoading size="small" />;
     }
@@ -451,38 +443,56 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
     return null;
   };
 
-  const renderCommandContent = (variant: 'default' | 'compact' = 'default') => {
-    const commandContent = (
-      <>
-        {command
-          || <span className="command-empty">{t(showConfirmButtons ? 'toolCards.terminal.commandEmpty' : 'toolCards.terminal.noCommand')}</span>}
-      </>
-    );
-    const commandNode = variant === 'compact' ? (
-      <span ref={commandRef} className="terminal-command-compact">
-        {commandContent}
-      </span>
-    ) : (
-      <code ref={commandRef} className="terminal-command">
-        {commandContent}
-      </code>
-    );
-
-    if (command && isCommandTruncated) {
-      return (
-        <Tooltip
-          content={<div className="terminal-command-tooltip-content">{command}</div>}
-          placement="bottom"
-          className="terminal-command-tooltip"
-          interactive
-        >
-          {commandNode}
-        </Tooltip>
-      );
+  const renderOpenInPanelButton = () => {
+    if (!terminalSessionId) {
+      return null;
     }
 
-    return commandNode;
+    return (
+      <IconButton
+        className="terminal-action-btn external-btn terminal-open-panel-btn"
+        variant="ghost"
+        size="xs"
+        onClick={handleOpenInPanel}
+        tooltip={t('toolCards.terminal.openInPanel')}
+      >
+        <ExternalLink size={12} />
+      </IconButton>
+    );
   };
+
+  const renderCopyCommandButton = () => (
+    <ToolCardCopyAction
+      className="terminal-action-btn copy-command-btn"
+      getText={getCopyCommandText}
+      disabled={!canExecuteCommand}
+      tooltip={t('toolCards.terminal.copyCommand')}
+      copiedTooltip={t('toolCards.terminal.commandCopied')}
+      successMessage={t('toolCards.terminal.commandCopied')}
+      failureMessage={t('toolCards.terminal.copyCommandFailed')}
+      ariaLabel={t('toolCards.terminal.copyCommand')}
+    />
+  );
+
+  const renderTimeoutIndicator = () => (
+    <span className="terminal-header-duration">
+      <ToolTimeoutIndicator
+        startTime={toolItem.startTime}
+        isRunning={status === 'preparing' || status === 'streaming' || status === 'running'}
+        timeoutMs={
+          typeof toolCall?.input?.timeout_ms === 'number' && toolCall.input.timeout_ms > 0
+            ? toolCall.input.timeout_ms
+            : undefined
+        }
+        showControls={false}
+        completedDurationMs={
+          status === 'completed' && parsedResult?.executionTimeMs
+            ? parsedResult.executionTimeMs
+            : undefined
+        }
+      />
+    </span>
+  );
 
   const renderStatusText = () => {
     if (!viewState.statusLabel || !viewState.statusClassName) {
@@ -496,72 +506,88 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
     );
   };
 
+  const renderHeaderActions = (includeInterrupt: boolean) => (
+    <ToolCardHeaderActions className="terminal-header-actions">
+      {renderCopyCommandButton()}
+      {renderOpenInPanelButton()}
+
+      {showConfirmButtons && (
+        <span className="terminal-confirm-actions" onClick={(e) => e.stopPropagation()}>
+          <IconButton
+            className="terminal-action-btn execute-btn"
+            variant="success"
+            size="xs"
+            onClick={handleExecute}
+            disabled={!canExecuteCommand}
+            tooltip={
+              canExecuteCommand
+                ? t('toolCards.terminal.executeCommandTitle')
+                : t('toolCards.terminal.commandEmptyWarning')
+            }
+          >
+            <Play size={12} fill="currentColor" />
+          </IconButton>
+          <IconButton
+            className="terminal-action-btn cancel-btn"
+            variant="danger"
+            size="xs"
+            onClick={handleReject}
+            tooltip={t('toolCards.terminal.cancel')}
+          >
+            <X size={14} />
+          </IconButton>
+        </span>
+      )}
+
+      {includeInterrupt && viewState.showInterruptButton && (
+        <IconButton
+          className="terminal-action-btn interrupt-btn"
+          variant="warning"
+          size="xs"
+          onClick={handleInterrupt}
+          tooltip={t('toolCards.terminal.interrupt')}
+        >
+          <Square size={12} fill="currentColor" />
+        </IconButton>
+      )}
+    </ToolCardHeaderActions>
+  );
+
+  const renderHeaderExtra = (includeInterrupt: boolean) => (
+    <span className="terminal-header-extra">
+      {renderTimeoutIndicator()}
+      {viewState.hasHeaderExtra && renderStatusText()}
+      {renderHeaderActions(includeInterrupt)}
+    </span>
+  );
+
+  const renderCommandContent = (variant: 'default' | 'compact' = 'default') => {
+    const commandText = typeof command === 'string' ? command : '';
+    const emptyText = t(showConfirmButtons ? 'toolCards.terminal.commandEmpty' : 'toolCards.terminal.noCommand');
+
+    return (
+      <ToolCommandPreview
+        ref={commandRef}
+        as={variant === 'compact' ? 'span' : 'code'}
+        command={commandText}
+        emptyText={emptyText}
+        className={
+          variant === 'compact'
+            ? 'terminal-command-compact tool-command-preview--compact'
+            : 'terminal-command'
+        }
+        tooltipContent={commandText && isCommandTruncated ? commandText : undefined}
+      />
+    );
+  };
+
   const renderHeader = () => (
     <ToolCardHeader
       icon={<Terminal size={16} className="terminal-card-icon" />}
       action={t('toolCards.terminal.executeCommand')}
       content={renderCommandContent()}
-      extra={(
-        <>
-          <ToolTimeoutIndicator
-            startTime={toolItem.startTime}
-            isRunning={status === 'preparing' || status === 'streaming' || status === 'running'}
-            timeoutMs={
-              typeof toolCall?.input?.timeout_ms === 'number' && toolCall.input.timeout_ms > 0
-                ? toolCall.input.timeout_ms
-                : undefined
-            }
-            showControls={false}
-            completedDurationMs={
-              status === 'completed' && parsedResult?.executionTimeMs
-                ? parsedResult.executionTimeMs
-                : undefined
-            }
-          />
-          {viewState.hasHeaderExtra && renderStatusText()}
-
-          {showConfirmButtons && (
-            <div className="terminal-confirm-actions" onClick={(e) => e.stopPropagation()}>
-              <IconButton
-                className="terminal-action-btn execute-btn"
-                variant="success"
-                size="xs"
-                onClick={handleExecute}
-                disabled={!canExecuteCommand}
-                tooltip={
-                  canExecuteCommand
-                    ? t('toolCards.terminal.executeCommandTitle')
-                    : t('toolCards.terminal.commandEmptyWarning')
-                }
-              >
-                <Play size={12} fill="currentColor" />
-              </IconButton>
-              <IconButton
-                className="terminal-action-btn cancel-btn"
-                variant="danger"
-                size="xs"
-                onClick={handleReject}
-                tooltip={t('toolCards.terminal.cancel')}
-              >
-                <X size={14} />
-              </IconButton>
-            </div>
-          )}
-
-          {viewState.showInterruptButton && (
-            <IconButton
-              className="terminal-action-btn interrupt-btn"
-              variant="warning"
-              size="xs"
-              onClick={handleInterrupt}
-              tooltip={t('toolCards.terminal.interrupt')}
-            >
-              <Square size={12} fill="currentColor" />
-            </IconButton>
-          )}
-        </>
-      )}
-      statusIcon={renderStatusIcon()}
+      extra={renderHeaderExtra(true)}
+      statusIcon={renderLoadingStatusIcon()}
     />
   );
 
@@ -570,55 +596,8 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
       icon={<Terminal size={16} className="terminal-card-icon" />}
       action={t('toolCards.terminal.executeCommand')}
       content={renderCommandContent('compact')}
-      extra={(
-        <>
-          <ToolTimeoutIndicator
-            startTime={toolItem.startTime}
-            isRunning={status === 'preparing' || status === 'streaming' || status === 'running'}
-            timeoutMs={
-              typeof toolCall?.input?.timeout_ms === 'number' && toolCall.input.timeout_ms > 0
-                ? toolCall.input.timeout_ms
-                : undefined
-            }
-            showControls={false}
-            completedDurationMs={
-              status === 'completed' && parsedResult?.executionTimeMs
-                ? parsedResult.executionTimeMs
-                : undefined
-            }
-          />
-          {viewState.hasHeaderExtra && renderStatusText()}
-
-          {showConfirmButtons && (
-            <div className="terminal-confirm-actions" onClick={(e) => e.stopPropagation()}>
-              <IconButton
-                className="terminal-action-btn execute-btn"
-                variant="success"
-                size="xs"
-                onClick={handleExecute}
-                disabled={!canExecuteCommand}
-                tooltip={
-                  canExecuteCommand
-                    ? t('toolCards.terminal.executeCommandTitle')
-                    : t('toolCards.terminal.commandEmptyWarning')
-                }
-              >
-                <Play size={12} fill="currentColor" />
-              </IconButton>
-              <IconButton
-                className="terminal-action-btn cancel-btn"
-                variant="danger"
-                size="xs"
-                onClick={handleReject}
-                tooltip={t('toolCards.terminal.cancel')}
-              >
-                <X size={14} />
-              </IconButton>
-            </div>
-          )}
-        </>
-      )}
-      rightStatusIcon={renderStatusIcon()}
+      extra={renderHeaderExtra(false)}
+      rightStatusIcon={renderLoadingStatusIcon()}
     />
   );
   const expandedContent = isExpanded
@@ -647,7 +626,7 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
           status={status}
           isExpanded={false}
           onClick={handleCardClick}
-          className="terminal-tool-card terminal-tool-card--compact-collapsed"
+          className="terminal-tool-card terminal-tool-card--compact-collapsed compact-tool-card-wrapper--dense-command"
           clickable
           header={renderCompactHeader()}
         />
