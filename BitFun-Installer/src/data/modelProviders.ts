@@ -47,9 +47,8 @@ export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
     models: [
       'gpt-5-nano',
       'big-pickle',
-      'mimo-v2-pro-free',
-      'mimo-v2-omni-free',
       'nemotron-3-super-free',
+      'hy3-preview-free',
       'minimax-m2.5-free',
     ],
     helpUrl: 'https://opencode.ai/zen',

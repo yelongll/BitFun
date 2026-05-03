@@ -17,6 +17,7 @@ import { useDebugInspector } from '@/infrastructure/debug/useDebugInspector';
 
 // Toolbar Mode
 import { ToolbarModeProvider } from '../flow_chat';
+import { ToolbarProvider } from './contexts/ToolbarContext';
 
 const log = createLogger('App');
 /**

@@ -2259,7 +2259,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               setHasChanges(newContent !== originalContentRef.current);
               onContentChange?.(newContent, newContent !== originalContentRef.current);
             }}
-            theme={theme === 'vs-light' ? 'light' : 'dark'}
             readOnly={readOnly}
             onCursorChange={(line, column) => setCursorPosition({ line, column })}
           />

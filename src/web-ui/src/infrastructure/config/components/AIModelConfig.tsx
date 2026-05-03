@@ -1832,7 +1832,7 @@ const AIModelConfig: React.FC = () => {
                 </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.modelSelection')} *`} wide multiline>
                   <div className="bitfun-ai-model-config__control-stack">
-                    <div className="bitfun-ai-model-config__model-picker-row" style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+                    <div className="bitfun-ai-model-config__model-picker-row">
                       <Select
                         value={selectedModelValues}
                         onChange={(value) => {
@@ -1843,26 +1843,15 @@ const AIModelConfig: React.FC = () => {
                         options={availableModelOptions}
                         searchable
                         multiple
+                        showSelectAll
                         loading={isFetchingRemoteModels}
                         emptyText={t('providerSelection.noPresetModels')}
                         searchPlaceholder={t('providerSelection.inputModelName')}
                         size="small"
                         onOpenChange={handleModelSelectionOpenChange}
                         renderValue={renderModelPickerValue}
-                        style={{ flex: 1 }}
                         className={selectedModelValues.length > 0 ? 'bitfun-ai-model-config__model-picker-select bitfun-ai-model-config__model-picker-select--has-value' : 'bitfun-ai-model-config__model-picker-select'}
                       />
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        onClick={() => {
-                          const allModelNames = availableModelOptions.map(opt => String(opt.value));
-                          syncSelectedModelDrafts(allModelNames, editingConfig);
-                        }}
-                        title={t('selectAll')}
-                      >
-                        {t('selectAll')}
-                      </Button>
                     </div>
                     <div className="bitfun-ai-model-config__manual-model-entry">
                       <Input
@@ -1952,7 +1941,7 @@ const AIModelConfig: React.FC = () => {
               <>
                 <ConfigPageRow label={`${t('form.modelSelection')} *`} wide multiline>
                   <div className="bitfun-ai-model-config__control-stack">
-                    <div className="bitfun-ai-model-config__model-picker-row" style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+                    <div className="bitfun-ai-model-config__model-picker-row">
                       <Select
                         value={editingConfig.id ? (selectedModelValues[0] || '') : selectedModelValues}
                         onChange={(value) => {
@@ -1965,26 +1954,13 @@ const AIModelConfig: React.FC = () => {
                         options={availableModelOptions}
                         searchable
                         multiple={!editingConfig.id}
+                        showSelectAll={!editingConfig.id}
                         loading={isFetchingRemoteModels}
                         emptyText={t('providerSelection.noPresetModels')}
                         searchPlaceholder={t('providerSelection.inputModelName')}
                         size="small"
                         onOpenChange={handleModelSelectionOpenChange}
-                        style={{ flex: 1 }}
                       />
-{!editingConfig.id && (
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={() => {
-                            const allModelNames = availableModelOptions.map(opt => String(opt.value));
-                            syncSelectedModelDrafts(allModelNames, editingConfig, false);
-                          }}
-                          title={t('selectAll')}
-                        >
-                          {t('selectAll')}
-                        </Button>
-                      )}
                     </div>
                     <div className="bitfun-ai-model-config__manual-model-entry">
                       <Input

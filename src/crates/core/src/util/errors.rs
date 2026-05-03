@@ -9,68 +9,68 @@ use thiserror::Error;
 /// Unified error type for the BitFun application
 #[derive(Debug, Error, Serialize)]
 pub enum BitFunError {
-    #[error("Service error: {0}")]
+    #[error("服务错误: {0}")]
     Service(String),
 
-    #[error("Agent error: {0}")]
+    #[error("智能体错误: {0}")]
     Agent(String),
 
-    #[error("Tool error: {0}")]
+    #[error("工具错误: {0}")]
     Tool(String),
 
-    #[error("AI client error: {0}")]
+    #[error("AI客户端错误: {0}")]
     AIClient(String),
 
-    #[error("Session error: {0}")]
+    #[error("会话错误: {0}")]
     Session(String),
 
-    #[error("Workspace error: {0}")]
+    #[error("工作空间错误: {0}")]
     Workspace(String),
 
-    #[error("Validation error: {0}")]
+    #[error("验证错误: {0}")]
     Validation(String),
 
-    #[error("IO error: {0}")]
+    #[error("IO错误: {0}")]
     #[serde(serialize_with = "serialize_io_error")]
     Io(#[from] std::io::Error),
 
-    #[error("Serialization error: {0}")]
+    #[error("序列错误: {0}")]
     #[serde(serialize_with = "serialize_serde_error")]
     Serialization(#[from] serde_json::Error),
 
-    #[error("HTTP error: {0}")]
+    #[error("HTTP错误: {0}")]
     #[serde(serialize_with = "serialize_reqwest_error")]
     Http(#[from] reqwest::Error),
 
-    #[error("Other error: {0}")]
+    #[error("其他错误: {0}")]
     #[serde(serialize_with = "serialize_anyhow_error")]
     Other(#[from] anyhow::Error),
 
-    #[error("Semaphore acquire error: {0}")]
+    #[error("信号量获取错误: {0}")]
     Semaphore(String),
 
-    #[error("MCP error: {0}")]
+    #[error("MCP错误: {0}")]
     MCPError(String),
 
-    #[error("Process error: {0}")]
+    #[error("进程错误: {0}")]
     ProcessError(String),
 
-    #[error("Not found: {0}")]
+    #[error("未找到: {0}")]
     NotFound(String),
 
-    #[error("Not implemented: {0}")]
+    #[error("未实现: {0}")]
     NotImplemented(String),
 
-    #[error("Timeout: {0}")]
+    #[error("超时错误: {0}")]
     Timeout(String),
 
-    #[error("Configuration error: {0}")]
+    #[error("配置错误: {0}")]
     Configuration(String),
 
-    #[error("Deserialization error: {0}")]
+    #[error("序列化错误: {0}")]
     Deserialization(String),
 
-    #[error("Cancelled: {0}")]
+    #[error("已取消: {0}")]
     Cancelled(String),
 }
 
@@ -308,14 +308,14 @@ fn classify_ai_error(msg: &str) -> ErrorCategory {
         ],
     ) {
         ErrorCategory::InvalidRequest
-    } else if m.contains("loop detected") || m.contains("consecutive same tool") {
+    } else if m.contains("循环检测") || m.contains("连续使用相同工具错误") {
         ErrorCategory::LoopDetected
     } else if m.contains("timeout") || m.contains("timed out") {
         ErrorCategory::Timeout
-    } else if m.contains("stream closed")
-        || m.contains("sse error")
-        || m.contains("connection reset")
-        || m.contains("broken pipe")
+    } else if m.contains("流已关闭")
+        || m.contains("sse 错误")
+        || m.contains("连接重置错误")
+        || m.contains("管道错误")
     {
         ErrorCategory::Network
     } else {
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn classifies_glm_quota_error_as_provider_quota() {
         let err = BitFunError::AIClient(
-            r#"Provider error: provider=glm, code=1113, message=余额不足或无可用资源包,请充值。, request_id=20260425142416"#.to_string(),
+            r#"供应商错误，provider=glm, code=1113, message=余额不足或无可用资源包,请充值。, request_id=20260425142416"#.to_string(),
         );
 
         assert_eq!(err.error_category(), ErrorCategory::ProviderQuota);
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn classifies_deepseek_insufficient_balance_as_provider_quota() {
         let err = BitFunError::AIClient(
-            "DeepSeek API error 402 - Insufficient Balance: You have run out of balance"
+            "DeepSeek API 错误 402 - 余额不足或无可用资源包"
                 .to_string(),
         );
 
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn classifies_anthropic_overload_as_provider_unavailable() {
         let err = BitFunError::AIClient(
-            "Anthropic API error 529: overloaded_error: Anthropic API is temporarily overloaded"
+            "Anthropic API 错误 529: 超载错误，Anthropic API 临时超载。"
                 .to_string(),
         );
 

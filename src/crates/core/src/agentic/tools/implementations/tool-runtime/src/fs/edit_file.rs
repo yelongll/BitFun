@@ -43,7 +43,7 @@ pub fn apply_edit_to_content(
     let matches: Vec<_> = normalized_content.match_indices(&normalized_old).collect();
 
     if matches.is_empty() {
-        return Err("old_string not found in file.".to_string());
+        return Err("未在文件中找到旧字符串。".to_string());
     }
 
     if matches.len() > 1 && !replace_all {
@@ -88,11 +88,11 @@ pub fn edit_file(
     replace_all: bool,
 ) -> Result<EditResult, String> {
     let content = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file {}: {}", file_path, e))?;
+        .map_err(|e| format!("文件读取错误 {}: {}", file_path, e))?;
     let result = apply_edit_to_content(&content, old_string, new_string, replace_all)?;
 
     fs::write(file_path, &result.new_content)
-        .map_err(|e| format!("Failed to write file {}: {}", file_path, e))?;
+        .map_err(|e| format!("文件写入错误 {}: {}", file_path, e))?;
 
     Ok(result.edit_result)
 }
@@ -107,10 +107,10 @@ mod tests {
     fn write_temp_file(contents: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("time went backwards")
+            .expect("时间戳获取失败")
             .as_nanos();
         let path = std::env::temp_dir().join(format!("bitfun-edit-file-test-{unique}.txt"));
-        fs::write(&path, contents).expect("temp file should be written");
+        fs::write(&path, contents).expect("临时文件应被写入");
         path
     }
 
@@ -118,7 +118,7 @@ mod tests {
     fn apply_edit_to_content_matches_multiline_lf_input_against_crlf_file() {
         let content = "header\r\nalpha\r\nbeta\r\nfooter\r\n";
         let result = apply_edit_to_content(content, "alpha\nbeta", "alpha\nBETA", false)
-            .expect("edit should succeed");
+            .expect("编辑成功");
 
         assert_eq!(result.match_count, 1);
         assert_eq!(
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn apply_edit_to_content_replace_all_reports_match_count() {
         let result = apply_edit_to_content("one\r\ntwo\r\none\r\n", "one", "ONE", true)
-            .expect("replace_all should succeed");
+            .expect("编辑成功");
 
         assert_eq!(result.match_count, 2);
         assert_eq!(result.new_content, "ONE\r\ntwo\r\nONE\r\n");
@@ -152,10 +152,10 @@ mod tests {
             "alpha\nBETA",
             false,
         )
-        .expect("edit should succeed");
-        let content = fs::read_to_string(&path).expect("edited file should be readable");
+        .expect("编辑成功");
+        let content = fs::read_to_string(&path).expect("编辑后的文件应可读取");
 
-        fs::remove_file(&path).expect("temp file should be deleted");
+        fs::remove_file(&path).expect("删除临时文件");
 
         assert_eq!(
             result,

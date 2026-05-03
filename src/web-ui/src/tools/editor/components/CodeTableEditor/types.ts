@@ -102,7 +102,6 @@ export interface CompletionItem {
 export interface EditorProps {
   value: string;
   isClassModule?: boolean;
-  theme?: 'dark' | 'light';
   readOnly?: boolean;
   onChange?: (value: string) => void;
   onCursorChange?: (line: number, column: number) => void;

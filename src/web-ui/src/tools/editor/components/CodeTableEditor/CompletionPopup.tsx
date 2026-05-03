@@ -16,7 +16,7 @@ export const CompletionPopup: React.FC<CompletionPopupProps> = ({
   position,
   selectedIndex,
   onSelect,
-  onClose,
+  onClose: _onClose,
   visible,
 }) => {
   const [items, setItems] = useState<CompletionItem[]>([]);

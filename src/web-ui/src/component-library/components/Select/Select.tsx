@@ -42,6 +42,7 @@ export interface SelectProps {
   allowCustomValue?: boolean;
   customValueHint?: string;
   onOpenChange?: (isOpen: boolean) => void;
+  style?: React.CSSProperties;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -71,6 +72,7 @@ export const Select: React.FC<SelectProps> = ({
   allowCustomValue = false,
   customValueHint,
   onOpenChange,
+  style,
 }) => {
   const { t } = useI18n('components');
   
@@ -430,7 +432,7 @@ export const Select: React.FC<SelectProps> = ({
   };
 
   return (
-    <div className={classNames} ref={selectRef}>
+    <div className={classNames} style={style} ref={selectRef}>
       {label && <label className="select__label">{label}</label>}
       
       <div

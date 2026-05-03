@@ -21,20 +21,20 @@ pub fn read_file(
     max_total_chars: usize,
 ) -> Result<ReadFileResult, String> {
     if start_line == 0 {
-        return Err("`start_line` should start from 1".to_string());
+        return Err("`start_line` 从行 1 开始".to_string());
     }
     if limit == 0 {
-        return Err("`limit` can't be 0".to_string());
+        return Err("`limit` 不能为 0".to_string());
     }
     if max_total_chars == 0 {
-        return Err("`max_total_chars` can't be 0".to_string());
+        return Err("`max_total_chars` 不能为 0".to_string());
     }
     let end_line_inclusive = start_line
         .checked_add(limit.saturating_sub(1))
         .ok_or_else(|| "Requested line range is too large".to_string())?;
 
     let file =
-        File::open(file_path).map_err(|e| format!("Failed to read file {}: {}", file_path, e))?;
+        File::open(file_path).map_err(|e| format!("文件读取错误 {}: {}", file_path, e))?;
     let reader = BufReader::new(file);
 
     let mut total_lines = 0usize;
@@ -43,7 +43,7 @@ pub fn read_file(
     let mut hit_total_char_limit = false;
 
     for line_result in reader.lines() {
-        let line = line_result.map_err(|e| format!("Failed to read file {}: {}", file_path, e))?;
+        let line = line_result.map_err(|e| format!("文件读取错误 {}: {}", file_path, e))?;
         total_lines += 1;
 
         if total_lines < start_line || total_lines > end_line_inclusive || hit_total_char_limit {
@@ -116,10 +116,10 @@ mod tests {
     fn write_temp_file(contents: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("time went backwards")
+            .expect("时间戳获取失败")
             .as_nanos();
         let path = std::env::temp_dir().join(format!("bitfun-read-file-test-{unique}.txt"));
-        fs::write(&path, contents).expect("temp file should be written");
+        fs::write(&path, contents).expect("文件应被写入");
         path
     }
 
@@ -128,9 +128,9 @@ mod tests {
         let path = write_temp_file("abcdefghijklmnopqrstuvwxyz\nsecond line\nthird line\n");
 
         let result = read_file(path.to_str().expect("utf-8 path"), 1, 10, 10, 30)
-            .expect("read should succeed");
+            .expect("读取文件成功");
 
-        fs::remove_file(&path).expect("temp file should be deleted");
+        fs::remove_file(&path).expect("临时文件应被删除");
 
         assert_eq!(result.start_line, 1);
         assert_eq!(result.end_line, 1);
@@ -143,9 +143,9 @@ mod tests {
         let path = write_temp_file("one\ntwo\nthree\n");
 
         let result = read_file(path.to_str().expect("utf-8 path"), 1, 10, 50, 100)
-            .expect("read should succeed");
+            .expect("读取文件成功");
 
-        fs::remove_file(&path).expect("temp file should be deleted");
+        fs::remove_file(&path).expect("临时文件应被删除");
 
         assert_eq!(result.end_line, 3);
         assert!(!result.hit_total_char_limit);

@@ -70,7 +70,7 @@ export class ConfigAPI {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const normalized = errorMessage.toLowerCase();
       if (
-        normalized.includes('not found:') &&
+        (normalized.includes('not found') || normalized.includes('未找到')) &&
         normalized.includes('config path') &&
         normalized.includes(`'${path}'`)
       ) {

@@ -5,36 +5,15 @@ import { highlightCode } from './highlighter';
 import { CompletionPopup } from './CompletionPopup';
 import type { CompletionItem } from './completions';
 import { getCompletions, getCompletionPrefix } from './completions';
+import { BASIC_TYPES } from './tableUtils';
+import { ProcTable, FuncTable, DllTable, TemplateTable, VarTable, ConstTable, TypeTable, ImportTable, IncludeTable, ParamTable, CodeLine, ParamLineData } from './TableComponents';
+import { computeFlowLines } from './flowLines';
 import './CodeTableEditor.scss';
-
-const BASIC_TYPES = [
-  '整数',
-  '整数8',
-  '整数16',
-  '整数32',
-  '整数64',
-  '无符号整数',
-  '无符号整数8',
-  '无符号整数16',
-  '无符号整数32',
-  '无符号整数64',
-  '浮点数',
-  '浮点数32',
-  '浮点数64',
-  '逻辑型',
-  '字符串',
-  '字符',
-  'C字符串',
-  '指针',
-  '内存地址',
-  '自动',
-];
 
 const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTableEditor(
   {
     value,
     isClassModule: _isClassModule = false,
-    theme = 'dark',
     readOnly = false,
     onChange,
     onCursorChange,
@@ -50,6 +29,8 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
   const [editCell, setEditCell] = useState<EditCellState | null>(null);
   const [editValue, setEditValue] = useState('');
   const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartLine, setDragStartLine] = useState<number | null>(null);
   const [editingLine, setEditingLine] = useState<number | null>(null);
   const [editingLineValue, setEditingLineValue] = useState('');
   const [history, setHistory] = useState<string[]>([value]);
@@ -58,6 +39,12 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
   const [completionPosition, setCompletionPosition] = useState(0);
   const [completionIndex, setCompletionIndex] = useState(0);
   const [currentLineIndex, setCurrentLineIndex] = useState<number | null>(null);
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [commentModalData, setCommentModalData] = useState<{
+    lineIndex: number;
+    fieldIndex: number;
+    value: string;
+  } | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +63,11 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
   }, [customTypes]);
 
   const lines = useMemo(() => content.split('\n'), [content]);
+
+  const { flowMap, maxFlowDepth } = useMemo(() => {
+    const result = computeFlowLines(lines);
+    return { flowMap: result.map, maxFlowDepth: result.maxIndent };
+  }, [lines]);
 
   const parseLine = useCallback((line: string, lineIndex: number) => {
     const cached = parseCacheRef.current.get(lineIndex);
@@ -121,37 +113,40 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
       return params;
     };
     
-    if (trimmed.startsWith('proc ') || trimmed.startsWith('过程 ') || trimmed.match(/^proc\s+\w+/) || trimmed.match(/^过程\s+[\w\u4e00-\u9fa5]+/)) {
-      type = 'proc';
+    if (trimmed.startsWith('proc ') || trimmed.startsWith('过程 ')) {
+      const isDll = trimmed.includes('{.dynlib:');
+      type = isDll ? 'dll' : 'proc';
       const isChinese = trimmed.startsWith('过程');
       const keyword = isChinese ? '过程' : 'proc';
-      // 支持反引号名称和类型约束
-      const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
       const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
       if (match) {
-        const [, procName, isPublic, genericParams, paramsStr, returnType, rest] = match;
+        const [, backtickName, normalName, isPublic, genericParams, paramsStr, returnType, rest] = match;
+        const procName = backtickName || normalName || '';
         const commentMatch = rest.match(/#\s*(.*)$/);
+        const dynlibMatch = rest.match(/\{\.dynlib:\s*"([^"]+)"\}/);
         data = {
-          procName: procName || '',
+          procName,
           isExported: isPublic === '*',
           genericParams: genericParams || '',
           params: parseParams(paramsStr),
           returnType: returnType || '空',
-          comment: commentMatch ? commentMatch[1].trim() : ''
+          comment: commentMatch ? commentMatch[1].trim() : '',
+          dllName: dynlibMatch ? dynlibMatch[1] : ''
         };
       }
     } else if (trimmed.startsWith('func ') || trimmed.startsWith('函数 ')) {
       type = 'func';
       const isChinese = trimmed.startsWith('函数');
       const keyword = isChinese ? '函数' : 'func';
-      // 支持反引号名称和类型约束
-      const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
       const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
       if (match) {
-        const [, funcName, isPublic, genericParams, paramsStr, returnType, rest] = match;
+        const [, backtickName, normalName, isPublic, genericParams, paramsStr, returnType, rest] = match;
+        const funcName = backtickName || normalName || '';
         const commentMatch = rest.match(/#\s*(.*)$/);
         data = {
-          funcName: funcName || '',
+          funcName,
           isExported: isPublic === '*',
           genericParams: genericParams || '',
           params: parseParams(paramsStr),
@@ -163,14 +158,14 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
       type = 'template';
       const isChinese = trimmed.startsWith('代码模板');
       const keyword = isChinese ? '代码模板' : 'template';
-      // 支持反引号名称和类型约束
-      const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
       const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
       if (match) {
-        const [, templateName, isPublic, genericParams, paramsStr, returnType, rest] = match;
+        const [, backtickName, normalName, isPublic, genericParams, paramsStr, returnType, rest] = match;
+        const templateName = backtickName || normalName || '';
         const commentMatch = rest.match(/#\s*(.*)$/);
         data = {
-          templateName: templateName || '',
+          templateName,
           isExported: isPublic === '*',
           genericParams: genericParams || '',
           params: parseParams(paramsStr),
@@ -362,34 +357,45 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     if (trimmed.startsWith('proc ') || trimmed.startsWith('过程 ')) {
       const isChinese = trimmed.startsWith('过程');
       const keyword = isChinese ? '过程' : 'proc';
-      // 支持反引号名称和类型约束
-      const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
       const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*\\(([^)]*)\\)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
       if (match) {
-        const [, procName, isPublic, genericParams, params, returnType, rest] = match;
+        const [, backtickName, normalName, isPublic, genericParams, params, returnType, rest] = match;
+        const procName = backtickName || normalName || '';
         const commentMatch = rest.match(/#\s*(.*)$/);
         const comment = commentMatch ? commentMatch[1].trim() : '';
         
         let newLine = keyword + ' ';
-        if (procName && procName.match(/[\w\u4e00-\u9fa5]+/)) {
-          newLine += procName;
-        } else if (procName) {
-          newLine += '\x60' + procName + '\x60';
+        
+        if (editCell.fieldIndex === 0) {
+          if (editValue && editValue.match(/^[\w\u4e00-\u9fa5]+$/)) {
+            newLine += editValue;
+          } else if (editValue) {
+            newLine += '\x60' + editValue + '\x60';
+          }
+        } else {
+          if (procName && procName.match(/^[\w\u4e00-\u9fa5]+$/)) {
+            newLine += procName;
+          } else if (procName) {
+            newLine += '\x60' + procName + '\x60';
+          }
         }
         
-        if (editCell.fieldIndex === 2) {
+        if (editCell.fieldIndex === 3) {
           newLine += editValue === '公开' ? '*' : '';
         } else {
           newLine += isPublic || '';
         }
         
-        if (genericParams) {
+        if (editCell.fieldIndex === 1) {
+          newLine += '[' + editValue + ']';
+        } else if (genericParams) {
           newLine += '[' + genericParams + ']';
         }
         
         newLine += '(' + params + ')';
         
-        if (editCell.fieldIndex === 1) {
+        if (editCell.fieldIndex === 2) {
           newLine += ': ' + editValue;
         } else {
           newLine += returnType ? ': ' + returnType : '';
@@ -397,7 +403,123 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
         
         newLine += ' =';
         
+        if (editCell.fieldIndex === 4) {
+          newLine += ' # ' + editValue;
+        } else if (comment) {
+          newLine += ' # ' + comment;
+        }
+        
+        newLines[editCell.lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('func ') || trimmed.startsWith('函数 ')) {
+      const isChinese = trimmed.startsWith('函数');
+      const keyword = isChinese ? '函数' : 'func';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*\\(([^)]*)\\)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
+      if (match) {
+        const [, backtickName, normalName, isPublic, genericParams, params, returnType, rest] = match;
+        const funcName = backtickName || normalName || '';
+        const commentMatch = rest.match(/#\s*(.*)$/);
+        const comment = commentMatch ? commentMatch[1].trim() : '';
+        
+        let newLine = keyword + ' ';
+        
+        if (editCell.fieldIndex === 0) {
+          if (editValue && editValue.match(/^[\w\u4e00-\u9fa5]+$/)) {
+            newLine += editValue;
+          } else if (editValue) {
+            newLine += '\x60' + editValue + '\x60';
+          }
+        } else {
+          if (funcName && funcName.match(/^[\w\u4e00-\u9fa5]+$/)) {
+            newLine += funcName;
+          } else if (funcName) {
+            newLine += '\x60' + funcName + '\x60';
+          }
+        }
+        
         if (editCell.fieldIndex === 3) {
+          newLine += editValue === '公开' ? '*' : '';
+        } else {
+          newLine += isPublic || '';
+        }
+        
+        if (editCell.fieldIndex === 1) {
+          newLine += '[' + editValue + ']';
+        } else if (genericParams) {
+          newLine += '[' + genericParams + ']';
+        }
+        
+        newLine += '(' + params + ')';
+        
+        if (editCell.fieldIndex === 2) {
+          newLine += ': ' + editValue;
+        } else {
+          newLine += returnType ? ': ' + returnType : '';
+        }
+        
+        newLine += ' =';
+        
+        if (editCell.fieldIndex === 4) {
+          newLine += ' # ' + editValue;
+        } else if (comment) {
+          newLine += ' # ' + comment;
+        }
+        
+        newLines[editCell.lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('template ') || trimmed.startsWith('代码模板 ')) {
+      const isChinese = trimmed.startsWith('代码模板');
+      const keyword = isChinese ? '代码模板' : 'template';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*\\(([^)]*)\\)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
+      if (match) {
+        const [, backtickName, normalName, isPublic, genericParams, params, returnType, rest] = match;
+        const templateName = backtickName || normalName || '';
+        const commentMatch = rest.match(/#\s*(.*)$/);
+        const comment = commentMatch ? commentMatch[1].trim() : '';
+        
+        let newLine = keyword + ' ';
+        
+        if (editCell.fieldIndex === 0) {
+          if (editValue && editValue.match(/^[\w\u4e00-\u9fa5]+$/)) {
+            newLine += editValue;
+          } else if (editValue) {
+            newLine += '\x60' + editValue + '\x60';
+          }
+        } else {
+          if (templateName && templateName.match(/^[\w\u4e00-\u9fa5]+$/)) {
+            newLine += templateName;
+          } else if (templateName) {
+            newLine += '\x60' + templateName + '\x60';
+          }
+        }
+        
+        if (editCell.fieldIndex === 3) {
+          newLine += editValue === '公开' ? '*' : '';
+        } else {
+          newLine += isPublic || '';
+        }
+        
+        if (editCell.fieldIndex === 1) {
+          newLine += '[' + editValue + ']';
+        } else if (genericParams) {
+          newLine += '[' + genericParams + ']';
+        }
+        
+        newLine += '(' + params + ')';
+        
+        if (editCell.fieldIndex === 2) {
+          newLine += ': ' + editValue;
+        } else {
+          newLine += returnType ? ': ' + returnType : '';
+        }
+        
+        newLine += ' =';
+        
+        if (editCell.fieldIndex === 4) {
           newLine += ' # ' + editValue;
         } else if (comment) {
           newLine += ' # ' + comment;
@@ -409,9 +531,9 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     } else if (trimmed.startsWith('param ') || trimmed.startsWith('参数 ')) {
       const isChinese = trimmed.startsWith('参数');
       const keyword = isChinese ? '参数' : 'param';
-      const match = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5]+))?\\s*(?:#\\s*(.*))?$`));
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)\\s*(?::\\s*([^#=]*?))?(?:=\\s*([^#]*?))?\\s*(?:#\\s*(.*))?$`));
       if (match) {
-        const [, paramName, paramType, comment] = match;
+        const [, paramName, paramType, defaultValue, comment] = match;
         
         let newLine = keyword + ' ';
         if (editCell.fieldIndex === 0) {
@@ -423,13 +545,19 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
         if (editCell.fieldIndex === 1) {
           newLine += ': ' + editValue;
         } else {
-          newLine += paramType ? ': ' + paramType : '';
+          newLine += paramType ? ': ' + paramType.trim() : '';
         }
         
         if (editCell.fieldIndex === 2) {
+          newLine += ' = ' + editValue;
+        } else if (defaultValue) {
+          newLine += ' = ' + defaultValue.trim();
+        }
+        
+        if (editCell.fieldIndex === 3) {
           newLine += ' # ' + editValue;
         } else if (comment) {
-          newLine += ' # ' + comment;
+          newLine += ' # ' + comment.trim();
         }
         
         newLines[editCell.lineIndex] = newLine;
@@ -617,6 +745,145 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     setEditValue('');
   }, [editCell, editValue, lines, updateContent]);
 
+  const handleCommentSave = useCallback((newValue: string) => {
+    if (!commentModalData) return;
+    
+    const { lineIndex, fieldIndex: _fieldIndex } = commentModalData;
+    const newLines = [...lines];
+    const line = newLines[lineIndex];
+    const trimmed = line.trim();
+    
+    if (trimmed.startsWith('proc ') || trimmed.startsWith('过程 ')) {
+      const isChinese = trimmed.startsWith('过程');
+      const keyword = isChinese ? '过程' : 'proc';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*\\(([^)]*)\\)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
+      if (match) {
+        const [, backtickName, normalName, isPublic, genericParams, params, returnType, _rest] = match;
+        const procName = backtickName || normalName || '';
+        
+        let newLine = keyword + ' ';
+        if (procName && procName.match(/^[\w\u4e00-\u9fa5]+$/)) {
+          newLine += procName;
+        } else if (procName) {
+          newLine += '\x60' + procName + '\x60';
+        }
+        
+        newLine += (isPublic || '');
+        if (genericParams) newLine += '[' + genericParams + ']';
+        newLine += '(' + params + ')';
+        if (returnType) newLine += ': ' + returnType;
+        newLine += ' =';
+        if (newValue) newLine += ' # ' + newValue;
+        
+        newLines[lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('func ') || trimmed.startsWith('函数 ')) {
+      const isChinese = trimmed.startsWith('函数');
+      const keyword = isChinese ? '函数' : 'func';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*\\(([^)]*)\\)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
+      if (match) {
+        const [, backtickName, normalName, isPublic, genericParams, params, returnType, _rest] = match;
+        const funcName = backtickName || normalName || '';
+        
+        let newLine = keyword + ' ';
+        if (funcName && funcName.match(/^[\w\u4e00-\u9fa5]+$/)) {
+          newLine += funcName;
+        } else if (funcName) {
+          newLine += '\x60' + funcName + '\x60';
+        }
+        
+        newLine += (isPublic || '');
+        if (genericParams) newLine += '[' + genericParams + ']';
+        newLine += '(' + params + ')';
+        if (returnType) newLine += ': ' + returnType;
+        newLine += ' =';
+        if (newValue) newLine += ' # ' + newValue;
+        
+        newLines[lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('template ') || trimmed.startsWith('代码模板 ')) {
+      const isChinese = trimmed.startsWith('代码模板');
+      const keyword = isChinese ? '代码模板' : 'template';
+      const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*\\(([^)]*)\\)\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
+      if (match) {
+        const [, backtickName, normalName, isPublic, genericParams, params, returnType, _rest] = match;
+        const templateName = backtickName || normalName || '';
+        
+        let newLine = keyword + ' ';
+        if (templateName && templateName.match(/^[\w\u4e00-\u9fa5]+$/)) {
+          newLine += templateName;
+        } else if (templateName) {
+          newLine += '\x60' + templateName + '\x60';
+        }
+        
+        newLine += (isPublic || '');
+        if (genericParams) newLine += '[' + genericParams + ']';
+        newLine += '(' + params + ')';
+        if (returnType) newLine += ': ' + returnType;
+        newLine += ' =';
+        if (newValue) newLine += ' # ' + newValue;
+        
+        newLines[lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('var ') || trimmed.startsWith('变量 ')) {
+      const isChinese = trimmed.startsWith('变量');
+      const keyword = isChinese ? '变量' : 'var';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*(?::\\s*([^#=]*?))?\\s*(?:=\\s*([^#]*?))?\\s*(?:#\\s*(.*))?$`));
+      if (match) {
+        const [, varName, isPublic, varType, varValue, _comment] = match;
+        
+        let newLine = keyword + ' ' + varName;
+        newLine += (isPublic || '');
+        if (varType) newLine += ': ' + varType.trim();
+        if (varValue) newLine += ' = ' + varValue.trim();
+        if (newValue) newLine += ' # ' + newValue;
+        
+        newLines[lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('const ') || trimmed.startsWith('常量 ')) {
+      const isChinese = trimmed.startsWith('常量');
+      const keyword = isChinese ? '常量' : 'const';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*(?::\\s*([^#=]*?))?\\s*=\\s*([^#]*?)\\s*(?:#\\s*(.*))?$`));
+      if (match) {
+        const [, constName, isPublic, constType, constValue, _comment] = match;
+        
+        let newLine = keyword + ' ' + constName;
+        newLine += (isPublic || '');
+        if (constType) newLine += ': ' + constType.trim();
+        if (constValue) newLine += ' = ' + constValue.trim();
+        if (newValue) newLine += ' # ' + newValue;
+        
+        newLines[lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    } else if (trimmed.startsWith('type ') || trimmed.startsWith('类型 ')) {
+      const isChinese = trimmed.startsWith('类型');
+      const keyword = isChinese ? '类型' : 'type';
+      const match = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*=\\s*([^#]*?)\\s*(?:#\\s*(.*))?$`));
+      if (match) {
+        const [, typeName, isPublic, typeDef, _comment] = match;
+        
+        let newLine = keyword + ' ' + typeName;
+        newLine += (isPublic || '');
+        newLine += ' = ' + (typeDef ? typeDef.trim() : '对象');
+        if (newValue) newLine += ' # ' + newValue;
+        
+        newLines[lineIndex] = newLine;
+        updateContent(newLines.join('\n'));
+      }
+    }
+    
+    setShowCommentModal(false);
+    setCommentModalData(null);
+  }, [commentModalData, lines, updateContent]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -627,27 +894,68 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     }
   }, [handleCellCommit]);
 
-  const handleLineClick = useCallback((lineIndex: number, e: React.MouseEvent) => {
+  const handleLineMouseDown = useCallback((lineIndex: number, e: React.MouseEvent) => {
     if (editCell || editingLine !== null) return;
     
-    const line = lines[lineIndex];
-    const parsed = parseLine(line, lineIndex);
-    
-    if (parsed.type !== 'code') {
-      if (e.shiftKey && selectedLines.size > 0) {
-        const min = Math.min(...Array.from(selectedLines));
-        const max = Math.max(lineIndex, min);
-        const newSelection = new Set<number>();
-        for (let i = min; i <= max; i++) {
-          newSelection.add(i);
-        }
-        setSelectedLines(newSelection);
-      } else {
-        setSelectedLines(new Set([lineIndex]));
-      }
-      onCursorChange?.(lineIndex + 1, 1);
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      e.preventDefault();
     }
-  }, [editCell, editingLine, selectedLines, onCursorChange, lines, parseLine]);
+    
+    if (e.shiftKey && selectedLines.size > 0) {
+      const min = Math.min(...Array.from(selectedLines));
+      const max = Math.max(lineIndex, min);
+      const newSelection = new Set<number>();
+      for (let i = min; i <= max; i++) {
+        newSelection.add(i);
+      }
+      setSelectedLines(newSelection);
+    } else {
+      setSelectedLines(new Set([lineIndex]));
+      setDragStartLine(lineIndex);
+      setIsDragging(true);
+    }
+    setCurrentLineIndex(lineIndex);
+    onCursorChange?.(lineIndex + 1, 1);
+  }, [editCell, editingLine, selectedLines, onCursorChange]);
+
+  const handleLineMouseEnter = useCallback((lineIndex: number) => {
+    if (!isDragging || dragStartLine === null) return;
+    const min = Math.min(dragStartLine, lineIndex);
+    const max = Math.max(dragStartLine, lineIndex);
+    const newSelection = new Set<number>();
+    for (let i = min; i <= max; i++) {
+      newSelection.add(i);
+    }
+    setSelectedLines(newSelection);
+  }, [isDragging, dragStartLine]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setDragStartLine(null);
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    if (editCell || editingLine !== null) return;
+    const clipText = e.clipboardData.getData('text/plain');
+    if (!clipText) return;
+    e.preventDefault();
+    const clipLines = clipText.split('\n');
+    const insertAfter = selectedLines.size > 0
+      ? Math.max(...Array.from(selectedLines))
+      : currentLineIndex !== null
+        ? currentLineIndex
+        : -1;
+    if (insertAfter < 0) return;
+    const newLines = [...lines];
+    newLines.splice(insertAfter + 1, 0, ...clipLines);
+    updateContent(newLines.join('\n'));
+    const newSelection = new Set<number>();
+    for (let i = insertAfter + 1; i <= insertAfter + clipLines.length; i++) {
+      newSelection.add(i);
+    }
+    setSelectedLines(newSelection);
+  }, [editCell, editingLine, selectedLines, currentLineIndex, lines, updateContent]);
 
   const handleLineEditCommit = useCallback(() => {
     if (editingLine === null) return;
@@ -708,23 +1016,22 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
       } else if (e.key === 'v') {
         e.preventDefault();
         navigator.clipboard.readText().then(clipText => {
-          if (clipText) {
-            const clipLines = clipText.split('\n');
-            if (selectedLines.size > 0) {
-              const maxLine = Math.max(...Array.from(selectedLines));
-              const newLines = [...lines];
-              newLines.splice(maxLine + 1, 0, ...clipLines);
-              updateContent(newLines.join('\n'));
-              const newSelection = new Set<number>();
-              for (let i = maxLine + 1; i <= maxLine + clipLines.length; i++) {
-                newSelection.add(i);
-              }
-              setSelectedLines(newSelection);
-            } else {
-              const newContent = content ? content + '\n' + clipText : clipText;
-              updateContent(newContent);
-            }
+          if (!clipText) return;
+          const clipLines = clipText.split('\n');
+          const insertAfter = selectedLines.size > 0
+            ? Math.max(...Array.from(selectedLines))
+            : currentLineIndex !== null
+              ? currentLineIndex
+              : -1;
+          if (insertAfter < 0) return;
+          const newLines = [...lines];
+          newLines.splice(insertAfter + 1, 0, ...clipLines);
+          updateContent(newLines.join('\n'));
+          const newSelection = new Set<number>();
+          for (let i = insertAfter + 1; i <= insertAfter + clipLines.length; i++) {
+            newSelection.add(i);
           }
+          setSelectedLines(newSelection);
         });
       } else if (e.key === 'a') {
         e.preventDefault();
@@ -770,94 +1077,98 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     const isEditing = editCell?.lineIndex === lineIndex && editCell?.cellIndex === cellIndex;
     
     if (cellType === 'public') {
-      const isChecked = cell.text.trim() === '公开' || cell.text.trim() === '是';
+      const isPublic = cell.text.trim() === '公开' || cell.text.trim() === '是';
+      
+      const updatePublicStatus = (makePublic: boolean) => {
+        if (readOnly) return;
+        const newLines = [...lines];
+        const line = newLines[lineIndex];
+        const trimmed = line.trim();
+        
+        if (trimmed.startsWith('proc ') || trimmed.startsWith('过程 ')) {
+          const isChinese = trimmed.startsWith('过程');
+          const keyword = isChinese ? '过程' : 'proc';
+          const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*\\(`));
+          if (match) {
+            const newLine = makePublic 
+              ? trimmed.replace(match[0], `${match[1]}*(`)
+              : trimmed.replace(match[0], `${match[1]}(`);
+            newLines[lineIndex] = newLine;
+            updateContent(newLines.join('\n'));
+          }
+        } else if (trimmed.startsWith('var ') || trimmed.startsWith('变量 ')) {
+          const isChinese = trimmed.startsWith('变量');
+          const keyword = isChinese ? '变量' : 'var';
+          const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*:`));
+          if (match) {
+            const newLine = makePublic 
+              ? trimmed.replace(match[0], `${match[1]}*:`)
+              : trimmed.replace(match[0], `${match[1]}:`);
+            newLines[lineIndex] = newLine;
+            updateContent(newLines.join('\n'));
+          }
+        } else if (trimmed.startsWith('const ') || trimmed.startsWith('常量 ')) {
+          const isChinese = trimmed.startsWith('常量');
+          const keyword = isChinese ? '常量' : 'const';
+          const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*=`));
+          if (match) {
+            const newLine = makePublic 
+              ? trimmed.replace(match[0], `${match[1]}* =`)
+              : trimmed.replace(match[0], `${match[1]}=`);
+            newLines[lineIndex] = newLine;
+            updateContent(newLines.join('\n'));
+          }
+        } else if (trimmed.startsWith('type ') || trimmed.startsWith('类型 ')) {
+          const isChinese = trimmed.startsWith('类型');
+          const keyword = isChinese ? '类型' : 'type';
+          const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*=`));
+          if (match) {
+            const newLine = makePublic 
+              ? trimmed.replace(match[0], `${match[1]}* =`)
+              : trimmed.replace(match[0], `${match[1]}=`);
+            newLines[lineIndex] = newLine;
+            updateContent(newLines.join('\n'));
+          }
+        } else if (trimmed.startsWith('func ') || trimmed.startsWith('函数 ')) {
+          const isChinese = trimmed.startsWith('函数');
+          const keyword = isChinese ? '函数' : 'func';
+          const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*\\(`));
+          if (match) {
+            const newLine = makePublic 
+              ? trimmed.replace(match[0], `${match[1]}*(`)
+              : trimmed.replace(match[0], `${match[1]}(`);
+            newLines[lineIndex] = newLine;
+            updateContent(newLines.join('\n'));
+          }
+        } else if (trimmed.startsWith('template ') || trimmed.startsWith('代码模板 ')) {
+          const isChinese = trimmed.startsWith('代码模板');
+          const keyword = isChinese ? '代码模板' : 'template';
+          const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5\`]+)(\\*)?\\s*\\(`));
+          if (match) {
+            const newLine = makePublic 
+              ? trimmed.replace(match[0], `${match[1]}*(`)
+              : trimmed.replace(match[0], `${match[1]}(`);
+            newLines[lineIndex] = newLine;
+            updateContent(newLines.join('\n'));
+          }
+        }
+      };
+      
       return (
         <div
           key={cellIndex}
           className={`code-table__table-cell ${cell.className}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!readOnly) {
-              const newLines = [...lines];
-              const line = newLines[lineIndex];
-              const trimmed = line.trim();
-              
-              if (trimmed.startsWith('proc ') || trimmed.startsWith('过程 ')) {
-                const isChinese = trimmed.startsWith('过程');
-                const keyword = isChinese ? '过程' : 'proc';
-                const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*\\(`));
-                if (match) {
-                  const newLine = isChecked 
-                    ? trimmed.replace(match[0], `${match[1]}(`)
-                    : trimmed.replace(match[0], `${match[1]}*(`);
-                  newLines[lineIndex] = newLine;
-                  updateContent(newLines.join('\n'));
-                }
-              } else if (trimmed.startsWith('var ') || trimmed.startsWith('变量 ')) {
-                const isChinese = trimmed.startsWith('变量');
-                const keyword = isChinese ? '变量' : 'var';
-                const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*:`));
-                if (match) {
-                  const newLine = isChecked 
-                    ? trimmed.replace(match[0], `${match[1]}:`)
-                    : trimmed.replace(match[0], `${match[1]}*:`);
-                  newLines[lineIndex] = newLine;
-                  updateContent(newLines.join('\n'));
-                }
-              } else if (trimmed.startsWith('const ') || trimmed.startsWith('常量 ')) {
-                const isChinese = trimmed.startsWith('常量');
-                const keyword = isChinese ? '常量' : 'const';
-                const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*=`));
-                if (match) {
-                  const newLine = isChecked 
-                    ? trimmed.replace(match[0], `${match[1]}=`)
-                    : trimmed.replace(match[0], `${match[1]}*=`.replace('*=', '* ='));
-                  newLines[lineIndex] = newLine;
-                  updateContent(newLines.join('\n'));
-                }
-              } else if (trimmed.startsWith('type ') || trimmed.startsWith('类型 ')) {
-                const isChinese = trimmed.startsWith('类型');
-                const keyword = isChinese ? '类型' : 'type';
-                const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*=`));
-                if (match) {
-                  const newLine = isChecked 
-                    ? trimmed.replace(match[0], `${match[1]}=`)
-                    : trimmed.replace(match[0], `${match[1]}*=`.replace('*=', '* ='));
-                  newLines[lineIndex] = newLine;
-                  updateContent(newLines.join('\n'));
-                }
-              } else if (trimmed.startsWith('func ') || trimmed.startsWith('函数 ')) {
-                const isChinese = trimmed.startsWith('函数');
-                const keyword = isChinese ? '函数' : 'func';
-                const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*\\(`));
-                if (match) {
-                  const newLine = isChecked 
-                    ? trimmed.replace(match[0], `${match[1]}(`)
-                    : trimmed.replace(match[0], `${match[1]}*(`);
-                  newLines[lineIndex] = newLine;
-                  updateContent(newLines.join('\n'));
-                }
-              } else if (trimmed.startsWith('template ') || trimmed.startsWith('代码模板 ')) {
-                const isChinese = trimmed.startsWith('代码模板');
-                const keyword = isChinese ? '代码模板' : 'template';
-                const match = trimmed.match(new RegExp(`^(${keyword}\\s+[\\w\\u4e00-\\u9fa5\`]+)(\\*)?\\s*\\(`));
-                if (match) {
-                  const newLine = isChecked 
-                    ? trimmed.replace(match[0], `${match[1]}(`)
-                    : trimmed.replace(match[0], `${match[1]}*(`);
-                  newLines[lineIndex] = newLine;
-                  updateContent(newLines.join('\n'));
-                }
-              }
-            }
-          }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <input
-            type="checkbox"
-            checked={isChecked}
-            readOnly
-            className="code-table__checkbox"
-          />
+          <select
+            className="code-table__select code-table__select--public"
+            value={isPublic ? 'true' : 'false'}
+            onChange={(e) => updatePublicStatus(e.target.value === 'true')}
+            disabled={readOnly}
+          >
+            <option value="false">假</option>
+            <option value="true">真</option>
+          </select>
         </div>
       );
     }
@@ -882,7 +1193,7 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
             onBlur={handleCellCommit}
             autoFocus
           >
-            <option value="">-- 选择类型 --</option>
+            <option value="">选择类型</option>
             {allTypes.map(type => (
               <option key={type} value={type}>{type}</option>
             ))}
@@ -891,13 +1202,26 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
       );
     }
     
+    const isRemarkCell = cell.fieldIndex === 4;
+    
     return (
       <div
         key={cellIndex}
         className={`code-table__table-cell ${cell.className}`}
         onClick={(e) => {
           e.stopPropagation();
-          if (!readOnly) handleCellClick(lineIndex, cellIndex, cell.fieldIndex, cell.text);
+          if (!readOnly) {
+            if (isRemarkCell) {
+              setCommentModalData({
+                lineIndex,
+                fieldIndex: cell.fieldIndex,
+                value: cell.text
+              });
+              setShowCommentModal(true);
+            } else {
+              handleCellClick(lineIndex, cellIndex, cell.fieldIndex, cell.text);
+            }
+          }
         }}
       >
         {isEditing ? (
@@ -912,20 +1236,132 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
             autoFocus
           />
         ) : (
-          <span>{cell.text || '\u00A0'}</span>
+          <span className={isRemarkCell && cell.text ? 'code-table__remark-text' : ''}>{cell.text || '\u00A0'}</span>
         )}
       </div>
     );
   }, [editCell, editValue, readOnly, allTypes, handleCellClick, handleCellCommit, handleKeyDown, lines, updateContent]);
 
+  const renderParamCell = useCallback((
+    lineIndex: number,
+    cellIndex: number,
+    cell: { text: string; className: string; fieldIndex: number },
+    cellType: 'text' | 'type' = 'text'
+  ) => {
+    const isEditing = editCell?.lineIndex === lineIndex && editCell?.fieldIndex === cell.fieldIndex;
+    
+    if (cellType === 'type' && isEditing) {
+      return (
+        <div key={cellIndex} className={`code-table__table-cell ${cell.className}`}>
+          <select
+            ref={selectRef}
+            className="code-table__select"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleCellCommit();
+              } else if (e.key === 'Escape') {
+                setEditCell(null);
+                setEditValue('');
+              }
+            }}
+            onBlur={handleCellCommit}
+            autoFocus
+          >
+            <option value="">选择类型</option>
+            {allTypes.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+    
+    const isRemarkCell = cell.fieldIndex === 3;
+    
+    return (
+      <div
+        key={cellIndex}
+        className={`code-table__table-cell ${cell.className}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!readOnly && cell.fieldIndex >= 0) {
+            if (isRemarkCell) {
+              setCommentModalData({
+                lineIndex,
+                fieldIndex: cell.fieldIndex,
+                value: cell.text
+              });
+              setShowCommentModal(true);
+            } else {
+              handleCellClick(lineIndex, cellIndex, cell.fieldIndex, cell.text);
+            }
+          }
+        }}
+      >
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            className="code-table__input"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleCellCommit}
+            autoFocus
+          />
+        ) : (
+          <span className={isRemarkCell && cell.text ? 'code-table__remark-text' : ''}>{cell.text || '\u00A0'}</span>
+        )}
+      </div>
+    );
+  }, [editCell, editValue, readOnly, allTypes, handleCellClick, handleCellCommit, handleKeyDown]);
+
   const insertSubroutine = useCallback(() => {
-    const newLines = [
-      'proc 新子程序*(): 整数 = # 子程序说明',
-      '  param 新参数: 整数 # 参数说明'
-    ];
-    const newContent = content ? content + '\n' + newLines.join('\n') : newLines.join('\n');
+    const newLine = 'proc 新子程序*(): 整数 = # 子程序说明';
+    const newContent = content ? content + '\n' + newLine : newLine;
     updateContent(newContent);
   }, [content, updateContent]);
+
+  const insertParamAfterProc = useCallback((procLineIndex: number) => {
+    const newLine = '  param 新参数: 整数 # 参数说明';
+    const newLines = [...lines];
+    
+    let insertIndex = procLineIndex + 1;
+    for (let i = procLineIndex + 1; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed.startsWith('param ') || trimmed.startsWith('参数 ')) {
+        insertIndex = i + 1;
+      } else if (trimmed && !trimmed.startsWith('param ') && !trimmed.startsWith('参数 ')) {
+        break;
+      }
+    }
+    
+    newLines.splice(insertIndex, 0, newLine);
+    updateContent(newLines.join('\n'));
+  }, [lines, updateContent]);
+
+  const insertLocalVarAfterProc = useCallback((procLineIndex: number) => {
+    const newLine = '  var 新变量: 整数 # 变量说明';
+    const newLines = [...lines];
+    
+    let insertIndex = procLineIndex + 1;
+    for (let i = procLineIndex + 1; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed.startsWith('param ') || trimmed.startsWith('参数 ') || 
+          trimmed.startsWith('var ') || trimmed.startsWith('变量 ')) {
+        insertIndex = i + 1;
+      } else if (trimmed && !trimmed.startsWith('param ') && !trimmed.startsWith('参数 ') &&
+                 !trimmed.startsWith('var ') && !trimmed.startsWith('变量 ')) {
+        break;
+      }
+    }
+    
+    newLines.splice(insertIndex, 0, newLine);
+    updateContent(newLines.join('\n'));
+  }, [lines, updateContent]);
 
   const insertLocalVariable = useCallback(() => {
     const newLine = '  var 新变量: 整数 # 变量说明';
@@ -1033,336 +1469,158 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     focus: () => containerRef.current?.focus(),
   }), [content, insertSubroutine, insertLocalVariable, insertGlobalVariable, insertAssemblyVariable]);
 
-  const renderProcLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
+  const getFlowSegs = useCallback((lineIndex: number) => {
+    return flowMap.get(lineIndex);
+  }, [flowMap]);
+
+  const renderProcLine = useCallback((line: string, lineIndex: number, isSelected: boolean, paramLines: ParamLineData[] = []) => {
     const trimmed = line.trim();
     const isChinese = trimmed.startsWith('过程');
     const keyword = isChinese ? '过程' : 'proc';
-    // 支持反引号名称和类型约束
-    const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+    const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
     const procMatch = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
     
     if (!procMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
-    const [, procName, isPublic, genericParams, paramsStr, returnType, rest] = procMatch;
+    const [, backtickName, normalName, isPublic, genericParams, paramsStr, returnType, rest] = procMatch;
+    const procName = backtickName || normalName || '';
     const isExported = isPublic === '*';
     const commentMatch = rest.match(/#\s*(.*)$/);
     const comment = commentMatch ? commentMatch[1].trim() : '';
     
-    // 解析参数
-    const params: Array<{name: string; type: string; comment: string}> = [];
-    const inner = paramsStr.trim();
-    if (inner && inner !== '()') {
-      const content = inner.replace(/^\(|\)$/g, '');
-      const parts = content.split(',');
-      for (const part of parts) {
-        const p = part.trim();
-        if (!p) continue;
-        const cMatch = p.match(/#\s*(.*)$/);
-        const c = cMatch ? cMatch[1].trim() : '';
-        const main = cMatch ? p.substring(0, p.indexOf('#')).trim() : p;
-        const colonIdx = main.lastIndexOf(':');
-        if (colonIdx > 0) {
-          params.push({ name: main.substring(0, colonIdx).trim(), type: main.substring(colonIdx + 1).trim(), comment: c });
-        } else {
-          params.push({ name: main, type: '自动', comment: c });
-        }
-      }
-    }
-    
-    const headers = ['过程名', '泛型', '返回类型', '公开', '注释'];
-    const headerClasses = ['code-table__cell--name', 'code-table__cell--generic', 'code-table__cell--type', 'code-table__cell--public', 'code-table__cell--remark'];
-    // 检查名称是否需要反引号包裹显示
-    const needsBackticks = procName && !procName.match(/^[\w\u4e00-\u9fa5]+$/);
-    const displayName = needsBackticks ? '\x60' + procName + '\x60' : (procName || '');
-    const cells = [
-      { text: displayName, className: 'code-table__cell--name', fieldIndex: 0 },
-      { text: genericParams ? '[' + genericParams + ']' : '', className: 'code-table__cell--generic', fieldIndex: 1 },
-      { text: returnType || '空', className: 'code-table__cell--type', fieldIndex: 2 },
-      { text: isExported ? '公开' : '', className: 'code-table__cell--public', fieldIndex: 3 },
-      { text: comment, className: 'code-table__cell--remark', fieldIndex: 4 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 2 ? 'type' : 
-                i === 3 ? 'public' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-          {params.length > 0 && (
-            <div className="code-table__params-section">
-              <div className="code-table__table-header code-table__table-header--params">
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-name">参数名</div>
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-type">类型</div>
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-remark">注释</div>
-              </div>
-              {params.map((param, idx) => (
-                <div key={idx} className="code-table__table-row code-table__table-row--params">
-                  <div className="code-table__table-cell code-table__cell--param-name">{param.name}</div>
-                  <div className="code-table__table-cell code-table__cell--param-type">{param.type}</div>
-                  <div className="code-table__table-cell code-table__cell--param-remark">{param.comment}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <ProcTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        renderParamCell={renderParamCell}
+        keyword={keyword}
+        procName={procName}
+        isExported={isExported}
+        genericParams={genericParams}
+        paramsStr={paramsStr}
+        returnType={returnType}
+        comment={comment}
+        onAddParam={insertParamAfterProc}
+        onAddLocalVar={insertLocalVarAfterProc}
+        paramLines={paramLines}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, renderParamCell, insertParamAfterProc, insertLocalVarAfterProc]);
 
-  const renderFuncLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
+  const renderFuncLine = useCallback((line: string, lineIndex: number, isSelected: boolean, paramLines: ParamLineData[] = []) => {
     const trimmed = line.trim();
     const isChinese = trimmed.startsWith('函数');
     const keyword = isChinese ? '函数' : 'func';
-    // 支持反引号名称和类型约束
-    const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+    const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
     const funcMatch = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
     
     if (!funcMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
-    const [, funcName, isPublic, genericParams, paramsStr, returnType, rest] = funcMatch;
+    const [, backtickName, normalName, isPublic, genericParams, paramsStr, returnType, rest] = funcMatch;
+    const funcName = backtickName || normalName || '';
     const isExported = isPublic === '*';
     const commentMatch = rest.match(/#\s*(.*)$/);
     const comment = commentMatch ? commentMatch[1].trim() : '';
     
-    // 检查名称是否需要反引号包裹显示
-    const needsBackticks = funcName && !funcName.match(/^[\w\u4e00-\u9fa5]+$/);
-    const displayName = needsBackticks ? '\x60' + funcName + '\x60' : (funcName || '');
-    
-    // 解析参数
-    const params: Array<{name: string; type: string; comment: string}> = [];
-    const inner = paramsStr.trim();
-    if (inner && inner !== '()') {
-      const content = inner.replace(/^\(|\)$/g, '');
-      const parts = content.split(',');
-      for (const part of parts) {
-        const p = part.trim();
-        if (!p) continue;
-        const cMatch = p.match(/#\s*(.*)$/);
-        const c = cMatch ? cMatch[1].trim() : '';
-        const main = cMatch ? p.substring(0, p.indexOf('#')).trim() : p;
-        const colonIdx = main.lastIndexOf(':');
-        if (colonIdx > 0) {
-          params.push({ name: main.substring(0, colonIdx).trim(), type: main.substring(colonIdx + 1).trim(), comment: c });
-        } else {
-          params.push({ name: main, type: '自动', comment: c });
-        }
-      }
-    }
-    
-    const headers = ['函数名', '泛型', '返回类型', '公开', '注释'];
-    const headerClasses = ['code-table__cell--name', 'code-table__cell--generic', 'code-table__cell--type', 'code-table__cell--public', 'code-table__cell--remark'];
-    const cells = [
-      { text: displayName, className: 'code-table__cell--name', fieldIndex: 0 },
-      { text: genericParams ? '[' + genericParams + ']' : '', className: 'code-table__cell--generic', fieldIndex: 1 },
-      { text: returnType || '空', className: 'code-table__cell--type', fieldIndex: 2 },
-      { text: isExported ? '公开' : '', className: 'code-table__cell--public', fieldIndex: 3 },
-      { text: comment, className: 'code-table__cell--remark', fieldIndex: 4 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--func">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 2 ? 'type' : 
-                i === 3 ? 'public' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-          {params.length > 0 && (
-            <div className="code-table__params-section">
-              <div className="code-table__table-header code-table__table-header--params">
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-name">参数名</div>
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-type">类型</div>
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-remark">注释</div>
-              </div>
-              {params.map((param, idx) => (
-                <div key={idx} className="code-table__table-row code-table__table-row--params">
-                  <div className="code-table__table-cell code-table__cell--param-name">{param.name}</div>
-                  <div className="code-table__table-cell code-table__cell--param-type">{param.type}</div>
-                  <div className="code-table__table-cell code-table__cell--param-remark">{param.comment}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <FuncTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        renderParamCell={renderParamCell}
+        keyword={keyword}
+        funcName={funcName}
+        isExported={isExported}
+        genericParams={genericParams}
+        paramsStr={paramsStr}
+        returnType={returnType}
+        comment={comment}
+        onAddParam={insertParamAfterProc}
+        onAddLocalVar={insertLocalVarAfterProc}
+        paramLines={paramLines}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, renderParamCell, insertParamAfterProc, insertLocalVarAfterProc]);
+
+  const renderDllLine = useCallback((line: string, lineIndex: number, isSelected: boolean, paramLines: ParamLineData[] = []) => {
+    const trimmed = line.trim();
+    const isChinese = trimmed.startsWith('过程');
+    const keyword = isChinese ? '过程' : 'proc';
+    const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
+    const dllMatch = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
+    
+    if (!dllMatch) {
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
+    }
+
+    const [, backtickName, normalName, isPublic, _genericParams, paramsStr, returnType, rest] = dllMatch;
+    const procName = backtickName || normalName || '';
+    const isExported = isPublic === '*';
+    const commentMatch = rest.match(/#\s*(.*)$/);
+    const comment = commentMatch ? commentMatch[1].trim() : '';
+    const dynlibMatch = rest.match(/\{\.dynlib:\s*"([^"]+)"\}/);
+    const dllName = dynlibMatch ? dynlibMatch[1] : '';
+    
+    return (
+      <DllTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        renderParamCell={renderParamCell}
+        keyword={keyword}
+        procName={procName}
+        isExported={isExported}
+        paramsStr={paramsStr}
+        returnType={returnType}
+        dllName={dllName}
+        comment={comment}
+        onAddParam={insertParamAfterProc}
+        paramLines={paramLines}
+      />
+    );
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, renderParamCell, insertParamAfterProc]);
 
   const renderTemplateLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
     const trimmed = line.trim();
     const isChinese = trimmed.startsWith('代码模板');
     const keyword = isChinese ? '代码模板' : 'template';
-    // 支持反引号名称和类型约束
-    const namePattern = '(?:\\x60([^\\x60]+)\\x60|[\\w\\u4e00-\\u9fa5]+)';
+    const namePattern = '(?:\\x60([^\\x60]*)\\x60|([\\w\\u4e00-\\u9fa5]*))?';
     const templateMatch = trimmed.match(new RegExp(`^${keyword}\\s+${namePattern}(\\*)?(?:\\[([^\\]]*)\\])?\\s*(\\([^)]*\\))\\s*(?::\\s*([\\w\\u4e00-\\u9fa5\\[\\],\\s|]+))?\\s*(?:=\\s*)?(.*)$`));
     
     if (!templateMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
-    const [, templateName, isPublic, genericParams, paramsStr, returnType, rest] = templateMatch;
+    const [, backtickName, normalName, isPublic, genericParams, paramsStr, returnType, rest] = templateMatch;
+    const templateName = backtickName || normalName || '';
     const isExported = isPublic === '*';
     const commentMatch = rest.match(/#\s*(.*)$/);
     const comment = commentMatch ? commentMatch[1].trim() : '';
     
-    // 解析参数
-    const params: Array<{name: string; type: string; comment: string}> = [];
-    const inner = paramsStr.trim();
-    if (inner && inner !== '()') {
-      const content = inner.replace(/^\(|\)$/g, '');
-      const parts = content.split(',');
-      for (const part of parts) {
-        const p = part.trim();
-        if (!p) continue;
-        const cMatch = p.match(/#\s*(.*)$/);
-        const c = cMatch ? cMatch[1].trim() : '';
-        const main = cMatch ? p.substring(0, p.indexOf('#')).trim() : p;
-        const colonIdx = main.lastIndexOf(':');
-        if (colonIdx > 0) {
-          params.push({ name: main.substring(0, colonIdx).trim(), type: main.substring(colonIdx + 1).trim(), comment: c });
-        } else {
-          params.push({ name: main, type: '自动', comment: c });
-        }
-      }
-    }
-    
-    const headers = ['模板名', '泛型', '返回类型', '公开', '注释'];
-    const headerClasses = ['code-table__cell--name', 'code-table__cell--generic', 'code-table__cell--type', 'code-table__cell--public', 'code-table__cell--remark'];
-    // 检查名称是否需要反引号包裹显示
-    const needsBackticks = templateName && !templateName.match(/^[\w\u4e00-\u9fa5]+$/);
-    const displayName = needsBackticks ? '\x60' + templateName + '\x60' : (templateName || '');
-    const cells = [
-      { text: displayName, className: 'code-table__cell--name', fieldIndex: 0 },
-      { text: genericParams ? '[' + genericParams + ']' : '', className: 'code-table__cell--generic', fieldIndex: 1 },
-      { text: returnType || '空', className: 'code-table__cell--type', fieldIndex: 2 },
-      { text: isExported ? '公开' : '', className: 'code-table__cell--public', fieldIndex: 3 },
-      { text: comment, className: 'code-table__cell--remark', fieldIndex: 4 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--template">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 2 ? 'type' : 
-                i === 3 ? 'public' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-          {params.length > 0 && (
-            <div className="code-table__params-section">
-              <div className="code-table__table-header code-table__table-header--params">
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-name">参数名</div>
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-type">类型</div>
-                <div className="code-table__table-cell code-table__table-cell--header code-table__cell--param-remark">注释</div>
-              </div>
-              {params.map((param, idx) => (
-                <div key={idx} className="code-table__table-row code-table__table-row--params">
-                  <div className="code-table__table-cell code-table__cell--param-name">{param.name}</div>
-                  <div className="code-table__table-cell code-table__cell--param-type">{param.type}</div>
-                  <div className="code-table__table-cell code-table__cell--param-remark">{param.comment}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <TemplateTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        keyword={keyword}
+        templateName={templateName}
+        isExported={isExported}
+        genericParams={genericParams}
+        paramsStr={paramsStr}
+        returnType={returnType}
+        comment={comment}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell]);
 
   const renderVariableLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
     const trimmed = line.trim();
@@ -1371,21 +1629,7 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     const varMatch = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*(?::\\s*([^#=]*?))?\\s*(?:=\\s*([^#]*?))?\\s*(?:#\\s*(.*))?$`));
     
     if (!varMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
     const [, varName, isPublic, varType, varValue, comment] = varMatch;
@@ -1394,44 +1638,26 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     const cleanValue = varValue ? varValue.trim() : '';
     const cleanComment = comment ? comment.trim() : '';
     
-    const headers = ['变量名', '类型', '初始值', '公开', '注释'];
-    const headerClasses = ['code-table__cell--var-name', 'code-table__cell--var-type', 'code-table__cell--var-value', 'code-table__cell--public', 'code-table__cell--remark'];
-    const cells = [
-      { text: varName || '', className: 'code-table__cell--var-name', fieldIndex: 0 },
-      { text: cleanType, className: 'code-table__cell--var-type', fieldIndex: 1 },
-      { text: cleanValue, className: 'code-table__cell--var-value', fieldIndex: 2 },
-      { text: isExported ? '公开' : '', className: 'code-table__cell--public', fieldIndex: 3 },
-      { text: cleanComment, className: 'code-table__cell--remark', fieldIndex: 4 },
-    ];
-
+    const prevLine = lineIndex > 0 ? lines[lineIndex - 1] : '';
+    const prevParsed = parseLine(prevLine, lineIndex - 1);
+    const showHeader = prevParsed.type !== 'var';
+    
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--variable">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 1 ? 'type' : 
-                i === 3 ? 'public' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-        </div>
-      </div>
+      <VarTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        keyword={keyword}
+        varName={varName}
+        isExported={isExported}
+        varType={cleanType}
+        varValue={cleanValue}
+        comment={cleanComment}
+        showHeader={showHeader}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, lines, parseLine]);
 
   const renderConstantLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
     const trimmed = line.trim();
@@ -1440,21 +1666,7 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     const constMatch = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*(?::\\s*([^#=]*?))?\\s*=\\s*([^#]*?)\\s*(?:#\\s*(.*))?$`));
     
     if (!constMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
     const [, constName, isPublic, constType, constValue, comment] = constMatch;
@@ -1463,44 +1675,26 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     const cleanValue = constValue ? constValue.trim() : '';
     const cleanComment = comment ? comment.trim() : '';
     
-    const headers = ['常量名', '类型', '常量值', '公开', '注释'];
-    const headerClasses = ['code-table__cell--const-name', 'code-table__cell--const-type', 'code-table__cell--const-value', 'code-table__cell--public', 'code-table__cell--remark'];
-    const cells = [
-      { text: constName || '', className: 'code-table__cell--const-name', fieldIndex: 0 },
-      { text: cleanType, className: 'code-table__cell--const-type', fieldIndex: 1 },
-      { text: cleanValue, className: 'code-table__cell--const-value', fieldIndex: 2 },
-      { text: isExported ? '公开' : '', className: 'code-table__cell--public', fieldIndex: 3 },
-      { text: cleanComment, className: 'code-table__cell--remark', fieldIndex: 4 },
-    ];
-
+    const prevLine = lineIndex > 0 ? lines[lineIndex - 1] : '';
+    const prevParsed = parseLine(prevLine, lineIndex - 1);
+    const showHeader = prevParsed.type !== 'const';
+    
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--constant">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 1 ? 'type' : 
-                i === 3 ? 'public' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-        </div>
-      </div>
+      <ConstTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        keyword={keyword}
+        constName={constName}
+        isExported={isExported}
+        constType={cleanType}
+        constValue={cleanValue}
+        comment={cleanComment}
+        showHeader={showHeader}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, lines, parseLine]);
 
   const renderDataTypeLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
     const trimmed = line.trim();
@@ -1509,256 +1703,173 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
     const typeMatch = trimmed.match(new RegExp(`^${keyword}\\s+([\\w\\u4e00-\\u9fa5]+)(\\*)?\\s*=\\s*(对象|引用 对象|[\\w\\u4e00-\\u9fa5]+)?\\s*(?:继承\\s+([\\w\\u4e00-\\u9fa5]+))?\\s*(?:#\\s*(.*))?$`));
     
     if (!typeMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
-    const [, typeName, isPublic, typeKind, baseType, comment] = typeMatch;
+    const [, typeName, isPublic, typeKind, _baseType, comment] = typeMatch;
     const isExported = isPublic === '*';
+    const typeDef = typeKind || '对象';
     
-    const headers = ['类型名', '类型', '基类', '公开', '注释'];
-    const headerClasses = ['code-table__cell--datatype-name', 'code-table__cell--datatype-kind', 'code-table__cell--datatype-base', 'code-table__cell--public', 'code-table__cell--remark'];
-    const cells = [
-      { text: typeName || '', className: 'code-table__cell--datatype-name', fieldIndex: 0 },
-      { text: typeKind || '对象', className: 'code-table__cell--datatype-kind', fieldIndex: 1 },
-      { text: baseType || '', className: 'code-table__cell--datatype-base', fieldIndex: 2 },
-      { text: isExported ? '公开' : '', className: 'code-table__cell--public', fieldIndex: 3 },
-      { text: comment || '', className: 'code-table__cell--remark', fieldIndex: 4 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--datatype">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 3 ? 'public' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-        </div>
-      </div>
+      <TypeTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        keyword={keyword}
+        typeName={typeName}
+        isExported={isExported}
+        typeDef={typeDef}
+        comment={comment || ''}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell]);
 
   const renderImportLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
     const parsed = parseLine(line, lineIndex);
     if (!parsed.data) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
     const { moduleName, importType, symbols, comment } = parsed.data;
     
-    let typeLabel = '全部导入';
-    if (importType === 'except') {
-      typeLabel = '排除';
-    } else if (importType === 'selective') {
-      typeLabel = '选择性';
-    }
-    
-    const headers = ['模块名', '导入类型', '符号', '注释'];
-    const headerClasses = ['code-table__cell--module-name', 'code-table__cell--import-type', 'code-table__cell--symbols', 'code-table__cell--remark'];
-    const cells = [
-      { text: moduleName || '', className: 'code-table__cell--module-name', fieldIndex: 0 },
-      { text: typeLabel, className: 'code-table__cell--import-type', fieldIndex: 1 },
-      { text: symbols || '', className: 'code-table__cell--symbols', fieldIndex: 2 },
-      { text: comment || '', className: 'code-table__cell--remark', fieldIndex: 3 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--import">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => renderEditableCell(lineIndex, i, cell, 'text'))}
-          </div>
-        </div>
-      </div>
+      <ImportTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        moduleName={moduleName}
+        importType={importType}
+        symbols={symbols}
+        comment={comment}
+      />
     );
-  }, [handleLineClick, renderEditableCell, parseLine]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, parseLine]);
 
   const renderIncludeLine = useCallback((line: string, lineIndex: number, isSelected: boolean) => {
     const parsed = parseLine(line, lineIndex);
     if (!parsed.data) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
     const { fileName, comment } = parsed.data;
     
-    const headers = ['文件名', '注释'];
-    const headerClasses = ['code-table__cell--file-name', 'code-table__cell--remark'];
-    const cells = [
-      { text: fileName || '', className: 'code-table__cell--file-name', fieldIndex: 0 },
-      { text: comment || '', className: 'code-table__cell--remark', fieldIndex: 1 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--include">
-          <div className="code-table__table-header">
-            {headers.map((h, i) => (
-              <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-            ))}
-          </div>
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => renderEditableCell(lineIndex, i, cell, 'text'))}
-          </div>
-        </div>
-      </div>
+      <IncludeTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        fileName={fileName}
+        comment={comment}
+      />
     );
-  }, [handleLineClick, renderEditableCell, parseLine]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell, parseLine]);
 
   const renderParameterLine = useCallback((line: string, lineIndex: number, isSelected: boolean, showHeader: boolean) => {
     const trimmed = line.trim();
     const paramMatch = trimmed.match(/^param\s+([\w\u4e00-\u9fa5]+)\s*(?::\s*([\w\u4e00-\u9fa5]+))?\s*(?:#\s*(.*))?$/);
     
     if (!paramMatch) {
-      return (
-        <div
-          key={lineIndex}
-          data-line={lineIndex}
-          className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-          onClick={(e) => handleLineClick(lineIndex, e)}
-        >
-          <div className="code-table__gutter">
-            <span className="code-table__line-number">{lineIndex + 1}</span>
-          </div>
-          <div className="code-table__content">
-            <span className="code-table__code">{line || '\u00A0'}</span>
-          </div>
-        </div>
-      );
+      return <CodeLine lineIndex={lineIndex} line={line} isSelected={isSelected} onLineMouseDown={handleLineMouseDown} onLineMouseEnter={handleLineMouseEnter} flowSegs={getFlowSegs(lineIndex)} maxFlowDepth={maxFlowDepth} />;
     }
 
     const [, paramName, paramType, comment] = paramMatch;
+    const isChinese = trimmed.startsWith('参数');
+    const keyword = isChinese ? '参数' : 'param';
     
-    const headers = ['参数名', '类型', '注释'];
-    const headerClasses = ['code-table__cell--param-name', 'code-table__cell--param-type', 'code-table__cell--remark'];
-    const cells = [
-      { text: paramName || '', className: 'code-table__cell--param-name', fieldIndex: 0 },
-      { text: paramType || '自动', className: 'code-table__cell--param-type', fieldIndex: 1 },
-      { text: comment || '', className: 'code-table__cell--remark', fieldIndex: 2 },
-    ];
-
     return (
-      <div
-        key={lineIndex}
-        data-line={lineIndex}
-        className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-        onClick={(e) => handleLineClick(lineIndex, e)}
-      >
-        <div className="code-table__gutter">
-          <span className="code-table__line-number">{lineIndex + 1}</span>
-        </div>
-        <div className="code-table__table code-table__table--parameter">
-          {showHeader && (
-            <div className="code-table__table-header">
-              {headers.map((h, i) => (
-                <div key={i} className={`code-table__table-cell code-table__table-cell--header ${headerClasses[i]}`}>{h}</div>
-              ))}
-            </div>
-          )}
-          <div className="code-table__table-row">
-            {cells.map((cell, i) => {
-              const cellType: 'text' | 'type' | 'public' = 
-                i === 1 ? 'type' : 'text';
-              return renderEditableCell(lineIndex, i, cell, cellType);
-            })}
-          </div>
-        </div>
-      </div>
+      <ParamTable
+        lineIndex={lineIndex}
+        isSelected={isSelected}
+        onLineMouseDown={handleLineMouseDown}
+        renderEditableCell={renderEditableCell}
+        keyword={keyword}
+        paramName={paramName}
+        paramType={paramType || '自动'}
+        comment={comment || ''}
+        showHeader={showHeader}
+      />
     );
-  }, [handleLineClick, renderEditableCell]);
+  }, [handleLineMouseDown, handleLineMouseEnter, renderEditableCell]);
+
+  const collectParamLines = useCallback((startIndex: number): ParamLineData[] => {
+    const paramLines: ParamLineData[] = [];
+    for (let i = startIndex + 1; i < lines.length; i++) {
+      const nextParsed = parseLine(lines[i], i);
+      if (nextParsed.type === 'param') {
+        const trimmed = lines[i].trim();
+        const paramMatch = trimmed.match(/^(?:参数|param)\s+([\w\u4e00-\u9fa5]+)\s*(?::\s*([^#=]*?))?\s*(?:=\s*([^#]*?))?\s*(?:#\s*(.*))?$/);
+        if (paramMatch) {
+          let paramName = paramMatch[1];
+          let modifier = '';
+          const modifierMatch = paramName.match(/^(var|ptr|ref|static|lent|sink|out|distinct)\s+/);
+          if (modifierMatch) {
+            modifier = modifierMatch[1];
+            paramName = paramName.substring(modifierMatch[0].length);
+          }
+          paramLines.push({
+            lineIndex: i,
+            paramName,
+            paramType: paramMatch[2] ? paramMatch[2].trim() : '自动',
+            defaultValue: paramMatch[3] ? paramMatch[3].trim() : '',
+            modifier,
+            comment: paramMatch[4] ? paramMatch[4].trim() : '',
+          });
+        }
+      } else {
+        break;
+      }
+    }
+    return paramLines;
+  }, [lines, parseLine]);
+
+  const mergedLinesInfo = useMemo(() => {
+    const skippedLines = new Set<number>();
+    for (let i = 0; i < lines.length; i++) {
+      const parsed = parseLine(lines[i], i);
+      if (parsed.type === 'proc' || parsed.type === 'func' || parsed.type === 'dll') {
+        for (let j = i + 1; j < lines.length; j++) {
+          const nextParsed = parseLine(lines[j], j);
+          if (nextParsed.type === 'param') {
+            skippedLines.add(j);
+          } else {
+            break;
+          }
+        }
+      }
+    }
+    return skippedLines;
+  }, [lines, parseLine]);
 
   const renderLine = useCallback((line: string, lineIndex: number) => {
+    if (mergedLinesInfo.has(lineIndex)) {
+      return null;
+    }
+
     const parsed = parseLine(line, lineIndex);
     const isSelected = selectedLines.has(lineIndex);
     
     switch (parsed.type) {
-      case 'proc':
-        return renderProcLine(line, lineIndex, isSelected);
-      case 'func':
-        return renderFuncLine(line, lineIndex, isSelected);
+      case 'proc': {
+        const paramLines = collectParamLines(lineIndex);
+        return renderProcLine(line, lineIndex, isSelected, paramLines);
+      }
+      case 'dll': {
+        const paramLines = collectParamLines(lineIndex);
+        return renderDllLine(line, lineIndex, isSelected, paramLines);
+      }
+      case 'func': {
+        const paramLines = collectParamLines(lineIndex);
+        return renderFuncLine(line, lineIndex, isSelected, paramLines);
+      }
       case 'template':
         return renderTemplateLine(line, lineIndex, isSelected);
       case 'param': {
         const prevLine = lineIndex > 0 ? lines[lineIndex - 1] : '';
         const prevParsed = parseLine(prevLine, lineIndex - 1);
-        const showHeader = prevParsed.type === 'proc';
+        const showHeader = prevParsed.type !== 'param';
         return renderParameterLine(line, lineIndex, isSelected, showHeader);
       }
       case 'var':
@@ -1772,7 +1883,6 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
       case 'include':
         return renderIncludeLine(line, lineIndex, isSelected);
       default: {
-        const indent = line.length - line.trimStart().length;
         const isEditing = editingLine === lineIndex;
         
         if (isEditing) {
@@ -1786,6 +1896,21 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
                 <span className="code-table__line-number">{lineIndex + 1}</span>
               </div>
               <div className="code-table__content">
+                {getFlowSegs(lineIndex) && getFlowSegs(lineIndex)!.length > 0 && (
+                  <div className="code-table__flow-lines">
+                    {getFlowSegs(lineIndex)!.map((seg, idx) => (
+                      <span
+                        key={idx}
+                        className={`code-flow-seg code-flow-${seg.type} ${seg.isLoop ? 'code-flow-loop' : ''} ${seg.showBottomArrow ? 'has-bottom-arrow' : ''}`}
+                        style={{ left: `calc(${seg.indent}ch - 4px)` }}
+                      >
+                        {seg.type === 'horz' && <span className="code-flow-line" />}
+                        {seg.showTopArrow && <span className="code-flow-arrow-top" />}
+                        {seg.showBottomArrow && <span className="code-flow-arrow-bottom" />}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   className="code-table__textarea"
@@ -1825,6 +1950,29 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
                     }
                   }}
                   onBlur={handleLineEditCommit}
+                  onPaste={(e) => {
+                    const clipText = e.clipboardData.getData('text/plain');
+                    if (!clipText) return;
+                    const clipLines = clipText.split('\n');
+                    if (clipLines.length <= 1) return;
+                    e.preventDefault();
+                    const cursorPos = e.currentTarget.selectionStart;
+                    const before = editingLineValue.substring(0, cursorPos);
+                    const after = editingLineValue.substring(e.currentTarget.selectionEnd);
+                    const newLines = [...lines];
+                    newLines[editingLine!] = before + clipLines[0];
+                    const middleLines = clipLines.slice(1, -1);
+                    const lastLine = clipLines[clipLines.length - 1] + after;
+                    newLines.splice(editingLine! + 1, 0, ...middleLines, lastLine);
+                    setEditingLine(null);
+                    setEditingLineValue('');
+                    updateContent(newLines.join('\n'));
+                    const newSelection = new Set<number>();
+                    for (let i = editingLine! + 1; i <= editingLine! + clipLines.length - 1; i++) {
+                      newSelection.add(i);
+                    }
+                    setSelectedLines(newSelection);
+                  }}
                   autoFocus
                 />
               </div>
@@ -1837,12 +1985,28 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
             key={lineIndex}
             data-line={lineIndex}
             className={`code-table__line ${isSelected ? 'code-table__line--selected' : ''}`}
-            onClick={(e) => handleLineClick(lineIndex, e)}
+            onMouseDown={(e) => handleLineMouseDown(lineIndex, e)}
+            onMouseEnter={() => handleLineMouseEnter(lineIndex)}
           >
             <div className="code-table__gutter">
               <span className="code-table__line-number">{lineIndex + 1}</span>
             </div>
-            <div className="code-table__content" style={{ paddingLeft: indent * 4 }}>
+            <div className="code-table__content">
+              {getFlowSegs(lineIndex) && getFlowSegs(lineIndex)!.length > 0 && (
+                <div className="code-table__flow-lines">
+                  {getFlowSegs(lineIndex)!.map((seg, idx) => (
+                    <span
+                      key={idx}
+                      className={`code-flow-seg code-flow-${seg.type} ${seg.isLoop ? 'code-flow-loop' : ''} ${seg.showBottomArrow ? 'has-bottom-arrow' : ''}`}
+                      style={{ left: `calc(${seg.indent}ch - 4px)` }}
+                    >
+                      {seg.type === 'horz' && <span className="code-flow-line" />}
+                      {seg.showTopArrow && <span className="code-flow-arrow-top" />}
+                      {seg.showBottomArrow && <span className="code-flow-arrow-bottom" />}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="code-table__input-wrapper">
                 <input
                   type="text"
@@ -1899,8 +2063,14 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
                       } else if (e.key === 'Enter' || e.key === 'Tab') {
                         e.preventDefault();
                         const item = completions[completionIndex];
+                        const currentLineIndent = line.length - line.trimStart().length;
+                        const prefix = getCompletionPrefix(line, completionPosition);
+                        const beforePrefix = line.substring(0, completionPosition - prefix.length);
+                        const afterCursor = line.substring(completionPosition);
+                        const insertText = item.insertText.replace(/\n/g, '\n' + ' '.repeat(currentLineIndent));
+                        const newLine = beforePrefix + insertText + afterCursor;
                         const newLines = [...lines];
-                        newLines[lineIndex] = item.insertText;
+                        newLines[lineIndex] = newLine;
                         updateContent(newLines.join('\n'));
                         setShowCompletion(false);
                         setCompletionIndex(0);
@@ -1923,18 +2093,22 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
                       const textAfterCursor = line.substring(cursorPos);
                       
                       const currentIndent = line.length - line.trimStart().length;
-                      const indentStr = ' '.repeat(currentIndent);
+                      const trimmedBefore = textBeforeCursor.trim();
+                      const endsWithBlock = /^(if|case|while|for|when|block|try|proc|func|type|enum|object|如果|判断|循环|计次|当|尝试|过程|函数|类型|枚举|对象|elif|else|of|except|finally|否则如果|否则|为|异常|最后|当为)\b.*:\s*$/.test(trimmedBefore);
+                      const extraIndent = endsWithBlock ? 2 : 0;
+                      const indentStr = ' '.repeat(currentIndent + extraIndent);
                       const newLines = [...lines];
                       newLines[lineIndex] = textBeforeCursor;
                       newLines.splice(lineIndex + 1, 0, indentStr + textAfterCursor.trimStart());
                       updateContent(newLines.join('\n'));
                       
+                      const newCursorPos = currentIndent + extraIndent;
                       setTimeout(() => {
                         const nextLine = containerRef.current?.querySelector(`[data-line="${lineIndex + 1}"] input`);
                         if (nextLine) {
                           (nextLine as HTMLInputElement).focus();
-                          (nextLine as HTMLInputElement).selectionStart = currentIndent;
-                          (nextLine as HTMLInputElement).selectionEnd = currentIndent;
+                          (nextLine as HTMLInputElement).selectionStart = newCursorPos;
+                          (nextLine as HTMLInputElement).selectionEnd = newCursorPos;
                         }
                       }, 0);
                     } else if (e.key === 'Backspace' && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
@@ -1994,9 +2168,11 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
                       const prefix = getCompletionPrefix(line, completionPosition);
                       const beforePrefix = line.substring(0, completionPosition - prefix.length);
                       const afterCursor = line.substring(completionPosition);
+                      const currentLineIndent = line.length - line.trimStart().length;
+                      const insertText = item.insertText.replace(/\n/g, '\n' + ' '.repeat(currentLineIndent));
                       
                       const newLines = [...lines];
-                      newLines[lineIndex] = beforePrefix + item.insertText + afterCursor;
+                      newLines[lineIndex] = beforePrefix + insertText + afterCursor;
                       updateContent(newLines.join('\n'));
                       setShowCompletion(false);
                       setCompletionIndex(0);
@@ -2013,7 +2189,7 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
         );
       }
     }
-  }, [selectedLines, handleLineClick, parseLine, lines, editingLine, editingLineValue, handleLineEditCommit, updateContent, renderProcLine, renderFuncLine, renderTemplateLine, renderParameterLine, renderVariableLine, renderConstantLine, renderDataTypeLine, renderImportLine, renderIncludeLine, currentLineIndex, showCompletion, completionPosition, completionIndex]);
+  }, [selectedLines, handleLineMouseDown, handleLineMouseEnter, parseLine, lines, editingLine, editingLineValue, handleLineEditCommit, updateContent, renderProcLine, renderFuncLine, renderTemplateLine, renderParameterLine, renderVariableLine, renderConstantLine, renderDataTypeLine, renderImportLine, renderIncludeLine, currentLineIndex, showCompletion, completionPosition, completionIndex, mergedLinesInfo, collectParamLines, renderDllLine]);
 
   const hasTableContent = useMemo(() => {
     return lines.some((line, index) => {
@@ -2025,9 +2201,11 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
   return (
     <div
       ref={containerRef}
-      className={`code-table-editor code-table-editor--${theme}`}
+      className={`code-table-editor`}
       tabIndex={0}
       onKeyDown={handleKeyDownGlobal}
+      onMouseUp={handleMouseUp}
+      onPaste={handlePaste}
     >
       {!readOnly && (
         <div className="code-table__toolbar">
@@ -2143,6 +2321,43 @@ const CodeTableEditor = forwardRef<EditorHandle, EditorProps>(function CodeTable
           />
         )}
       </div>
+      {showCommentModal && commentModalData && (
+        <div className="code-table__modal-overlay" onClick={() => setShowCommentModal(false)}>
+          <div className="code-table__modal" onClick={(e) => e.stopPropagation()}>
+            <div className="code-table__modal-header">
+              <span className="code-table__modal-title">编辑注释</span>
+              <button 
+                className="code-table__modal-close"
+                onClick={() => setShowCommentModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <textarea
+              ref={textareaRef}
+              className="code-table__modal-textarea"
+              value={commentModalData.value}
+              onChange={(e) => setCommentModalData({ ...commentModalData, value: e.target.value })}
+              placeholder="输入注释内容..."
+              autoFocus
+            />
+            <div className="code-table__modal-footer">
+              <button 
+                className="code-table__modal-btn code-table__modal-btn--cancel"
+                onClick={() => setShowCommentModal(false)}
+              >
+                取消
+              </button>
+              <button 
+                className="code-table__modal-btn code-table__modal-btn--confirm"
+                onClick={() => handleCommentSave(commentModalData.value)}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

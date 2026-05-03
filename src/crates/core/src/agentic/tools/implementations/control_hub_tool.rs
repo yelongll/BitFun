@@ -1382,9 +1382,9 @@ fn map_dispatch_error(domain: &str, _action: &str, err: BitFunError) -> ControlH
     // `BitFunError::Tool` wraps the message with `"Tool error: "`, so we try
     // both the raw form and the form after stripping that wrapper.
     let strip_candidate = msg
-        .strip_prefix("Tool error: ")
-        .or_else(|| msg.strip_prefix("Service error: "))
-        .or_else(|| msg.strip_prefix("Agent error: "))
+        .strip_prefix("工具错误: ")
+        .or_else(|| msg.strip_prefix("服务错误: "))
+        .or_else(|| msg.strip_prefix("智能体错误: "))
         .unwrap_or(msg.as_str());
     if let Some((code_str, rest)) =
         parse_bracket_code_prefix(strip_candidate).or_else(|| parse_bracket_code_prefix(&msg))
@@ -1399,26 +1399,26 @@ fn map_dispatch_error(domain: &str, _action: &str, err: BitFunError) -> ControlH
     }
 
     let lower = msg.to_lowercase();
-    let code = if lower.contains("not found") {
+    let code = if lower.contains("未找到") {
         ErrorCode::NotFound
-    } else if lower.contains("ambiguous") {
+    } else if lower.contains("模糊") {
         ErrorCode::Ambiguous
-    } else if lower.contains("permission") || lower.contains("not allowed") {
+    } else if lower.contains("权限") || lower.contains("不允许") {
         ErrorCode::PermissionDenied
-    } else if lower.contains("timed out") || lower.contains("timeout") {
+    } else if lower.contains("超时") || lower.contains("超时") {
         ErrorCode::Timeout
-    } else if lower.contains("stale") || lower.contains("take a fresh") {
+    } else if lower.contains("过期") || lower.contains("重新获取") {
         ErrorCode::StaleRef
-    } else if lower.contains("refused") || lower.contains("guard") {
+    } else if lower.contains("拒绝") || lower.contains("保护") {
         ErrorCode::GuardRejected
-    } else if lower.contains("only available in") || lower.contains("not available") {
+    } else if lower.contains("仅在") || lower.contains("不可用") {
         ErrorCode::NotAvailable
-    } else if domain == "terminal" && lower.contains("session") {
+    } else if domain == "terminal" && lower.contains("会话错误") {
         ErrorCode::MissingSession
     } else if domain == "browser"
-        && (lower.contains("no longer connected")
-            || lower.contains("tab was likely closed")
-            || lower.contains("page was closed"))
+        && (lower.contains("浏览器已断开连接")
+            || lower.contains("标签页已关闭")
+            || lower.contains("页面已关闭"))
     {
         ErrorCode::WrongTab
     } else {
@@ -1462,13 +1462,13 @@ mod control_hub_tests {
         let err = tool
             .dispatch("nope", "any", &json!({}), &ctx)
             .await
-            .expect_err("unknown domain must error");
+            .expect_err("未知域必须错误");
         let msg = err.to_string();
-        assert!(msg.contains("Unknown domain"), "got: {msg}");
+        assert!(msg.contains("未知域"), "got: {msg}");
         for d in ["browser", "terminal", "meta", "ComputerUse"] {
             assert!(
                 msg.contains(d),
-                "valid domain {d} missing from error: {msg}"
+                "有效域 {d} 缺失于错误: {msg}"
             );
         }
     }
@@ -1480,13 +1480,13 @@ mod control_hub_tests {
         let results = tool
             .dispatch("meta", "capabilities", &json!({}), &ctx)
             .await
-            .expect("capabilities should succeed");
+            .expect("capabilities 成功");
         let payload = results.first().expect("one result").content();
         let domains = payload.get("domains").expect("domains present");
         for d in ["browser", "terminal", "meta"] {
             assert!(
                 domains.get(d).is_some(),
-                "domain {d} missing from capabilities payload: {payload}"
+                "域 {d} 缺失于 capabilities payload: {payload}"
             );
         }
         assert!(domains.get("desktop").is_none());
@@ -1509,11 +1509,11 @@ mod control_hub_tests {
             .dispatch(
                 "meta",
                 "route_hint",
-                &json!({ "intent": "open https://example.com in a new tab" }),
+                &json!({ "intent": "在新标签页打开 URL https://example.com" }),
                 &ctx,
             )
             .await
-            .expect("route_hint succeeds");
+            .expect("route_hint 成功");
         let payload = results.first().unwrap().content();
         let ranked = payload
             .get("ranked")
@@ -1523,7 +1523,7 @@ mod control_hub_tests {
             ranked
                 .iter()
                 .any(|s| { s.get("domain").and_then(|v| v.as_str()) == Some("browser") }),
-            "browser must appear in ranked for URL intent: {payload}"
+            "浏览器必须在 ranked 中出现，用于 URL 意图: {payload}"
         );
         assert_eq!(
             payload.get("suggested_domain").and_then(|v| v.as_str()),
@@ -1555,35 +1555,35 @@ mod control_hub_tests {
     fn parse_bracket_code_prefix_extracts_code_and_rest() {
         // Standard structured frontend error shape.
         let (code, rest) = parse_bracket_code_prefix("[NOT_FOUND] no element matched #x")
-            .expect("must parse code");
-        assert_eq!(code, "NOT_FOUND");
-        assert_eq!(rest, "no element matched #x");
+            .expect("必须解析代码");
+        assert_eq!(code, "未找到");
+        assert_eq!(rest, "未找到元素: #x");
 
         // With trailing hints block (preserved untouched in `rest`).
         let (code, rest) = parse_bracket_code_prefix(
             "[AMBIGUOUS] multiple matches\nHints: refine selector | use index",
         )
         .unwrap();
-        assert_eq!(code, "AMBIGUOUS");
-        assert!(rest.starts_with("multiple matches"));
+        assert_eq!(code, "多个匹配");
+        assert!(rest.starts_with("多个匹配项"));
         assert!(rest.contains("Hints:"));
     }
 
     #[test]
     fn parse_bracket_code_prefix_rejects_non_code_brackets() {
-        assert!(parse_bracket_code_prefix("[not a code] foo").is_none());
-        assert!(parse_bracket_code_prefix("no prefix here").is_none());
-        assert!(parse_bracket_code_prefix("[] empty").is_none());
+        assert!(parse_bracket_code_prefix("[非代码] foo").is_none());
+        assert!(parse_bracket_code_prefix("无前缀").is_none());
+        assert!(parse_bracket_code_prefix("[] 空").is_none());
     }
 
     #[test]
     fn parse_hints_suffix_splits_pipe_delimited_hints() {
-        let (msg, hints) = parse_hints_suffix("the error\nHints: a | b | c");
-        assert_eq!(msg, "the error");
+        let (msg, hints) = parse_hints_suffix("错误\nHints: a | b | c");
+        assert_eq!(msg, "错误");
         assert_eq!(hints, vec!["a", "b", "c"]);
 
-        let (msg, hints) = parse_hints_suffix("just a message");
-        assert_eq!(msg, "just a message");
+        let (msg, hints) = parse_hints_suffix("消息");
+        assert_eq!(msg, "消息");
         assert!(hints.is_empty());
     }
 
@@ -1597,14 +1597,14 @@ mod control_hub_tests {
             "desktop",
             "click",
             BitFunError::tool(
-                "[AMBIGUOUS] 3 matches for text 'Save'\nHints: pass index | use selector"
+                "[多个匹配] 3 for text 'Save'\nHints: pass index | use selector"
                     .to_string(),
             ),
         );
         assert!(matches!(err.code, ErrorCode::Ambiguous));
-        assert!(err.message.contains("Save"));
-        assert!(err.hints.iter().any(|h| h.contains("pass index")));
-        assert!(err.hints.iter().any(|h| h.contains("use selector")));
+        assert!(err.message.contains("保存"));
+        assert!(err.hints.iter().any(|h| h.contains("索引")));
+        assert!(err.hints.iter().any(|h| h.contains("选择器")));
 
         // Unknown frontend code should fall through to FRONTEND_ERROR.
         let err = map_dispatch_error(
@@ -1620,8 +1620,8 @@ mod control_hub_tests {
         let err = map_dispatch_error(
             "browser",
             "click",
-            BitFunError::tool(
-                "Browser session 'AB' is no longer connected (the tab was likely closed)."
+                BitFunError::tool(
+                "浏览器会话 'AB' 已断开连接（可能已关闭标签页）"
                     .to_string(),
             ),
         );
@@ -1632,31 +1632,31 @@ mod control_hub_tests {
     fn map_dispatch_error_classifies_known_phrases() {
         let mk = |s: &str| BitFunError::tool(s.to_string());
         assert!(matches!(
-            map_dispatch_error("browser", "select", mk("element not found")).code,
+            map_dispatch_error("browser", "select", mk("未找到元素")).code,
             ErrorCode::NotFound
         ));
         assert!(matches!(
-            map_dispatch_error("browser", "wait", mk("Operation timed out")).code,
+            map_dispatch_error("browser", "wait", mk("超时")).code,
             ErrorCode::Timeout
         ));
         assert!(matches!(
             map_dispatch_error(
                 "browser",
                 "click",
-                mk("stale reference, take a fresh snapshot")
+                mk("过期引用，重新获取快照，请重试")
             )
             .code,
             ErrorCode::StaleRef
         ));
         // "session ... not found" hits NotFound first (correct: that is what
         // the model needs to know), so verify the terminal-specific branch
-        // trips on a phrasing that doesn't say "not found".
+        // trips on a phrasing that doesn't say "未找到".
         assert!(matches!(
-            map_dispatch_error("terminal", "kill", mk("invalid terminal session id")).code,
+            map_dispatch_error("terminal", "kill", mk("无效终端会话ID")).code,
             ErrorCode::MissingSession
         ));
         assert!(matches!(
-            map_dispatch_error("browser", "x", mk("something exploded")).code,
+            map_dispatch_error("browser", "x", mk("浏览器崩溃了")).code,
             ErrorCode::Internal
         ));
     }
@@ -1666,11 +1666,11 @@ mod control_hub_tests {
         let desc = ControlHubTool::new().description().await.unwrap();
         assert!(
             desc.contains("ComputerUse"),
-            "description must point local computer work to ComputerUse"
+            "本地计算机工作必须指向 ComputerUse"
         );
         assert!(
             !desc.contains("domain: \"desktop\"") && !desc.contains("domain: \"system\""),
-            "ControlHub description must not advertise desktop/system domains"
+            "控制中心描述必须不广告桌面/系统域"
         );
     }
 
@@ -1679,11 +1679,11 @@ mod control_hub_tests {
         let desc = ControlHubTool::new().description().await.unwrap();
         assert!(
             desc.contains("Two browser modes"),
-            "description must describe the two browser control modes"
+            "控制中心描述必须描述两种浏览器控制模式"
         );
         assert!(
             desc.contains("mode: \"headless\"") && desc.contains("mode: \"default\""),
-            "description must mention both browser connect modes"
+            "控制中心描述必须提及两种浏览器连接模式"
         );
     }
 
@@ -1699,7 +1699,7 @@ mod control_hub_tests {
                 &ctx,
             )
             .await
-            .expect("migration error is a structured result");
+            .expect("迁移错误是一个结构化结果");
         let payload = results.first().expect("one result").content();
         assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(false));
         assert_eq!(
@@ -1844,7 +1844,7 @@ mod control_hub_tests {
                 &ctx,
             )
             .await
-            .expect("dispatch returns the structured envelope");
+            .expect("迁移错误是一个结构化结果");
         let payload = results.first().unwrap().content();
         assert_eq!(payload["ok"], serde_json::Value::Bool(false));
         assert_eq!(payload["error"]["code"], "NOT_AVAILABLE");
@@ -1875,9 +1875,9 @@ mod control_hub_tests {
     fn which_exists_finds_a_universally_present_binary() {
         // `sh` is always on Unix; `cmd` is always on Windows.
         #[cfg(unix)]
-        assert!(which_exists("sh"), "sh must be on PATH on Unix hosts");
+        assert!(which_exists("sh"), "sh必须在Unix主机上在PATH中");
         #[cfg(windows)]
-        assert!(which_exists("cmd"), "cmd must be on PATH on Windows hosts");
+        assert!(which_exists("cmd"), "cmd必须在Windows主机上在PATH中");
         // A clearly bogus name must NOT resolve.
         assert!(!which_exists("definitely-not-a-real-binary-bitfun-xyz"));
     }
@@ -1887,7 +1887,7 @@ mod control_hub_tests {
         // Just sanity-check that the helper returns SOMETHING non-empty on
         // every platform; the message content is OS-specific.
         let hints = linux_clipboard_install_hints();
-        assert!(!hints.is_empty(), "hints must never be empty");
+        assert!(!hints.is_empty(), "迁移错误必须包含提示");
     }
 
     #[tokio::test]
@@ -1911,7 +1911,7 @@ mod control_hub_tests {
                 &ctx,
             )
             .await
-            .expect("shell run_script should succeed");
+            .expect("迁移错误是一个结构化结果");
         let payload = results.first().unwrap().content();
         assert_eq!(
             payload.get("success").and_then(|v| v.as_bool()),
@@ -1935,7 +1935,7 @@ mod control_hub_tests {
         let err = tool
             .dispatch("terminal", "list_sessions", &json!({}), &ctx)
             .await
-            .expect_err("must fail without TerminalApi singleton");
+            .expect_err("迁移错误是一个结构化结果");
         let msg = err.to_string();
         assert!(
             msg.contains("TerminalApi") || msg.contains("list_sessions"),
