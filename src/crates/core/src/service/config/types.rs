@@ -126,6 +126,25 @@ pub struct AIExperienceConfig {
     pub show_thinking_process: bool,
     /// Whether completed thinking blocks remain as expandable collapsed items.
     pub show_completed_thinking_item: bool,
+    /// Where to show the Agent companion: "input" or "desktop".
+    pub agent_companion_display_mode: String,
+    /// Optional Petdex-compatible companion package selected by the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_companion_pet: Option<AgentCompanionPetSelection>,
+}
+
+/// User-selected Agent companion pet package.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCompanionPetSelection {
+    pub id: String,
+    pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub source: String,
+    pub package_path: String,
+    pub spritesheet_path: String,
+    pub spritesheet_mime_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1275,6 +1294,8 @@ impl Default for AIExperienceConfig {
             enable_agent_companion: true,
             show_thinking_process: false,
             show_completed_thinking_item: false,
+            agent_companion_display_mode: "desktop".to_string(),
+            agent_companion_pet: None,
         }
     }
 }
@@ -1685,7 +1706,7 @@ impl AIModelConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{AIConfig, AIModelConfig, ReasoningMode};
+    use super::{AIConfig, AIExperienceConfig, AIModelConfig, ReasoningMode};
 
     #[test]
     fn deserializes_compatibility_thinking_flag_into_reasoning_mode() {
@@ -1703,6 +1724,46 @@ mod tests {
 
         assert_eq!(config.reasoning_mode, Some(ReasoningMode::Enabled));
         assert!(config.enable_thinking_process);
+    }
+
+    #[test]
+    fn preserves_selected_agent_companion_pet() {
+        let config: AIExperienceConfig = serde_json::from_value(serde_json::json!({
+            "enable_session_title_generation": true,
+            "enable_welcome_panel_ai_analysis": false,
+            "enable_visual_mode": false,
+            "enable_agent_companion": true,
+            "agent_companion_display_mode": "desktop",
+            "agent_companion_pet": {
+                "id": "boxcat",
+                "displayName": "Boxcat",
+                "description": "A tiny cat tucked inside a cardboard box for cozy coding sessions.",
+                "source": "preset",
+                "packagePath": "/agent-companion-pets/boxcat",
+                "spritesheetPath": "/agent-companion-pets/boxcat/spritesheet.webp",
+                "spritesheetMimeType": "image/webp"
+            }
+        }))
+        .expect("AI experience config with selected companion pet should deserialize");
+
+        let pet = config
+            .agent_companion_pet
+            .as_ref()
+            .expect("selected companion pet should be retained");
+        assert_eq!(pet.id, "boxcat");
+        assert_eq!(pet.display_name, "Boxcat");
+        assert_eq!(pet.package_path, "/agent-companion-pets/boxcat");
+        assert_eq!(config.agent_companion_display_mode, "desktop");
+
+        let serialized = serde_json::to_value(&config).expect("config should serialize");
+        assert_eq!(
+            serialized["agent_companion_pet"]["displayName"],
+            "Boxcat"
+        );
+        assert_eq!(
+            serialized["agent_companion_pet"]["spritesheetPath"],
+            "/agent-companion-pets/boxcat/spritesheet.webp"
+        );
     }
 
     #[test]

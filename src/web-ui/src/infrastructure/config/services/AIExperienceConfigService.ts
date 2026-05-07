@@ -15,6 +15,22 @@ export interface AIExperienceSettings {
   show_thinking_process: boolean;
   /** Whether completed thinking blocks remain as expandable collapsed items. */
   show_completed_thinking_item: boolean;
+  /** Where to show the Agent companion. */
+  agent_companion_display_mode: AgentCompanionDisplayMode;
+  /** Optional Petdex-compatible companion package selected by the user. */
+  agent_companion_pet?: AgentCompanionPetSelection | null;
+}
+
+export type AgentCompanionDisplayMode = 'input' | 'desktop';
+
+export interface AgentCompanionPetSelection {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  source: 'preset' | 'user';
+  packagePath: string;
+  spritesheetPath: string;
+  spritesheetMimeType: string;
 }
 
 const CONFIG_PATH = 'app.ai_experience';
@@ -26,6 +42,7 @@ const defaultSettings: AIExperienceSettings = {
   enable_agent_companion: true,
   show_thinking_process: false,
   show_completed_thinking_item: false,
+  agent_companion_display_mode: 'desktop',
 };
 
  
@@ -141,4 +158,3 @@ export class AIExperienceConfigService {
 
  
 export const aiExperienceConfigService = AIExperienceConfigService.getInstance();
-
