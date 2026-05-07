@@ -7,17 +7,25 @@ const log = createLogger('AIExperienceConfig');
 
 export interface AIExperienceSettings {
   enable_session_title_generation: boolean;
+  enable_welcome_panel_ai_analysis: boolean;
   enable_visual_mode: boolean;
   /** Pixel Agent companion in collapsed chat input (session settings). */
   enable_agent_companion: boolean;
+  /** Whether to show model thinking process in FlowChat. */
+  show_thinking_process: boolean;
+  /** Whether completed thinking blocks remain as expandable collapsed items. */
+  show_completed_thinking_item: boolean;
 }
 
 const CONFIG_PATH = 'app.ai_experience';
 
 const defaultSettings: AIExperienceSettings = {
   enable_session_title_generation: true,
+  enable_welcome_panel_ai_analysis: false,
   enable_visual_mode: false,
   enable_agent_companion: true,
+  show_thinking_process: false,
+  show_completed_thinking_item: false,
 };
 
  

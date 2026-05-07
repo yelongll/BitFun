@@ -39,7 +39,7 @@ function convertMenuItem(item: SystemMenuItem): UIMenuItem {
     separator: item.separator,
     shortcut: item.shortcut,
     submenu: item.submenu?.map(convertMenuItem),
-    onClick: item.onClick
+    onClick: item.onClick ? (context) => item.onClick!(context!) : undefined
   };
 }
 

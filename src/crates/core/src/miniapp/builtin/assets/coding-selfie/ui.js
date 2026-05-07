@@ -1070,7 +1070,7 @@ const EXT_TO_LANG = {
   '.mdx': 'MDX', '.yml': 'YAML', '.yaml': 'YAML', '.toml': 'TOML', '.ini': 'INI', '.sql': 'SQL',
   '.vue': 'Vue', '.svelte': 'Svelte', '.lua': 'Lua', '.dart': 'Dart', '.r': 'R', '.proto': 'Protobuf',
   '.gradle': 'Gradle', '.tf': 'Terraform', '.hcl': 'HCL', '.ex': 'Elixir', '.exs': 'Elixir',
-  '.erl': 'Erlang', '.elm': 'Elm', '.zig': 'Zig', '.nim': 'Nim', '.jl': 'Julia', '.clj': 'Clojure',
+  '.erl': 'Erlang', '.elm': 'Elm', '.zig': 'Zig', '.灵': '空灵语言', '.jl': 'Julia', '.clj': 'Clojure',
   '.cljs': 'ClojureScript', '.fs': 'F#', '.ml': 'OCaml', '.coffee': 'CoffeeScript', '.xml': 'XML',
 };
 

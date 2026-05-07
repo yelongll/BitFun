@@ -1,9 +1,9 @@
 {
-  "name": "bitfun-installer",
+  "name": "kongling-installer",
   "version": "0.2.5",
   "private": true,
   "type": "module",
-  "description": "Kongling Custom Installer - Modern branded installation experience",
+  "description": "空灵语言安装程序 - 现代品牌安装体验",
   "scripts": {
     "sync:model-i18n": "node scripts/sync-model-i18n.cjs",
     "sync:theme-i18n": "node scripts/sync-theme-i18n.cjs",

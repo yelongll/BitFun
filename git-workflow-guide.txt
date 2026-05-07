@@ -71,3 +71,7 @@ git remote set-url upstream https://github.com/GCWing/BitFun.git
 git remote add origin https://github.com/yelongll/BitFun.git
 
 项目编译 pnpm run desktop:dev
+
+发布版 pnpm run desktop:build:release-fast
+
+编译发布安装程序 pnpm run desktop:build:nsis:fast

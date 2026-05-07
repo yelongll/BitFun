@@ -25,7 +25,7 @@ struct WindowsInstallState {
 
 const MIN_WINDOWS_APP_EXE_BYTES: u64 = 5 * 1024 * 1024;
 const PAYLOAD_MANIFEST_FILE: &str = "payload-manifest.json";
-const INSTALL_MANIFEST_FILE: &str = ".bitfun-install-manifest.json";
+const INSTALL_MANIFEST_FILE: &str = ".kongling-install-manifest.json";
 const INSTALLER_STATE_FILE: &str = "installer-state.json";
 const EMBEDDED_PAYLOAD_ZIP: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/embedded_payload.zip"));
@@ -121,7 +121,7 @@ pub fn get_default_install_path() -> String {
             .unwrap_or_else(|| PathBuf::from("/opt"))
     };
 
-    base.join("BitFun").to_string_lossy().to_string()
+    base.join("空灵语言").to_string_lossy().to_string()
 }
 
 /// Last successful install path if still valid, otherwise platform default.
@@ -347,12 +347,12 @@ pub async fn start_installation(window: Window, options: InstallOptions) -> Resu
             if cfg!(debug_assertions) {
                 // Development mode: create a placeholder to simplify local UI iteration.
                 log::warn!("No payload found - running in development mode");
-                let placeholder = install_path.join("BitFun.exe");
+                let placeholder = install_path.join("空灵语言.exe");
                 if !placeholder.exists() {
                     std::fs::write(&placeholder, "placeholder")
                         .map_err(|e| format!("Failed to write placeholder: {}", e))?;
                 }
-                installed_files.push("BitFun.exe".to_string());
+                installed_files.push("空灵语言.exe".to_string());
                 used_debug_placeholder = true;
             } else {
                 return Err(format!(
@@ -528,15 +528,15 @@ fn schedule_windows_self_uninstall_cleanup(uninstall_exe_path: &Path) -> Result<
 
     let temp_dir = std::env::temp_dir();
     let pid = std::process::id();
-    let script_path = temp_dir.join(format!("bitfun-uninstall-{}.cmd", pid));
-    let log_path = temp_dir.join(format!("bitfun-uninstall-cleanup-{}.log", pid));
+    let script_path = temp_dir.join(format!("kongling-uninstall-{}.cmd", pid));
+    let log_path = temp_dir.join(format!("kongling-uninstall-cleanup-{}.log", pid));
 
     let script = r#"@echo off
 setlocal enableextensions
 set "TARGET=%~1"
 set "LOG=%~2"
 if "%TARGET%"=="" exit /b 2
-if "%LOG%"=="" set "LOG=%TEMP%\bitfun-uninstall-cleanup.log"
+if "%LOG%"=="" set "LOG=%TEMP%\kongling-uninstall-cleanup.log"
 echo [%DATE% %TIME%] cleanup start > "%LOG%"
 cd /d "%TEMP%"
 for /L %%i in (1,1,30) do (
@@ -600,7 +600,7 @@ fn append_uninstall_runtime_log(message: &str) {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let log_path = std::env::temp_dir().join("bitfun-uninstall-runtime.log");
+    let log_path = std::env::temp_dir().join("kongling-uninstall-runtime.log");
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -615,11 +615,11 @@ fn append_uninstall_runtime_log(message: &str) {
 #[tauri::command]
 pub fn launch_application(install_path: String) -> Result<(), String> {
     let exe = if cfg!(target_os = "windows") {
-        PathBuf::from(&install_path).join("BitFun.exe")
+        PathBuf::from(&install_path).join("空灵语言.exe")
     } else if cfg!(target_os = "macos") {
-        PathBuf::from(&install_path).join("BitFun")
+        PathBuf::from(&install_path).join("空灵语言")
     } else {
-        PathBuf::from(&install_path).join("bitfun")
+        PathBuf::from(&install_path).join("kongling")
     };
 
     std::process::Command::new(&exe)
@@ -1013,7 +1013,7 @@ fn prepare_install_target(requested_path: &Path) -> Result<PathBuf, String> {
         }
         if directory_has_entries(&install_path)?
             && !install_path.join(INSTALL_MANIFEST_FILE).exists()
-            && !install_path.join("BitFun.exe").exists()
+            && !install_path.join("空灵语言.exe").exists()
         {
             return Err(format!(
                 "{}directory_must_be_empty_or_kongling",
@@ -1027,7 +1027,7 @@ fn prepare_install_target(requested_path: &Path) -> Result<PathBuf, String> {
     } else {
         find_existing_ancestor(&install_path)
     };
-    let test_file = writable_dir.join(".bitfun_install_test");
+    let test_file = writable_dir.join(".kongling_install_test");
     match std::fs::write(&test_file, "test") {
         Ok(_) => {
             let _ = std::fs::remove_file(&test_file);
@@ -1053,7 +1053,7 @@ fn directory_has_entries(path: &Path) -> Result<bool, String> {
 fn ensure_app_config_path() -> Result<PathBuf, String> {
     let config_root = dirs::config_dir()
         .ok_or_else(|| "Failed to get user config directory".to_string())?
-        .join("bitfun")
+        .join("kongling")
         .join("config");
     std::fs::create_dir_all(&config_root)
         .map_err(|e| format!("Failed to create 空灵语言 config directory: {}", e))?;
@@ -1345,7 +1345,7 @@ fn preflight_validate_payload_zip_archive<R: std::io::Read + std::io::Seek>(
             continue;
         }
         let file_name = zip_entry_file_name(file.name());
-        if file_name.eq_ignore_ascii_case("BitFun.exe") {
+        if file_name.eq_ignore_ascii_case("空灵语言.exe") {
             exe_size = Some(file.size());
             break;
         }
@@ -1357,7 +1357,7 @@ fn preflight_validate_payload_zip_archive<R: std::io::Read + std::io::Seek>(
 }
 
 fn preflight_validate_payload_dir(path: &Path, source_label: &str) -> Result<(), String> {
-    let app_exe = path.join("BitFun.exe");
+    let app_exe = path.join("空灵语言.exe");
     let meta = std::fs::metadata(&app_exe).map_err(|_| {
         format!(
             "Payload directory from {source_label} does not contain {}",
@@ -1590,7 +1590,7 @@ fn path_buf_to_manifest_string(path: PathBuf) -> String {
 }
 
 fn verify_installed_payload(install_path: &Path) -> Result<(), String> {
-    let app_exe = install_path.join("BitFun.exe");
+    let app_exe = install_path.join("空灵语言.exe");
     let app_meta = std::fs::metadata(&app_exe)
         .map_err(|_| "Installed application executable is missing after extraction".to_string())?;
     if app_meta.len() < MIN_WINDOWS_APP_EXE_BYTES {

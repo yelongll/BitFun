@@ -24,7 +24,7 @@ pub fn register_uninstall_entry(
         .create_subkey(UNINSTALL_KEY)
         .with_context(|| "Failed to create uninstall registry key")?;
 
-    let exe_path = install_path.join("BitFun.exe");
+    let exe_path = install_path.join("空灵语言.exe");
     let icon_path = format!("{},0", exe_path.display());
 
     key.set_value("DisplayName", &APP_NAME)?;
@@ -51,7 +51,7 @@ pub fn remove_uninstall_entry() -> Result<()> {
 
 /// Register the right-click context menu "Open with 空灵语言" for directories.
 pub fn register_context_menu(install_path: &Path) -> Result<()> {
-    let exe_path = install_path.join("BitFun.exe");
+    let exe_path = install_path.join("空灵语言.exe");
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Directory background context menu (right-click on empty area)

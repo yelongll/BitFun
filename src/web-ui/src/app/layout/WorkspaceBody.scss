@@ -119,9 +119,88 @@ $_nav-collapsed-width: 80px;
   flex-shrink: 0;
   padding-right: $size-gap-1;
   -webkit-app-region: drag;
+  gap: $size-gap-2;
+}
+
+.bitfun-workspace-body__level-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  
+  img {
+    width: 40px;
+    height: 36px;
+    object-fit: contain;
+  }
+}
+
+.bitfun-workspace-body__user-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 3px;
+  border-radius: 12px;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  transition: all $motion-fast $easing-standard;
+  
+  &:hover {
+    background: var(--color-bg-subtle);
+  }
+}
+
+.bitfun-workspace-body__user-level-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.bitfun-workspace-body__user-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-accent-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  span {
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+  }
+}
+
+.bitfun-workspace-body__user-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bitfun-workspace-body__window-controls {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bitfun-workspace-body__notification-btn {
   -webkit-app-region: no-drag;
 }
 
@@ -178,4 +257,81 @@ $_nav-collapsed-width: 80px;
     width: 0;
     opacity: 0;
   }
+}
+
+.bitfun-workspace-body__user-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: $size-gap-4;
+  gap: $size-gap-3;
+}
+
+.bitfun-workspace-body__user-modal-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-accent-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  span {
+    font-size: 24px;
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+  }
+}
+
+.bitfun-workspace-body__user-modal-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $size-gap-2;
+  text-align: center;
+}
+
+.bitfun-workspace-body__user-modal-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.bitfun-workspace-body__user-modal-email {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.bitfun-workspace-body__user-modal-level {
+  display: flex;
+  align-items: center;
+  gap: $size-gap-2;
+  padding: $size-gap-2 $size-gap-3;
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+  
+  img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+  }
+  
+  span {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+}
+
+.bitfun-workspace-body__user-modal-points {
+  color: var(--color-accent-500) !important;
+  font-weight: 600 !important;
 }

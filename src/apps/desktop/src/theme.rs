@@ -198,7 +198,6 @@ impl ThemeConfig {
                         document.body.style.backgroundColor = '{bg_primary}';
                     }}
                     
-                    console.log('[Theme] Pre-injected theme: {id}');
                     return true;
                 }}
                 

@@ -43,7 +43,11 @@ import { useI18n } from '@/infrastructure/i18n';
 import { EditorBreadcrumb } from './EditorBreadcrumb';
 import { EditorStatusBar } from './EditorStatusBar';
 import { EditorFloatingToolbar } from './EditorFloatingToolbar';
+import { ProgramOutputPanel, type ProgramOutput } from './ProgramOutputPanel';
+import { RunConfigDialog, type NimRunConfig } from './RunConfigDialog';
 import CodeTableEditor from './CodeTableEditor';
+import { notificationService } from '@/shared/notification-system';
+import { runConfigService } from '@/infrastructure/config/services/RunConfigService';
 
 const log = createLogger('CodeEditor');
 import {
@@ -148,7 +152,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   readOnly = false,
   showLineNumbers = true,
   showMinimap = true,
-  theme = 'vs-dark',
+  theme: _theme = 'vs-dark',
   className = '',
   onContentChange,
   onSave,
@@ -235,19 +239,48 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const [encoding, setEncoding] = useState<string>('UTF-8');
   const [largeFileMode, setLargeFileMode] = useState(false);
   const [isTableEditor, setIsTableEditor] = useState(false);
-  // Floating toolbar disabled - moved to tab bar
-  const showFloatingToolbar = false;
+  const showFloatingToolbar = true;
   const [isRunning, setIsRunning] = useState(false);
   const [isDebugging, setIsDebugging] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [selectedRunConfig, setSelectedRunConfig] = useState<string>('debug');
+  const [programOutputs, setProgramOutputs] = useState<ProgramOutput[]>([]);
+  const [showOutputPanel, setShowOutputPanel] = useState(false);
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
+  const [nimConfigs, setNimConfigs] = useState<NimRunConfig[]>([]);
+
+  // Load run configs on mount
+  useEffect(() => {
+    const loadConfigs = async () => {
+      const configs = await runConfigService.getConfigsAsync();
+      setNimConfigs(configs.nim);
+      setSelectedRunConfig(configs.selectedNimConfig);
+    };
+    loadConfigs();
+
+    const unsubscribe = runConfigService.subscribe((configs) => {
+      setNimConfigs(configs.nim);
+      setSelectedRunConfig(configs.selectedNimConfig);
+    });
+
+    return unsubscribe;
+  }, []);
   
-  // Sample run configs - in real app, these would come from project config
-  const runConfigs = [
-    { id: 'debug', name: '调试', command: 'npm run debug' },
-    { id: 'release', name: '发布', command: 'npm run build' },
-    { id: 'test', name: '测试', command: 'npm test' },
-  ];
+  // Run configs based on file type
+  const runConfigs = React.useMemo(() => {
+    if (filePath?.toLowerCase().endsWith('.灵')) {
+      return nimConfigs.map(config => ({
+        id: config.id,
+        name: config.name,
+        command: config.command,
+      }));
+    }
+    return [
+      { id: 'debug', name: '调试', command: 'npm run debug' },
+      { id: 'release', name: '发布', command: 'npm run build' },
+      { id: 'test', name: '测试', command: 'npm test' },
+    ];
+  }, [filePath, nimConfigs]);
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const modelRef = useRef<monaco.editor.ITextModel | null>(null);
@@ -1588,26 +1621,132 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
   // Run file
   const handleRun = useCallback(async () => {
-    if (!filePath || isRunning) return;
-    
+    console.log('[DEBUG] handleRun called', { filePath, isRunning, selectedRunConfig });
+    if (!filePath || isRunning) {
+      console.log('[DEBUG] handleRun early return', { noFilePath: !filePath, isRunning });
+      return;
+    }
+
+    const isNimFile = filePath.toLowerCase().endsWith('.灵');
+    console.log('[DEBUG] About to run file', { filePath, isNimFile, selectedRunConfig });
+
+    setProgramOutputs([]);
+    setShowOutputPanel(true);
+
+    const addOutput = (type: ProgramOutput['type'], content: string) => {
+      setProgramOutputs(prev => [...prev, { type, content, timestamp: Date.now() }]);
+    };
+
     setIsRunning(true);
     try {
-      log.info('Run file', { filePath });
+      if (isNimFile) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        
+        // Get selected config
+        const config = nimConfigs.find(c => c.id === selectedRunConfig);
+        if (!config) {
+          addOutput('error', '未找到运行配置');
+          return;
+        }
+        
+        const result = await invoke<{ success: boolean; output: string; error?: string; executablePath?: string; compilerInfo?: string }>('run_nim', {
+          request: {
+            filePath,
+            compileMode: config.compileMode,
+            nimCommand: config.command,
+            optimization: config.optimization,
+            warnings: config.warnings,
+            threads: config.threads,
+            memoryManagement: config.memoryManagement,
+            appType: config.appType,
+            backend: config.backend,
+            debugInfo: config.debugInfo,
+            stackTrace: config.stackTrace,
+            lineTrace: config.lineTrace,
+            checks: config.checks,
+            assertions: config.assertions,
+            targetOS: config.targetOS,
+            targetCPU: config.targetCPU,
+            nimcache: config.nimcache,
+            defines: config.defines,
+            additionalArgs: config.additionalArgs,
+            outputPath: config.outputPath,
+            // Runtime checks (detailed)
+            objChecks: config.objChecks,
+            fieldChecks: config.fieldChecks,
+            rangeChecks: config.rangeChecks,
+            boundChecks: config.boundChecks,
+            overflowChecks: config.overflowChecks,
+            floatChecks: config.floatChecks,
+            nanChecks: config.nanChecks,
+            infChecks: config.infChecks,
+            // Output control
+            outDir: config.outDir,
+            stdoutOutput: config.stdoutOutput,
+            colors: config.colors,
+            verbosity: config.verbosity,
+            // Compiler options
+            passC: config.passC,
+            passL: config.passL,
+            cc: config.cc,
+            cIncludes: config.cIncludes,
+            cLibDir: config.cLibDir,
+            cLib: config.cLib,
+            // Path management
+            paths: config.paths,
+            libPath: config.libPath,
+            imports: config.imports,
+            includes: config.includes,
+            // Config file control
+            skipCfg: config.skipCfg,
+            skipUserCfg: config.skipUserCfg,
+            skipParentCfg: config.skipParentCfg,
+            skipProjCfg: config.skipProjCfg,
+            // Other important options
+            forceBuild: config.forceBuild,
+            compileOnly: config.compileOnly,
+            noLinking: config.noLinking,
+            noMain: config.noMain,
+            exceptions: config.exceptions,
+            parallelBuild: config.parallelBuild,
+            incremental: config.incremental,
+            styleCheck: config.styleCheck,
+            lineDir: config.lineDir,
+            embedSrc: config.embedSrc,
+            experimental: config.experimental,
+            legacy: config.legacy,
+          }
+        });
+
+        if (result.success) {
+          log.info('空灵 程序执行成功', { output: result.output });
+          if (result.output) {
+            addOutput('stdout', result.output);
+          }
+        } else {
+          log.error('空灵 程序执行失败', { error: result.error });
+          addOutput('error', result.output || result.error || '编译失败');
+        }
+      } else {
+        log.info('运行文件', { filePath });
+        addOutput('info', '不支持的文件类型');
+      }
     } catch (err) {
-      log.error('Failed to run file', err);
+      log.error('运行文件失败', err);
+      addOutput('error', err instanceof Error ? err.message : String(err));
     } finally {
       setIsRunning(false);
     }
-  }, [filePath, isRunning]);
+  }, [filePath, isRunning, selectedRunConfig, nimConfigs]);
 
   const handleDebug = useCallback(async () => {
     if (!filePath || isDebugging) return;
     
     setIsDebugging(true);
     try {
-      log.info('Debug file', { filePath });
+      log.info('调试文件（不支持空灵语言）', { filePath });
     } catch (err) {
-      log.error('Failed to debug file', err);
+      log.error('调试文件失败', err);
     } finally {
       setIsDebugging(false);
     }
@@ -1618,9 +1757,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     
     setIsBuilding(true);
     try {
-      log.info('Build file', { filePath });
+      log.info('构建文件（不支持空灵语言）', { filePath });
     } catch (err) {
-      log.error('Failed to build file', err);
+      log.error('构建文件失败', err);
     } finally {
       setIsBuilding(false);
     }
@@ -1632,7 +1771,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     setIsDebugging(false);
     setIsBuilding(false);
     // TODO: Send actual stop command to backend
-    log.info('Stop requested');
+    log.info('停止请求');
   }, []);
 
   // Restart current operation
@@ -1641,7 +1780,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     setTimeout(() => {
       handleRun();
     }, 100);
-    log.info('Restart requested');
+    log.info('重新运行请求');
   }, [handleRun, handleStop]);
 
   // Format code
@@ -1649,22 +1788,28 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     if (!editorRef.current) return;
     try {
       await editorRef.current.getAction('editor.action.formatDocument')?.run();
-      log.info('Code formatted');
+      log.info('代码格式化成功');
     } catch (err) {
-      log.error('Failed to format code', err);
+      log.error('代码格式化失败', err);
     }
   }, []);
 
   // Open terminal
   const handleOpenTerminal = useCallback(() => {
     globalEventBus.emit('terminal:open', { workspacePath });
-    log.info('Terminal opened');
+    log.info('打开终端请求');
   }, [workspacePath]);
 
   // Open run settings
   const handleOpenSettings = useCallback(() => {
     globalEventBus.emit('settings:open', { section: 'run' });
-    log.info('Settings opened');
+    log.info('打开设置请求');
+  }, []);
+
+  // Handle config change
+  const handleConfigChange = useCallback(async (configId: string) => {
+    setSelectedRunConfig(configId);
+    await runConfigService.setSelectedNimConfig(configId);
   }, []);
 
   // Auto-save effect
@@ -2275,6 +2420,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               onFormat={handleFormat}
               onOpenTerminal={handleOpenTerminal}
               onOpenSettings={handleOpenSettings}
+              onOpenRunConfig={() => setShowConfigDialog(true)}
               isRunning={isRunning}
               isDebugging={isDebugging}
               isBuilding={isBuilding}
@@ -2282,7 +2428,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               filePath={filePath}
               runConfigs={runConfigs}
               selectedConfig={selectedRunConfig}
-              onConfigChange={setSelectedRunConfig}
+              onConfigChange={handleConfigChange}
             />
             <div 
               ref={containerRef} 
@@ -2297,6 +2443,27 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           </>
         )}
       </div>
+
+      <ProgramOutputPanel
+        outputs={programOutputs}
+        isVisible={showOutputPanel}
+        onClose={() => setShowOutputPanel(false)}
+        onClear={() => setProgramOutputs([])}
+        title="程序输出"
+        compileMode={selectedRunConfig === 'release' ? 'release' : 'debug'}
+        outputType={filePath?.toLowerCase().endsWith('.灵') ? 'exe' : undefined}
+      />
+
+      <RunConfigDialog
+        isOpen={showConfigDialog}
+        onClose={() => setShowConfigDialog(false)}
+        onSave={async (configs) => {
+          await runConfigService.saveNimConfigs(configs, selectedRunConfig);
+          setShowConfigDialog(false);
+        }}
+        configs={nimConfigs}
+        language={detectedLanguage}
+      />
 
       {loading && showLoadingOverlay && (
         <div className="code-editor-tool__loading-overlay">

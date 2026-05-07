@@ -439,7 +439,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     };
     loadDesignerConfig();
 
-    const unsubscribe = configManager.onConfigChange((path, oldValue, newValue) => {
+    const unsubscribe = configManager.onConfigChange((path, _oldValue, newValue) => {
       if (path === 'designer') {
         const config = newValue as { 
           alignmentLines?: boolean; 
@@ -811,7 +811,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     saveHistory(newElements);
   }, [elements, saveHistory]);
 
-  const updateElements = useCallback((ids: string[], updates: Partial<DesignerElement>) => {
+  const _updateElements = useCallback((ids: string[], updates: Partial<DesignerElement>) => {
     const newElements = elements.map(el => 
       ids.includes(el.id) ? { ...el, ...updates } : el
     );
@@ -1303,13 +1303,13 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     });
   };
 
-  const handlePreviewDragStart = (e: React.MouseEvent) => {
+  const _handlePreviewDragStart = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDraggingPreview(true);
     setPreviewDragStart({ x: e.clientX - previewPosition.x, y: e.clientY - previewPosition.y });
   };
 
-  const closePreview = () => {
+  const _closePreview = () => {
     setPreviewMode(false);
     setPreviewPosition({ x: 0, y: 0 });
   };
@@ -1638,7 +1638,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     e.dataTransfer.dropEffect = 'copy';
   };
 
-  const toggleLayer = (id: string) => {
+  const _toggleLayer = (id: string) => {
     const newExpanded = new Set(expandedLayers);
     if (newExpanded.has(id)) {
       newExpanded.delete(id);
@@ -1760,7 +1760,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     return css.join('\n');
   };
 
-  const generateHTML = (): string => {
+  const _generateHTML = (): string => {
 
     const canvasBorder = canvasSettings.borderWidth && canvasSettings.borderWidth > 0 
       ? `border: ${canvasSettings.borderWidth}px solid ${canvasSettings.borderColor || '#cccccc'};` 
@@ -1854,7 +1854,7 @@ const DesignerScene: React.FC<DesignerSceneProps> = ({ filePath }) => {
     return html;
   };
 
-  const generateReact = (): string => {
+  const _generateReact = (): string => {
 
     let code = `import React from 'react';
 import styled from 'styled-components';
@@ -1922,7 +1922,7 @@ export default ${canvasSettings.name?.replace(/\s+/g, '') || 'Window'};`;
     return code;
   };
 
-  const generateCSS = (): string => {
+  const _generateCSS = (): string => {
     let css = `/* ${canvasSettings.name || 'Window'} - 设计器导出 CSS */
 
 .container {
@@ -2352,7 +2352,7 @@ export default ${canvasSettings.name?.replace(/\s+/g, '') || 'Window'};`;
           <button className={`designer-toolbar__btn ${previewMode ? 'is-active' : ''}`} onClick={() => setPreviewMode(!previewMode)} title="预览模式">
             <Play size={16} />
           </button>
-          <button className="designer-toolbar__btn" onClick={handleExportNimCode} title="导出 Nim 代码">
+          <button className="designer-toolbar__btn" onClick={handleExportNimCode} title="导出 空灵 代码">
             <Code size={16} />
           </button>
           <button className="designer-toolbar__btn" onClick={() => setShowHelpModal(true)} title="快捷键帮助">

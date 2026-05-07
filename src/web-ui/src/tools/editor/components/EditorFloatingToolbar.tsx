@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { 
   Play, 
   Bug, 
@@ -7,7 +7,9 @@ import {
   Terminal,
   Settings,
   RotateCcw,
-  Wand2
+  Wand2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { IconButton, Tooltip, Select } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
@@ -30,6 +32,7 @@ export interface EditorFloatingToolbarProps {
   onFormat?: () => void;
   onOpenTerminal?: () => void;
   onOpenSettings?: () => void;
+  onOpenRunConfig?: () => void;
   isRunning?: boolean;
   isDebugging?: boolean;
   isBuilding?: boolean;
@@ -38,6 +41,7 @@ export interface EditorFloatingToolbarProps {
   runConfigs?: RunConfig[];
   selectedConfig?: string;
   onConfigChange?: (configId: string) => void;
+  defaultCollapsed?: boolean;
 }
 
 export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
@@ -50,19 +54,25 @@ export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
   onFormat,
   onOpenTerminal,
   onOpenSettings,
+  onOpenRunConfig,
   isRunning = false,
   isDebugging = false,
   isBuilding = false,
   language,
+  filePath,
   runConfigs = [],
   selectedConfig = 'default',
   onConfigChange,
+  defaultCollapsed = false,
 }) => {
   const { t } = useI18n();
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
   const handleRun = useCallback(() => {
+    console.log('[DEBUG] EditorFloatingToolbar handleRun', { onRun: !!onRun, selectedConfig });
     if (onRun) {
+      console.log('[DEBUG] EditorFloatingToolbar calling onRun');
       onRun(selectedConfig);
     }
   }, [onRun, selectedConfig]);
@@ -85,8 +95,14 @@ export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
     }
   }, [onBuild]);
 
-  // Get language-specific run button label
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed(prev => !prev);
+  }, []);
+
   const getRunLabel = () => {
+    if (filePath?.toLowerCase().endsWith('.灵')) {
+      return t('toolbar.runNim', { defaultValue: '运行 空灵' });
+    }
     switch (language) {
       case 'python':
         return t('toolbar.runPython', { defaultValue: '运行' });
@@ -102,7 +118,6 @@ export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
     }
   };
 
-  // Check if any operation is active
   const isActive = isRunning || isDebugging || isBuilding;
 
   if (!isVisible) return null;
@@ -110,142 +125,156 @@ export const EditorFloatingToolbar: React.FC<EditorFloatingToolbarProps> = ({
   return (
     <div
       ref={toolbarRef}
-      className="editor-floating-toolbar"
+      className={`editor-floating-toolbar ${isCollapsed ? 'is-collapsed' : ''}`}
     >
       <div className="editor-floating-toolbar__container">
-        {/* Run Button with Config Dropdown */}
-        <div className="editor-floating-toolbar__run-group">
-          <Tooltip content={getRunLabel()}>
-            <IconButton
-              variant="primary"
-              size="small"
-              onClick={handleRun}
-              disabled={isRunning}
-              className="editor-floating-toolbar__run-btn"
-            >
-              {isRunning ? (
-                <div className="editor-floating-toolbar__spinner" />
-              ) : (
-                <Play size={16} />
-              )}
-            </IconButton>
-          </Tooltip>
-          
-          {/* Config Selector Dropdown */}
-          {runConfigs.length > 0 && (
-            <div className="editor-floating-toolbar__config-wrapper">
-              <Select
-                value={selectedConfig}
-                onChange={(value) => handleConfigChange(value as string)}
-                options={runConfigs.map(config => ({
-                  value: config.id,
-                  label: config.name,
-                }))}
+        {isCollapsed ? (
+          <>
+            <Tooltip content={getRunLabel()}>
+              <IconButton
+                variant="primary"
                 size="small"
-                className="editor-floating-toolbar__config-select"
-              />
+                onClick={handleRun}
+                disabled={isRunning}
+                className="editor-floating-toolbar__run-btn"
+              >
+                {isRunning ? (
+                  <div className="editor-floating-toolbar__spinner" />
+                ) : (
+                  <Play size={16} />
+                )}
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip content={t('toolbar.expand', { defaultValue: '展开工具栏' })}>
+              <IconButton
+                variant="ghost"
+                size="small"
+                onClick={toggleCollapse}
+                className="editor-floating-toolbar__toggle-btn"
+              >
+                <ChevronRight size={14} />
+              </IconButton>
+            </Tooltip>
+          </>
+        ) : (
+          <>
+            <div className="editor-floating-toolbar__run-group">
+              <Tooltip content={getRunLabel()}>
+                <IconButton
+                  variant="primary"
+                  size="small"
+                  onClick={handleRun}
+                  disabled={isRunning}
+                  className="editor-floating-toolbar__run-btn"
+                >
+                  {isRunning ? (
+                    <div className="editor-floating-toolbar__spinner" />
+                  ) : (
+                    <Play size={16} />
+                  )}
+                </IconButton>
+              </Tooltip>
+              
+              {runConfigs.length > 0 && (
+                <div className="editor-floating-toolbar__config-wrapper">
+                  <Select
+                    value={selectedConfig}
+                    onChange={(value) => handleConfigChange(value as string)}
+                    options={runConfigs.map(config => ({
+                      value: config.id,
+                      label: config.name,
+                    }))}
+                    size="small"
+                    className="editor-floating-toolbar__config-select"
+                  />
+                  {onOpenRunConfig && (
+                    <IconButton
+                      variant="ghost"
+                      size="small"
+                      onClick={onOpenRunConfig}
+                      className="editor-floating-toolbar__config-btn"
+                      title="运行配置"
+                    >
+                      <Settings size={14} />
+                    </IconButton>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Debug Button */}
-        <Tooltip content={t('toolbar.debug', { defaultValue: '调试' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={handleDebug}
-            disabled={isDebugging}
-            className="editor-floating-toolbar__debug-btn"
-          >
-            {isDebugging ? (
-              <div className="editor-floating-toolbar__spinner" />
-            ) : (
-              <Bug size={16} />
-            )}
-          </IconButton>
-        </Tooltip>
+            <Tooltip content={t('toolbar.debug', { defaultValue: '调试' })}>
+              <IconButton
+                variant="ghost"
+                size="small"
+                onClick={handleDebug}
+                disabled={isDebugging}
+                className="editor-floating-toolbar__debug-btn"
+              >
+                {isDebugging ? (
+                  <div className="editor-floating-toolbar__spinner" />
+                ) : (
+                  <Bug size={16} />
+                )}
+              </IconButton>
+            </Tooltip>
 
-        {/* Build Button */}
-        <Tooltip content={t('toolbar.build', { defaultValue: '构建' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={handleBuild}
-            disabled={isBuilding}
-            className="editor-floating-toolbar__build-btn"
-          >
-            {isBuilding ? (
-              <div className="editor-floating-toolbar__spinner" />
-            ) : (
-              <Hammer size={16} />
-            )}
-          </IconButton>
-        </Tooltip>
+            <Tooltip content={t('toolbar.build', { defaultValue: '构建' })}>
+              <IconButton
+                variant="ghost"
+                size="small"
+                onClick={handleBuild}
+                disabled={isBuilding}
+                className="editor-floating-toolbar__build-btn"
+              >
+                {isBuilding ? (
+                  <div className="editor-floating-toolbar__spinner" />
+                ) : (
+                  <Hammer size={16} />
+                )}
+              </IconButton>
+            </Tooltip>
 
-        {/* Stop Button */}
-        <Tooltip content={t('toolbar.stop', { defaultValue: '停止' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={onStop}
-            disabled={!isActive}
-            className="editor-floating-toolbar__stop-btn"
-          >
-            <Square size={14} fill="currentColor" />
-          </IconButton>
-        </Tooltip>
+            <Tooltip content={t('toolbar.stop', { defaultValue: '停止' })}>
+              <IconButton
+                variant="ghost"
+                size="small"
+                onClick={onStop}
+                disabled={!isActive}
+                className="editor-floating-toolbar__stop-btn"
+              >
+                <Square size={14} fill="currentColor" />
+              </IconButton>
+            </Tooltip>
 
-        {/* Divider */}
-        <div className="editor-floating-toolbar__divider" />
+            <div className="editor-floating-toolbar__divider" />
 
-        {/* Restart Button */}
-        <Tooltip content={t('toolbar.restart', { defaultValue: '重新运行' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={onRestart}
-            disabled={!isActive}
-            className="editor-floating-toolbar__restart-btn"
-          >
-            <RotateCcw size={16} />
-          </IconButton>
-        </Tooltip>
+            <Tooltip content={t('toolbar.restart', { defaultValue: '重新运行' })}>
+              <IconButton
+                variant="ghost"
+                size="small"
+                onClick={onRestart}
+                disabled={!isActive}
+                className="editor-floating-toolbar__restart-btn"
+              >
+                <RotateCcw size={16} />
+              </IconButton>
+            </Tooltip>
 
-        {/* Format Button */}
-        <Tooltip content={t('toolbar.format', { defaultValue: '格式化代码' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={onFormat}
-            className="editor-floating-toolbar__format-btn"
-          >
-            <Wand2 size={16} />
-          </IconButton>
-        </Tooltip>
+            <div className="editor-floating-toolbar__divider" />
 
-        {/* Terminal Button */}
-        <Tooltip content={t('toolbar.terminal', { defaultValue: '打开终端' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={onOpenTerminal}
-            className="editor-floating-toolbar__terminal-btn"
-          >
-            <Terminal size={16} />
-          </IconButton>
-        </Tooltip>
-
-        {/* Settings Button */}
-        <Tooltip content={t('toolbar.settings', { defaultValue: '运行设置' })}>
-          <IconButton
-            variant="ghost"
-            size="small"
-            onClick={onOpenSettings}
-            className="editor-floating-toolbar__settings-btn"
-          >
-            <Settings size={16} />
-          </IconButton>
-        </Tooltip>
+            <Tooltip content={t('toolbar.collapse', { defaultValue: '折叠工具栏' })}>
+              <IconButton
+                variant="ghost"
+                size="small"
+                onClick={toggleCollapse}
+                className="editor-floating-toolbar__toggle-btn"
+              >
+                <ChevronLeft size={14} />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
       </div>
     </div>
   );

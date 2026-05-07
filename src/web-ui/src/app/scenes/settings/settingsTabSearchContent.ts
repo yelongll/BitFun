@@ -116,6 +116,11 @@ export const SETTINGS_TAB_SEARCH_CONTENT: Record<ConfigTab, readonly SettingsTab
     { ns: 'settings/editor', key: 'actions.saveDesc' },
   ],
 
+  designer: [
+    { ns: 'settings', key: 'designer.title' },
+    { ns: 'settings', key: 'designer.description' },
+  ],
+
   keyboard: [
     { ns: 'settings', key: 'keyboard.title' },
     { ns: 'settings', key: 'keyboard.description' },

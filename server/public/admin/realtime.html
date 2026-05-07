@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时消息管理 - 空灵语言 IDE 管理后台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body { background: #f5f7fa; }
+        .sidebar { position: fixed; top: 0; left: 0; width: 250px; height: 100vh; background: #2c3e50; color: #fff; padding: 20px 0; }
+        .sidebar .logo { padding: 0 20px 20px; border-bottom: 1px solid #34495e; margin-bottom: 20px; }
+        .sidebar .logo h4 { margin: 0; font-weight: 600; }
+        .sidebar .nav-link { color: #bdc3c7; padding: 12px 20px; display: flex; align-items: center; gap: 10px; transition: all 0.3s; }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #34495e; color: #fff; }
+        .main-content { margin-left: 250px; padding: 30px; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .card-header { background: #fff; border-bottom: 1px solid #eee; padding: 15px 20px; }
+        .btn-primary { background: #3498db; border-color: #3498db; }
+        .btn-primary:hover { background: #2980b9; border-color: #2980b9; }
+        .table th { background: #f8f9fa; font-weight: 600; }
+        .badge-broadcast { background: #e74c3c; }
+        .badge-notification { background: #3498db; }
+        .message-content { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-code-square"></i> 空灵语言 IDE</h4>
+            <small class="text-muted">管理后台</small>
+        </div>
+        <nav class="nav flex-column">
+            <a class="nav-link" href="index.html"><i class="bi bi-speedometer2"></i> 仪表盘</a>
+            <a class="nav-link" href="index.html#users"><i class="bi bi-people"></i> 用户管理</a>
+            <a class="nav-link" href="index.html#versions"><i class="bi bi-box-seam"></i> 版本管理</a>
+            <a class="nav-link" href="index.html#announcements"><i class="bi bi-megaphone"></i> 公告管理</a>
+            <a class="nav-link active" href="realtime.html"><i class="bi bi-lightning"></i> 实时消息</a>
+            <a class="nav-link" href="index.html#libraries"><i class="bi bi-archive"></i> 库管理</a>
+            <a class="nav-link" href="index.html#examples"><i class="bi bi-folder"></i> 项目示例</a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="bi bi-lightning"></i> 实时消息管理</h2>
+            <div>
+                <button class="btn btn-primary" onclick="showSendModal()">
+                    <i class="bi bi-send"></i> 发送消息
+                </button>
+                <button class="btn btn-danger ms-2" onclick="showBroadcastModal()">
+                    <i class="bi bi-megaphone"></i> 广播消息
+                </button>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h3 class="text-primary" id="totalMessages">0</h3>
+                        <small class="text-muted">总消息数</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h3 class="text-success" id="deliveredMessages">0</h3>
+                        <small class="text-muted">已送达</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h3 class="text-warning" id="unreadMessages">0</h3>
+                        <small class="text-muted">未读消息</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h3 class="text-info" id="broadcastCount">0</h3>
+                        <small class="text-muted">广播消息</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">消息列表</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>用户</th>
+                                <th>类型</th>
+                                <th>标题</th>
+                                <th>内容</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="messageList">
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-4">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <nav>
+                    <ul class="pagination justify-content-center" id="pagination">
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="sendModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">发送消息</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">选择用户</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="searchUser" placeholder="搜索用户名或邮箱..." oninput="searchUsers()">
+                            <button class="btn btn-outline-secondary" type="button" onclick="searchUsers()">搜索</button>
+                        </div>
+                        <select class="form-select mt-2" id="sendUserId" size="5" required>
+                            <option value="">加载用户中...</option>
+                        </select>
+                        <small class="text-muted">已选择: <span id="selectedUserName">未选择</span></small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息类型</label>
+                        <select class="form-select" id="sendType">
+                            <option value="notification">普通通知</option>
+                            <option value="success">成功提示</option>
+                            <option value="warning">警告提示</option>
+                            <option value="error">错误提示</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息标题</label>
+                        <input type="text" class="form-control" id="sendTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息内容</label>
+                        <textarea class="form-control" id="sendMessage" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="broadcastModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">广播消息</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 广播消息将发送给所有用户，请谨慎操作！
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息类型</label>
+                        <select class="form-select" id="broadcastType">
+                            <option value="info">普通通知</option>
+                            <option value="success">成功提示</option>
+                            <option value="warning">警告提示</option>
+                            <option value="critical">重要公告</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息标题</label>
+                        <input type="text" class="form-control" id="broadcastTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息内容</label>
+                        <textarea class="form-control" id="broadcastMessage" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" onclick="sendBroadcast()">广播</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = '';
+        let currentPage = 1;
+        const pageSize = 20;
+        let allUsers = [];
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('admin_token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            };
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/admin/users?page=1&page_size=1000`, {
+                    headers: getAuthHeaders()
+                });
+                const result = await response.json();
+                if (result.success) {
+                    allUsers = result.data.users || [];
+                    renderUserList(allUsers);
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        }
+
+        function renderUserList(users) {
+            const select = document.getElementById('sendUserId');
+            if (users.length === 0) {
+                select.innerHTML = '<option value="">无用户</option>';
+                return;
+            }
+            
+            const html = users.map(user => 
+                `<option value="${user.id}">${user.username} (${user.email}) - ${user.nickname || '无昵称'}</option>`
+            ).join('');
+            
+            select.innerHTML = html;
+        }
+
+        function searchUsers() {
+            const keyword = document.getElementById('searchUser').value.toLowerCase().trim();
+            
+            if (!keyword) {
+                renderUserList(allUsers);
+                return;
+            }
+            
+            const filtered = allUsers.filter(user => 
+                user.username.toLowerCase().includes(keyword) ||
+                user.email.toLowerCase().includes(keyword) ||
+                (user.nickname && user.nickname.toLowerCase().includes(keyword))
+            );
+            
+            renderUserList(filtered);
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/admin/messages/stats`, {
+                    headers: getAuthHeaders()
+                });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('totalMessages').textContent = result.data.total || 0;
+                    document.getElementById('deliveredMessages').textContent = result.data.delivered || 0;
+                    document.getElementById('unreadMessages').textContent = result.data.unread || 0;
+                    document.getElementById('broadcastCount').textContent = result.data.broadcast || 0;
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        async function loadMessages(page = 1) {
+            currentPage = page;
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/admin/messages?page=${page}&page_size=${pageSize}`, {
+                    headers: getAuthHeaders()
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    renderMessages(result.data.messages || []);
+                    renderPagination(result.data.pagination);
+                } else {
+                    document.getElementById('messageList').innerHTML = 
+                        '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>';
+                }
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+                document.getElementById('messageList').innerHTML = 
+                    '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>';
+            }
+        }
+
+        function renderMessages(messages) {
+            if (messages.length === 0) {
+                document.getElementById('messageList').innerHTML = 
+                    '<tr><td colspan="8" class="text-center text-muted py-4">暂无消息</td></tr>';
+                return;
+            }
+
+            const html = messages.map(msg => {
+                const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+                const typeBadge = msg.event_type === 'broadcast' 
+                    ? '<span class="badge badge-broadcast">广播</span>'
+                    : '<span class="badge badge-notification">通知</span>';
+                const statusBadge = msg.read_at 
+                    ? '<span class="badge bg-success">已读</span>'
+                    : msg.delivered_at 
+                        ? '<span class="badge bg-info">已送达</span>'
+                        : '<span class="badge bg-secondary">待发送</span>';
+
+                return `
+                    <tr>
+                        <td>${msg.id}</td>
+                        <td>${msg.user_id || '全部'}</td>
+                        <td>${typeBadge}</td>
+                        <td>${data.title || '-'}</td>
+                        <td class="message-content">${data.message || '-'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${msg.created_at}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info" onclick="viewMessage(${msg.id}, '${encodeURIComponent(msg.data)}')">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteMessage(${msg.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('messageList').innerHTML = html;
+        }
+
+        function renderPagination(pagination) {
+            if (!pagination || pagination.total_pages <= 1) {
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            for (let i = 1; i <= pagination.total_pages; i++) {
+                html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="loadMessages(${i}); return false;">${i}</a>
+                </li>`;
+            }
+            document.getElementById('pagination').innerHTML = html;
+        }
+
+        function showSendModal() {
+            document.getElementById('searchUser').value = '';
+            document.getElementById('sendUserId').selectedIndex = -1;
+            document.getElementById('selectedUserName').textContent = '未选择';
+            document.getElementById('sendType').value = 'notification';
+            document.getElementById('sendTitle').value = '';
+            document.getElementById('sendMessage').value = '';
+            loadUsers();
+            new bootstrap.Modal(document.getElementById('sendModal')).show();
+        }
+
+        document.getElementById('sendUserId')?.addEventListener('change', function() {
+            const selected = this.options[this.selectedIndex];
+            document.getElementById('selectedUserName').textContent = selected ? selected.text : '未选择';
+        });
+
+        function showBroadcastModal() {
+            document.getElementById('broadcastType').value = 'info';
+            document.getElementById('broadcastTitle').value = '';
+            document.getElementById('broadcastMessage').value = '';
+            new bootstrap.Modal(document.getElementById('broadcastModal')).show();
+        }
+
+        async function sendMessage() {
+            const selectEl = document.getElementById('sendUserId');
+            const userId = selectEl.value;
+            const type = document.getElementById('sendType').value;
+            const title = document.getElementById('sendTitle').value;
+            const message = document.getElementById('sendMessage').value;
+
+            if (!userId) {
+                alert('请选择目标用户');
+                return;
+            }
+
+            if (!title || !message) {
+                alert('请填写完整信息');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/realtime/send`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        user_id: parseInt(userId),
+                        event_type: 'notification',
+                        data: { title, message, variant: type }
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('消息发送成功');
+                    bootstrap.Modal.getInstance(document.getElementById('sendModal')).hide();
+                    loadMessages(currentPage);
+                    loadStats();
+                } else {
+                    alert(result.error?.message || '发送失败');
+                }
+            } catch (error) {
+                alert('发送失败: ' + error.message);
+            }
+        }
+
+        async function sendBroadcast() {
+            const type = document.getElementById('broadcastType').value;
+            const title = document.getElementById('broadcastTitle').value;
+            const message = document.getElementById('broadcastMessage').value;
+
+            if (!title || !message) {
+                alert('请填写完整信息');
+                return;
+            }
+
+            if (!confirm('确定要广播消息给所有用户吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/realtime/broadcast`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        event_type: 'broadcast',
+                        data: { title, message, variant: type }
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(`广播成功，已发送给 ${result.data.recipients} 位用户`);
+                    bootstrap.Modal.getInstance(document.getElementById('broadcastModal')).hide();
+                    loadMessages(currentPage);
+                    loadStats();
+                } else {
+                    alert(result.error?.message || '广播失败');
+                }
+            } catch (error) {
+                alert('广播失败: ' + error.message);
+            }
+        }
+
+        function viewMessage(id, dataStr) {
+            const data = JSON.parse(decodeURIComponent(dataStr));
+            alert(`消息详情:\n\n标题: ${data.title || '-'}\n内容: ${data.message || '-'}\n类型: ${data.variant || '-'}`);
+        }
+
+        async function deleteMessage(id) {
+            if (!confirm('确定要删除这条消息吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/admin/messages/${id}`, {
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('删除成功');
+                    loadMessages(currentPage);
+                    loadStats();
+                } else {
+                    alert(result.error?.message || '删除失败');
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadMessages();
+        });
+    </script>
+</body>
+</html>

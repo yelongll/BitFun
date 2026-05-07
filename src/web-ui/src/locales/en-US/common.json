@@ -394,7 +394,7 @@
   "remoteConnect": {
     "title": "Remote Control",
     "tabLan": "LAN",
-    "tabBitfunServer": "空灵语言 Server",
+    "tabBitfunServer": "空灵语言服务",
     "tabNgrok": "NAT Traversal",
     "tabCustomServer": "Self-Hosted",
     "tabBot": "IM Bot",
@@ -423,7 +423,7 @@
     "stateConnected": "Connected",
     "stateDisconnected": "Disconnected",
     "desc_lan": "Connect via local network. Both devices must be on the same LAN/WiFi. If connection fails, check router security settings (such as AP/client isolation) and make sure proxy/tunneling settings do not route or block LAN traffic (allow direct LAN access) on both devices.",
-    "desc_bitfun_server": "Connect via 空灵语言 relay server. The server is currently self-hosted by the 空灵语言 team and is mainly provided for convenient trials and feature evaluation. Although message payloads are protected with end-to-end encryption, the relay service and related infrastructure may still observe necessary metadata, and any public-facing service can introduce information security or data leakage risks due to misconfiguration, log exposure, operational mistakes, or attacks. For long-term use, production environments, or higher-security scenarios, we strongly recommend using a self-hosted server under your own deployment and operational control.",
+    "desc_bitfun_server": "通过空灵语言中继服务器连接。该服务器目前由空灵语言团队自行托管，主要用于方便试用和功能评估。虽然消息内容受到端到端加密保护，但中继服务及相关基础设施仍可能观察到必要的元数据，且任何面向公众的服务都可能因配置错误、日志暴露、操作失误或遭受攻击而带来信息安全或数据泄露风险。对于长期使用、生产环境或对安全性要求较高的场景，我们强烈建议使用您自行部署和运维的私有服务器。",
     "desc_ngrok": "Connect via ngrok tunnel. For first-time use, just install ngrok and configure auth token. No need to start ngrok manually.",
     "desc_ngrok_prefix": "Connect via ngrok tunnel. First-time use need to ",
     "desc_ngrok_link": "install ngrok",
@@ -1032,6 +1032,23 @@
       "transferNeedsDesktop": "Upload and download require the desktop app.",
       "transferring": "Transferring..."
     }
+  },
+  "toolbar": {
+    "run": "Run",
+    "runPython": "Run Python",
+    "runNode": "Run Node.js",
+    "runCargo": "Run Cargo",
+    "runGo": "Run Go",
+    "runNim": "Run kongling",
+    "debug": "Debug",
+    "build": "Build",
+    "stop": "Stop",
+    "restart": "Restart",
+    "format": "Format Code",
+    "terminal": "Open Terminal",
+    "settings": "Run Settings",
+    "collapse": "Collapse Toolbar",
+    "expand": "Expand Toolbar"
   },
   "notify": {
     "dialogCompleted": "AI agent has finished the task.",

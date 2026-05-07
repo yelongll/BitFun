@@ -28,9 +28,19 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
   const { t } = useI18n('common');
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [tooltipOffset, setTooltipOffset] = useState(0);
+  const [isNewBadge, setIsNewBadge] = useState(false);
+  const prevUnreadCountRef = useRef<number | null>(null);
 
   const unreadCount = useUnreadCount();
   const activeNotification = useLatestTaskNotification();
+
+  useEffect(() => {
+    if (prevUnreadCountRef.current !== null && unreadCount > prevUnreadCountRef.current) {
+      setIsNewBadge(true);
+      setTimeout(() => setIsNewBadge(false), 600);
+    }
+    prevUnreadCountRef.current = unreadCount;
+  }, [unreadCount]);
 
   useEffect(() => {
     if (activeNotification?.title && buttonRef.current) {
@@ -131,9 +141,14 @@ const NotificationButton: React.FC<NotificationButtonProps> = ({
           </span>
         )
       ) : (
-        unreadCount > 0
-          ? <BellDot size={14} className="bitfun-notification-btn__icon--has-message" />
-          : <Bell size={14} />
+        <div className="bitfun-notification-btn__bell-wrapper">
+          <Bell size={14} />
+          {unreadCount > 0 && (
+            <span className={`bitfun-notification-btn__badge${isNewBadge ? ' bitfun-notification-btn__badge--new' : ''}`}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </div>
       )}
     </button>
     </Tooltip>

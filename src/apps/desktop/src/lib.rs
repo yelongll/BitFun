@@ -786,6 +786,10 @@ pub async fn run() {
             api::debug_api::debug_element_picked,
             api::debug_api::debug_open_devtools,
             api::debug_api::debug_close_devtools,
+            // Nim Language API
+            api::nim_api::get_nim_compiler_info,
+            api::nim_api::compile_nim,
+            api::nim_api::run_nim,
         ])
         .build(tauri::generate_context!());
 

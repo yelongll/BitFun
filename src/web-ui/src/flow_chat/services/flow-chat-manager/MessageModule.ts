@@ -17,6 +17,7 @@ import { ensureBackendSession, retryCreateBackendSession } from './SessionModule
 import { cleanupSessionBuffers } from './TextChunkModule';
 import type { ImageContextData as ImageInputContextData } from '@/infrastructure/api/service-api/ImageContextTypes';
 import { globalEventBus } from '@/infrastructure/event-bus';
+import { getServerAIModels, isLoggedIn } from '@/infrastructure/api/service-api/AuthAPI';
 import {
   FLOWCHAT_PIN_TURN_TO_TOP_EVENT,
   type FlowChatPinTurnToTopRequest,
@@ -73,7 +74,35 @@ async function syncSessionModelSelection(
     configManager.getConfig<DefaultModelsConfig>('ai.default_models') || {},
   ]);
 
-  const desiredModelId = normalizeModelSelection(agentModels[agentType], allModels, defaultModels);
+  let desiredModelId = normalizeModelSelection(agentModels[agentType], allModels, defaultModels);
+  
+  if (desiredModelId && desiredModelId !== 'auto' && desiredModelId.startsWith('server_')) {
+    if (isLoggedIn()) {
+      try {
+        const serverModelsResult = await getServerAIModels();
+        const serverModels = serverModelsResult.models || [];
+        const serverModelId = parseInt(desiredModelId.replace('server_', ''), 10);
+        const serverModelExists = serverModels.some(m => m.id === serverModelId && m.enabled);
+        
+        if (!serverModelExists) {
+          log.warn('Server model no longer exists, falling back to auto', { 
+            modelId: desiredModelId, 
+            serverId: serverModelId 
+          });
+          
+          const updatedModels = allModels.filter(m => m.id !== desiredModelId);
+          await configManager.setConfig('ai.models', updatedModels);
+          
+          desiredModelId = 'auto';
+          
+          notificationService.warning('所选服务端模型已失效，已自动切换到自动选择模式', { duration: 3000 });
+        }
+      } catch (error) {
+        log.error('Failed to verify server model availability', error);
+      }
+    }
+  }
+
   const currentModelId = (session.config.modelName || 'auto').trim() || 'auto';
   const shouldForceAutoSync = desiredModelId === 'auto';
   if (!shouldForceAutoSync && desiredModelId === currentModelId) {
@@ -225,7 +254,7 @@ export async function sendMessage(
     });
     if (!startOk) {
       const currentState = stateMachineManager.getCurrentState(sessionId);
-      throw new Error(`Session is still busy finishing the previous turn (current state: ${currentState})`);
+      throw new Error(`会话仍在处理上一轮对话（当前状态：${currentState}）`);
     }
 
     if (isFirstMessage) {
@@ -324,7 +353,7 @@ export async function sendMessage(
     }
     
     notificationService.error(errorMessage, {
-      title: 'Thinking process error',
+      title: '正在思考进程错误',
       duration: 5000
     });
     

@@ -275,6 +275,19 @@ const BUILTIN_LANGUAGES: Language[] = [
     supportsComments: true,
     lineCommentPrefix: '#',
   },
+  {
+    id: '空灵',
+    name: '空灵语言',
+    category: 'programming',
+    extensions: ['灵'],
+    monacoId: '空灵',
+    lspId: '空灵',
+    iconType: '空灵',
+    color: '#706c51ff',
+    supportsComments: true,
+    lineCommentPrefix: '#',
+    blockComment: { start: '#[', end: ']#' },
+  },
 
   // -------------------------------------------------------------------------
   

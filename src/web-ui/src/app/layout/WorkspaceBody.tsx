@@ -10,14 +10,17 @@
  *     SceneViewport (flex:1 — active scene content)
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useCurrentWorkspace } from '../../infrastructure/contexts/WorkspaceContext';
 import { NavBar } from '../components/NavBar';
 import NavPanel from '../components/NavPanel/NavPanel';
 import { SceneBar } from '../components/SceneBar';
 import { SceneViewport } from '../scenes';
-import { WindowControls } from '@/component-library';
+import { WindowControls, Modal } from '@/component-library';
+import NotificationButton from '../components/TitleBar/NotificationButton';
 import { useApp } from '../hooks/useApp';
+import { getStoredUser, isLoggedIn, configureAuth, UserInfo, getMe } from '@/infrastructure/api/service-api/AuthAPI';
+import { getLevelByPoints } from '@/shared/config/levels';
 import './WorkspaceBody.scss';
 
 const NAV_DEFAULT_WIDTH = 240;
@@ -51,6 +54,55 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
   const isNavCollapsed = state.layout.leftPanelCollapsed;
   const [navWidth, setNavWidth] = useState(NAV_DEFAULT_WIDTH);
   const [isDividerHovered, setIsDividerHovered] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [isLoggedInState, setIsLoggedInState] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
+  
+  const refreshUserInfo = useCallback(async () => {
+    if (!isLoggedIn()) return;
+    try {
+      const freshUser = await getMe();
+      setCurrentUser(freshUser);
+    } catch (err) {
+      console.error('Failed to refresh user info', err);
+    }
+  }, []);
+  
+  useEffect(() => {
+    const serverUrl = localStorage.getItem('kongling_server_url') || 'http://111.228.54.164';
+    configureAuth({ serverUrl });
+    
+    const checkLoginStatus = () => {
+      const loggedIn = isLoggedIn();
+      setIsLoggedInState(loggedIn);
+      if (loggedIn) {
+        const user = getStoredUser();
+        setCurrentUser(user);
+      } else {
+        setCurrentUser(null);
+      }
+    };
+    
+    checkLoginStatus();
+    
+    const handleAuthChange = () => checkLoginStatus();
+    const handleUserInfoUpdated = () => refreshUserInfo();
+    
+    window.addEventListener('auth-change', handleAuthChange);
+    window.addEventListener('user-info-updated', handleUserInfoUpdated);
+    
+    return () => {
+      window.removeEventListener('auth-change', handleAuthChange);
+      window.removeEventListener('user-info-updated', handleUserInfoUpdated);
+    };
+  }, [refreshUserInfo]);
+  
+  const handleOpenUserModal = useCallback(() => {
+    refreshUserInfo();
+    setShowUserModal(true);
+  }, [refreshUserInfo]);
+  
+  const userLevel = currentUser ? getLevelByPoints(currentUser.points || 0) : null;
 
   const handleDividerMouseEnter = useCallback(() => {
     setIsDividerHovered(true);
@@ -136,8 +188,37 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
       {/* Right: window controls + scene tab bar + scene content */}
       <div className="bitfun-workspace-body__scene-area">
         <div className="bitfun-workspace-body__scene-header">
+          {isLoggedInState && currentUser && (
+            <>
+              {userLevel && (
+                <div className="bitfun-workspace-body__level-badge">
+                  <img 
+                    src={userLevel.icon} 
+                    alt={userLevel.name} 
+                    title={`${userLevel.name} - ${currentUser.points || 0}积分`}
+                  />
+                </div>
+              )}
+              <div 
+                className="bitfun-workspace-body__user-info"
+                onClick={handleOpenUserModal}
+              >
+                <div className="bitfun-workspace-body__user-avatar">
+                  {currentUser.avatar_url ? (
+                    <img src={currentUser.avatar_url} alt={currentUser.username} />
+                  ) : (
+                    <span>{currentUser.username?.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <span className="bitfun-workspace-body__user-name">
+                  {currentUser.nickname || currentUser.username}
+                </span>
+              </div>
+            </>
+          )}
           {onMinimize && onMaximize && onClose && (
             <div className="bitfun-workspace-body__window-controls">
+              <NotificationButton className="bitfun-workspace-body__notification-btn" />
               <WindowControls
                 onMinimize={onMinimize}
                 onMaximize={onMaximize}
@@ -154,6 +235,40 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
         />
         {sceneOverlay}
       </div>
+      <Modal
+        isOpen={showUserModal}
+        onClose={() => setShowUserModal(false)}
+        title="用户信息"
+        showCloseButton
+        size="small"
+      >
+        <div className="bitfun-workspace-body__user-modal">
+          <div className="bitfun-workspace-body__user-modal-avatar">
+            {currentUser?.avatar_url ? (
+              <img src={currentUser.avatar_url} alt={currentUser.username} />
+            ) : (
+              <span>{currentUser?.username?.charAt(0).toUpperCase()}</span>
+            )}
+          </div>
+          <div className="bitfun-workspace-body__user-modal-info">
+            <div className="bitfun-workspace-body__user-modal-name">
+              {currentUser?.nickname || currentUser?.username}
+            </div>
+            <div className="bitfun-workspace-body__user-modal-email">
+              {currentUser?.email}
+            </div>
+            {userLevel && (
+              <div className="bitfun-workspace-body__user-modal-level">
+                <img src={userLevel.icon} alt={userLevel.name} />
+                <span>{userLevel.name}</span>
+                <span className="bitfun-workspace-body__user-modal-points">
+                  {currentUser?.points || 0} 积分
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

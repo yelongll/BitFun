@@ -17,6 +17,7 @@ import {
   Network,
   MessageSquareQuote,
   Globe,
+  Layout,
 } from 'lucide-react';
 import { PanelContentType, PanelContentConfig } from './types';
 
@@ -226,6 +227,14 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     type: 'browser',
     displayName: 'Browser',
     icon: Globe,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
+  'designer': {
+    type: 'designer',
+    displayName: 'Designer',
+    icon: Layout,
     supportsCopy: false,
     supportsDownload: false,
     showHeader: false

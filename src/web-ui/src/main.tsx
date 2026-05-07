@@ -235,6 +235,15 @@ async function initializeBeforeRender(): Promise<void> {
     data: { step: 'initializeFrontendLogLevelSync' },
   });
 
+  await measureAsyncAndLog(log, 'Startup step completed', async () => {
+    const { configureAuth } = await import('./infrastructure/api/service-api/AuthAPI');
+    const savedServerUrl = localStorage.getItem('kongling_server_url') || 'http://111.228.54.164';
+    configureAuth({ serverUrl: savedServerUrl });
+    log.debug('Auth configured with server URL', { serverUrl: savedServerUrl });
+  }, {
+    data: { step: 'configureAuth' },
+  });
+
   log.debug('Monaco loader configured', { vs: monacoPath, isDev });
   log.info('Initializing BitFun');
 

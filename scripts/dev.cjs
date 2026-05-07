@@ -67,10 +67,10 @@ function isDesktopMode(mode) {
 
 function getDesktopBinaryPath() {
   const suffix = process.platform === 'win32' ? '.exe' : '';
-  const binaryName = `bitfun-desktop${suffix}`;
+  const binaryName = `kongling-desktop${suffix}`;
 
   if (process.platform === 'darwin') {
-    return path.join(ROOT_DIR, 'target', 'debug', 'BitFun.app', 'Contents', 'MacOS', 'BitFun');
+    return path.join(ROOT_DIR, 'target', 'debug', '空灵语言.app', 'Contents', 'MacOS', '空灵语言');
   }
 
   return path.join(ROOT_DIR, 'target', 'debug', binaryName);
@@ -316,7 +316,7 @@ async function rebuildDesktopDebugBinary() {
     CARGO_PROFILE_DEV_CODEGEN_UNITS: process.env.CARGO_PROFILE_DEV_CODEGEN_UNITS || '256',
   };
 
-  printInfo('Building bitfun-desktop in dev mode with reduced debug info for faster local relink');
+  printInfo('Building kongling-desktop in dev mode with reduced debug info for faster local relink');
   printInfo(
     `Fast local build env: CARGO_PROFILE_DEV_DEBUG=${buildEnv.CARGO_PROFILE_DEV_DEBUG}, ` +
     `CARGO_PROFILE_DEV_CODEGEN_UNITS=${buildEnv.CARGO_PROFILE_DEV_CODEGEN_UNITS}`
@@ -324,7 +324,7 @@ async function rebuildDesktopDebugBinary() {
 
   await spawnCommand(
     process.platform === 'win32' ? 'cargo.exe' : 'cargo',
-    ['build', '-p', 'bitfun-desktop'],
+    ['build', '-p', 'kongling-desktop'],
     ROOT_DIR,
     buildEnv,
   );
@@ -441,7 +441,7 @@ async function startDesktopPreview() {
 
   if (!fs.existsSync(desktopBinary)) {
     printError(`Debug desktop binary not found: ${desktopBinary}`);
-    printInfo('Retry with `pnpm run desktop:preview:debug -- --force-rebuild` or build it with `cargo build -p bitfun-desktop`');
+    printInfo('Retry with `pnpm run desktop:preview:debug -- --force-rebuild` or build it with `cargo build -p kongling-desktop`');
     process.exit(1);
   }
 

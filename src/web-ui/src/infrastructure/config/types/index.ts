@@ -25,6 +25,7 @@ export interface AppConfig {
   notifications: NotificationConfig;
   session_config: AppSessionConfig;
   ai_experience: AIExperienceConfig;
+  run_configs?: any;
 }
 
 export type BackendLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'off';

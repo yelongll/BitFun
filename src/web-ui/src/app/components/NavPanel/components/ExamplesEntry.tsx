@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderCode } from 'lucide-react';
+import { FolderCode as _FolderCode } from 'lucide-react';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 
 interface ExamplesEntryProps {

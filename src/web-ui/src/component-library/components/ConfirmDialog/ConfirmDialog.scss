@@ -1,6 +1,6 @@
 /**
  * ConfirmDialog styles
- * Icon top-centered; content uses full width of a wide (landscape) modal.
+ * Modern, polished confirm dialog with smooth animations
  */
 @use '../../styles/tokens' as *;
 
@@ -9,56 +9,88 @@
   flex-direction: column;
   align-items: stretch;
   width: 100%;
-  max-width: 560px;
+  max-width: 480px;
   box-sizing: border-box;
-  padding-top: $size-gap-16;
+  padding: $size-gap-8 $size-gap-6 $size-gap-6;
+  animation: confirm-dialog-enter 0.25s ease-out;
+
+  @keyframes confirm-dialog-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
 
   &__icon {
     flex-shrink: 0;
-    width: 48px;
-    height: 48px;
-    margin: 0 auto $size-gap-4;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto $size-gap-5;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
+    animation: confirm-icon-pop 0.4s ease-out 0.1s both;
+
+    @keyframes confirm-icon-pop {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.15);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
 
     svg {
       flex-shrink: 0;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
     }
   }
 
   &--info &__icon {
-    background: color-mix(in srgb, var(--color-info) 15%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-info) 18%, transparent), color-mix(in srgb, var(--color-info) 8%, transparent));
     color: var(--color-info);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-info) 20%, transparent);
   }
 
   &--warning &__icon {
-    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-warning) 18%, transparent), color-mix(in srgb, var(--color-warning) 8%, transparent));
     color: var(--color-warning);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-warning) 20%, transparent);
   }
 
   &--error &__icon {
-    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-error) 18%, transparent), color-mix(in srgb, var(--color-error) 8%, transparent));
     color: var(--color-error);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-error) 20%, transparent);
   }
 
   &--success &__icon {
-    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 18%, transparent), color-mix(in srgb, var(--color-success) 8%, transparent));
     color: var(--color-success);
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--color-success) 20%, transparent);
   }
 
   &__content {
     flex: 1;
     min-width: 0;
     margin: 0;
-    padding: 0 $size-gap-6 $size-gap-4;
+    padding: 0;
   }
 
   &__title {
     font-size: var(--font-size-lg);
     font-weight: $font-weight-semibold;
-    line-height: 1.35;
+    line-height: 1.4;
     letter-spacing: -0.01em;
     color: var(--color-text-primary);
     margin: 0 0 $size-gap-3;
@@ -71,9 +103,10 @@
 
   &__message {
     font-size: var(--font-size-sm);
-    line-height: 1.55;
+    line-height: 1.6;
     color: var(--color-text-secondary);
-    text-align: left;
+    text-align: center;
+    padding: 0 $size-gap-2;
 
     > *:first-child {
       margin-top: 0;
@@ -84,7 +117,6 @@
     }
   }
 
-  /** Lead line before bullet list (e.g. “This will:”) */
   &__message-intro {
     margin: 0 0 $size-gap-3;
     font-size: var(--font-size-sm);
@@ -93,12 +125,11 @@
     color: var(--color-text-primary);
   }
 
-  /** Structured bullet list inside confirm body */
   &__bullet-list {
     list-style: none;
     margin: 0;
     padding: $size-gap-3 $size-gap-5;
-    border-radius: $size-radius-base;
+    border-radius: $size-radius-lg;
     background: var(--color-bg-subtle);
     border: 1px solid var(--color-border);
   }
@@ -128,11 +159,11 @@
   }
 
   &__preview {
-    margin-top: $size-gap-3;
+    margin-top: $size-gap-4;
     padding: $size-gap-3 $size-gap-4;
     background: var(--color-bg-subtle);
     border: 1px solid var(--color-border);
-    border-radius: $size-radius-base;
+    border-radius: $size-radius-lg;
     text-align: left;
     overflow: auto;
 
@@ -151,14 +182,48 @@
   &__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: $size-gap-2;
-    justify-content: flex-end;
+    gap: $size-gap-3;
+    justify-content: center;
     align-items: center;
-    padding: $size-gap-4 $size-gap-6 $size-gap-5;
+    padding: $size-gap-5 0 0;
+    margin-top: $size-gap-4;
     border-top: 1px solid var(--color-border);
 
     .btn {
-      min-width: 88px;
+      min-width: 100px;
+      padding: $size-gap-2 $size-gap-5;
+      border-radius: $size-radius-lg;
+      font-weight: $font-weight-medium;
+      transition: all 0.2s ease;
+
+      &:hover {
+        transform: translateY(-1px);
+      }
+
+      &:active {
+        transform: translateY(0);
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .confirm-dialog {
+    max-width: 100%;
+    padding: $size-gap-6 $size-gap-4 $size-gap-4;
+
+    &__icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: $size-gap-4;
+    }
+
+    &__actions {
+      flex-direction: column;
+
+      .btn {
+        width: 100%;
+      }
     }
   }
 }

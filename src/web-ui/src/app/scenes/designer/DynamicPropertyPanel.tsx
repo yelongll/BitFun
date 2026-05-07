@@ -3,7 +3,7 @@ import { Palette, Layout, Zap, SlidersHorizontal, Box, Code2 } from 'lucide-reac
 import { componentRegistry } from './registry';
 import type { PropertyConfig } from './registry';
 import { DesignerElement } from './DesignerPropertiesPanel';
-import { eventCodeService, EVENT_LABELS } from './EventCodeService';
+import { eventCodeService, EVENT_LABELS as _EVENT_LABELS } from './EventCodeService';
 import { editorJumpService } from '@/shared/services/EditorJumpService';
 import { globalAPI } from '@/infrastructure/api/service-api/GlobalAPI';
 

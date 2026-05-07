@@ -20,7 +20,7 @@ import type { FileSystemNode } from '@/tools/file-system/types';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { useNotification } from '@/shared/notification-system';
 import { InputDialog, CubeLoading } from '@/component-library';
-import { openFileInBestTarget, createTab } from '@/shared/utils/tabUtils';
+import { openFileInBestTarget, createTab as _createTab } from '@/shared/utils/tabUtils';
 import { enqueuePendingTab } from '@/shared/services/pendingTabQueue';
 import { useSceneStore } from '@/app/stores/sceneStore';
 import { PanelHeader } from './base';

@@ -1,4 +1,4 @@
-import type { ComponentDefinition, ComponentCategory, PropertyConfig, EventConfig } from './types';
+import type { ComponentDefinition, ComponentCategory } from './types';
 import { COMMON_STYLE_PROPERTIES, COMMON_LAYOUT_PROPERTIES, COMMON_EVENT_PROPERTIES, DEFAULT_EVENTS, DEFAULT_CATEGORIES } from './types';
 
 class ComponentRegistry {

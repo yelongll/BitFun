@@ -11,6 +11,13 @@
       "title": "Agent 伙伴",
       "subtitle": "在收起的会话输入框中显示空灵AI伙伴。",
       "enable": "显示 Agent 伙伴"
+    },
+    "thinkingProcess": {
+      "title": "思考过程",
+      "subtitle": "控制 AI 模型思考过程的显示行为",
+      "show": "显示思考过程",
+      "showCompleted": "显示已完成的思考",
+      "showCompletedDesc": "思考输出完成并自动收起后，仍在空灵语言聊天中保留可展开的思考条目"
     }
   },
   "toolExecution": {

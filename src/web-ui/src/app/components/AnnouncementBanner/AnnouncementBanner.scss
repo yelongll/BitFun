@@ -1,0 +1,231 @@
+@use '../../../component-library/styles/tokens.scss' as *;
+
+.announcement-banner {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  z-index: 1000;
+  max-width: 380px;
+  min-width: 300px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: announcement-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  backdrop-filter: blur(8px);
+
+  &.is-info {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+
+    .announcement-banner__icon {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .announcement-banner__title {
+      color: #fff;
+    }
+
+    .announcement-banner__desc {
+      color: rgba(255, 255, 255, 0.85);
+    }
+  }
+
+  &.is-warning {
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.95), rgba(202, 138, 4, 0.95));
+    border: 1px solid rgba(234, 179, 8, 0.3);
+
+    .announcement-banner__icon {
+      background: rgba(255, 255, 255, 0.25);
+      color: #fff;
+    }
+
+    .announcement-banner__title {
+      color: #fff;
+    }
+
+    .announcement-banner__desc {
+      color: rgba(255, 255, 255, 0.85);
+    }
+  }
+
+  &.is-success {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95));
+    border: 1px solid rgba(34, 197, 94, 0.3);
+
+    .announcement-banner__icon {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .announcement-banner__title {
+      color: #fff;
+    }
+
+    .announcement-banner__desc {
+      color: rgba(255, 255, 255, 0.85);
+    }
+  }
+
+  &.is-critical {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95));
+    border: 1px solid rgba(239, 68, 68, 0.3);
+
+    .announcement-banner__icon {
+      background: rgba(255, 255, 255, 0.25);
+      color: #fff;
+    }
+
+    .announcement-banner__title {
+      color: #fff;
+    }
+
+    .announcement-banner__desc {
+      color: rgba(255, 255, 255, 0.85);
+    }
+  }
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+
+  &__desc {
+    font-size: 13px;
+    line-height: 1.5;
+    opacity: 0.9;
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding-left: 44px;
+  }
+
+  &__action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  &__pagination {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__page-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+  }
+
+  &__page-indicator {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-variant-numeric: tabular-nums;
+    min-width: 32px;
+    text-align: center;
+  }
+
+  &__dismiss {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.25);
+      color: #fff;
+    }
+  }
+}
+
+@keyframes announcement-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 480px) {
+  .announcement-banner {
+    right: 12px;
+    left: 12px;
+    bottom: 70px;
+    max-width: none;
+    min-width: auto;
+  }
+}

@@ -62,10 +62,10 @@ const BOT_TABS: { id: BotTab; label: string }[] = [
 ];
 
 const NGROK_SETUP_URL = 'https://dashboard.ngrok.com/get-started/setup';
-const RELAY_SERVER_README_URL = 'https://github.com/GCWing/BitFun/blob/main/src/apps/relay-server/README.md';
+const RELAY_SERVER_README_URL = 'https://github.com/空灵语言/blob/main/src/apps/relay-server/README.md';
 const FEISHU_SETUP_GUIDE_URLS = {
-  'zh-CN': 'https://github.com/GCWing/BitFun/blob/main/docs/remote-connect/feishu-bot-setup.zh-CN.md',
-  'en-US': 'https://github.com/GCWing/BitFun/blob/main/docs/remote-connect/feishu-bot-setup.md',
+  'zh-CN': 'https://github.com/空灵语言/blob/main/docs/remote-connect/feishu-bot-setup.zh-CN.md',
+  'en-US': 'https://github.com/空灵语言/blob/main/docs/remote-connect/feishu-bot-setup.md',
 } as const satisfies Partial<Record<LocaleId, string>>;
 
 function pickLocalizedUrl(urls: Partial<Record<LocaleId, string>>, locale: LocaleId): string {

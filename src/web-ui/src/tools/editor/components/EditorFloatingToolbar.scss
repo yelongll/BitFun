@@ -4,45 +4,75 @@
   position: absolute;
   pointer-events: auto;
   z-index: 100;
-  top: 4px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
+  animation: toolbar-fade-in 0.3s ease-out;
+
+  @keyframes toolbar-fade-in {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+
+  &.is-collapsed {
+    .editor-floating-toolbar__container {
+      padding: 4px 6px;
+      gap: 4px;
+    }
+  }
 
   &__container {
     display: flex;
     flex-direction: row;
     align-items: center;
-    background: var(--color-surface-elevated);
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    padding: var(--spacing-xs);
-    gap: var(--spacing-xs);
+    background: var(--color-bg-elevated, var(--color-bg-primary));
+    border: 1px solid var(--color-border);
+    border-radius: $size-radius-xl;
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 4px 8px;
+    gap: 2px;
     min-width: fit-content;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: padding 0.2s ease, gap 0.2s ease;
   }
 
   &__run-group {
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding-right: var(--spacing-xs);
-    border-right: 1px solid var(--color-border-default);
+    gap: 4px;
+    padding-right: 6px;
+    margin-right: 4px;
+    border-right: 1px solid var(--color-border);
   }
 
   &__config-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
     .select {
-      min-width: 80px;
+      min-width: 70px;
       
       &__trigger {
-        height: 28px;
-        padding: 0 var(--spacing-sm);
-        font-size: 12px;
+        height: 26px;
+        padding: 0 8px;
+        font-size: 11px;
+        font-weight: 500;
         border: none;
         background: transparent;
+        border-radius: $size-radius-base;
         
         &:hover {
-          background: var(--color-surface-hover);
+          background: var(--color-bg-subtle);
         }
       }
       
@@ -52,12 +82,35 @@
     }
   }
 
+  &__config-btn {
+    color: var(--color-text-secondary) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background: var(--color-bg-subtle) !important;
+      color: var(--color-primary) !important;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+  }
+
   &__run-btn {
     background: var(--color-success) !important;
     color: white !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover:not(:disabled) {
-      background: var(--color-success-hover) !important;
+      background: var(--color-success-hover, color-mix(in srgb, var(--color-success) 85%, black)) !important;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
     }
 
     &:disabled {
@@ -68,9 +121,16 @@
 
   &__debug-btn {
     color: var(--color-warning) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover:not(:disabled) {
-      background: var(--color-warning-subtle) !important;
+      background: color-mix(in srgb, var(--color-warning) 15%, transparent) !important;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
     }
 
     &:disabled {
@@ -81,9 +141,16 @@
 
   &__build-btn {
     color: var(--color-info) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover:not(:disabled) {
-      background: var(--color-info-subtle) !important;
+      background: color-mix(in srgb, var(--color-info) 15%, transparent) !important;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
     }
 
     &:disabled {
@@ -94,9 +161,16 @@
 
   &__stop-btn {
     color: var(--color-error) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
-    &:hover {
-      background: var(--color-error-subtle) !important;
+    &:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--color-error) 15%, transparent) !important;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
     }
 
     &:disabled {
@@ -107,17 +181,24 @@
 
   &__divider {
     width: 1px;
-    height: 20px;
-    background: var(--color-border-default);
-    margin: 0 var(--spacing-xs);
+    height: 18px;
+    background: var(--color-border);
+    margin: 0 4px;
   }
 
   &__restart-btn {
     color: var(--color-text-secondary) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover:not(:disabled) {
-      background: var(--color-surface-hover) !important;
+      background: var(--color-bg-subtle) !important;
       color: var(--color-text-primary) !important;
+      transform: scale(1.05);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.98);
     }
 
     &:disabled {
@@ -127,34 +208,71 @@
   }
 
   &__format-btn {
-    color: var(--color-purple) !important;
+    color: #a855f7 !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover {
-      background: var(--color-purple-subtle) !important;
+      background: color-mix(in srgb, #a855f7 15%, transparent) !important;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.98);
     }
   }
 
   &__terminal-btn {
     color: var(--color-text-secondary) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover {
-      background: var(--color-surface-hover) !important;
+      background: var(--color-bg-subtle) !important;
       color: var(--color-text-primary) !important;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.98);
     }
   }
 
   &__settings-btn {
     color: var(--color-text-secondary) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
 
     &:hover {
-      background: var(--color-surface-hover) !important;
+      background: var(--color-bg-subtle) !important;
       color: var(--color-text-primary) !important;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+  }
+
+  &__toggle-btn {
+    color: var(--color-text-secondary) !important;
+    border-radius: $size-radius-base !important;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: var(--color-bg-subtle) !important;
+      color: var(--color-text-primary) !important;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.98);
     }
   }
 
   &__spinner {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border: 2px solid transparent;
     border-top-color: currentColor;
     border-radius: 50%;
@@ -168,5 +286,21 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-floating-toolbar {
+    animation: none;
+    
+    &__container {
+      backdrop-filter: none;
+    }
+    
+    .btn,
+    .icon-btn {
+      transition: none !important;
+      transform: none !important;
+    }
   }
 }

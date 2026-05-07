@@ -74,7 +74,7 @@ export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
     id: 'openbitfun',
     nameKey: 'model.providers.openbitfun.name',
     descriptionKey: 'model.providers.openbitfun.description',
-    baseUrl: 'https://api.openbitfun.com',
+    baseUrl: 'https://api.kongling.com',
     format: 'anthropic',
     models: [],
   },

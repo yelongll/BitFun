@@ -619,7 +619,7 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
                       className={`bitfun-nav-panel__inline-item-action-btn${openMenuSessionId === session.sessionId ? ' is-open' : ''}`}
                       onClick={e => handleMenuOpen(e, session.sessionId)}
                     >
-                      <MoreHorizontal size="var(--bitfun-nav-row-action-icon-size)" />
+                      <MoreHorizontal className="bitfun-nav-panel__action-icon" />
                     </button>
                   </div>
                   {openMenuSessionId === session.sessionId && sessionMenuPosition && createPortal(
@@ -652,7 +652,10 @@ const SessionsSection: React.FC<SessionsSectionProps> = ({
               )}
             </div>
           );
-          return isEditing || openMenuSessionId !== null ? row : (
+          if (isEditing || openMenuSessionId !== null) {
+            return React.cloneElement(row, { key: session.sessionId });
+          }
+          return (
             <Tooltip key={session.sessionId} content={tooltipContent} placement="right" followCursor>
               {row}
             </Tooltip>

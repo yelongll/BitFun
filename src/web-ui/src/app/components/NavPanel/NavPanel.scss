@@ -1346,6 +1346,11 @@ $_section-header-height: 24px;
       background: var(--element-bg-medium);
     }
   }
+  
+  &__action-icon {
+    width: var(--bitfun-nav-row-action-icon-size);
+    height: var(--bitfun-nav-row-action-icon-size);
+  }
 
 }
 

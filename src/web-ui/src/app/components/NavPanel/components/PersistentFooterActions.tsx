@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Settings,
   Info,
@@ -20,6 +20,8 @@ import {
   Library,
   FolderCode,
   AppWindow,
+  History,
+  Trophy,
 } from 'lucide-react';
 import { Tooltip, Modal } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
@@ -30,8 +32,9 @@ import { useCanvasStore } from '@/app/components/panels/content-canvas/stores';
 import { useToolbarModeContext } from '@/flow_chat/components/toolbar-mode/ToolbarModeContext';
 import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
 import { useNotification } from '@/shared/notification-system';
-import NotificationButton from '../../TitleBar/NotificationButton';
 import { AboutDialog } from '../../AboutDialog';
+import { ChangelogModal } from '../../ChangelogModal';
+import { RankingModal } from '../../RankingModal';
 import { RemoteConnectDialog } from '../../RemoteConnectDialog';
 import {
   RemoteConnectDisclaimerContent,
@@ -41,12 +44,20 @@ import {
   setRemoteConnectDisclaimerAgreed,
 } from '../../RemoteConnectDialog/remoteConnectDisclaimerStorage';
 import { MERMAID_INTERACTIVE_EXAMPLE } from '@/flow_chat/constants/mermaidExamples';
+import {
+  isLoggedIn as checkIsLoggedIn,
+  getStoredUser,
+  logout as authLogout,
+  UserInfo,
+} from '@/infrastructure/api/service-api/AuthAPI';
+import AuthConfig from '@/infrastructure/config/components/AuthConfig';
 
 const PersistentFooterActions: React.FC = () => {
   const { t } = useI18n('common');
   const { openScene } = useSceneManager();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userName, setUserName] = useState('');
+  const [isLoggedInState, setIsLoggedInState] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const activeTabId = useSceneStore((s) => s.activeTabId);
   const showSceneNav = useNavSceneStore((s) => s.showSceneNav);
   const navSceneId = useNavSceneStore((s) => s.navSceneId);
@@ -71,9 +82,33 @@ const PersistentFooterActions: React.FC = () => {
   const [multimodalOpen, setMultimodalOpen] = useState(false);
   const multimodalHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [showRanking, setShowRanking] = useState(false);
   const [showRemoteConnect, setShowRemoteConnect] = useState(false);
   const [showRemoteDisclaimer, setShowRemoteDisclaimer] = useState(false);
   const [hasAgreedRemoteDisclaimer, setHasAgreedRemoteDisclaimer] = useState<boolean>(() => getRemoteConnectDisclaimerAgreed());
+
+  useEffect(() => {
+    const checkLoginStatus = () => {
+      const loggedIn = checkIsLoggedIn();
+      setIsLoggedInState(loggedIn);
+      if (loggedIn) {
+        const user = getStoredUser();
+        setCurrentUser(user);
+      } else {
+        setCurrentUser(null);
+      }
+    };
+    
+    checkLoginStatus();
+    
+    const handleAuthChange = () => checkLoginStatus();
+    window.addEventListener('auth-change', handleAuthChange);
+    
+    return () => {
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
+  }, []);
 
   const closeMenu = useCallback(() => {
     setMenuClosing(true);
@@ -164,6 +199,16 @@ const PersistentFooterActions: React.FC = () => {
     setShowAbout(true);
   };
 
+  const handleShowChangelog = () => {
+    closeMenu();
+    setShowChangelog(true);
+  };
+
+  const handleShowRanking = () => {
+    closeMenu();
+    setShowRanking(true);
+  };
+
   const handleFloatingMode = () => {
     closeMenu();
     enableToolbarMode();
@@ -194,13 +239,18 @@ const PersistentFooterActions: React.FC = () => {
   }, []);
 
   const handleLogin = useCallback(() => {
-    setIsLoggedIn(true);
-    setUserName('用户');
+    setShowAuthModal(true);
   }, []);
 
-  const handleLogout = useCallback(() => {
-    setIsLoggedIn(false);
-    setUserName('');
+  const handleLogout = useCallback(async () => {
+    try {
+      await authLogout();
+      setIsLoggedInState(false);
+      setCurrentUser(null);
+      window.dispatchEvent(new CustomEvent('auth-change'));
+    } catch (err) {
+      console.error('Logout failed', err);
+    }
   }, []);
 
   const handleOpenMiniApps = useCallback(() => {
@@ -229,17 +279,17 @@ const PersistentFooterActions: React.FC = () => {
       <div className="bitfun-nav-panel__footer">
         <div className="bitfun-nav-panel__footer-left">
           {/* Login Button */}
-          {isLoggedIn ? (
-            <Tooltip content={`${t('header.loggedInAs')}: ${userName}`} placement="right">
+          {isLoggedInState ? (
+            <Tooltip content={`${t('header.loggedInAs')}: ${currentUser?.nickname || currentUser?.username || ''}`} placement="right">
               <button
                 type="button"
                 className="bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon"
-                aria-label={t('header.logout')}
-                onClick={handleLogout}
+                aria-label={t('header.loggedInAs')}
+                onClick={handleLogin}
               >
                 <span className="bitfun-nav-panel__footer-btn-icon-swap" aria-hidden="true">
-                  <LogIn size={15} className="bitfun-nav-panel__footer-btn-icon-swap-default" />
-                  <User size={15} className="bitfun-nav-panel__footer-btn-icon-swap-hover" />
+                  <User size={15} className="bitfun-nav-panel__footer-btn-icon-swap-default" />
+                  <LogIn size={15} className="bitfun-nav-panel__footer-btn-icon-swap-hover" />
                 </span>
               </button>
             </Tooltip>
@@ -378,6 +428,24 @@ const PersistentFooterActions: React.FC = () => {
                     <Info size={14} />
                     <span>{t('header.about')}</span>
                   </button>
+                  <button
+                    type="button"
+                    className="bitfun-nav-panel__footer-menu-item"
+                    role="menuitem"
+                    onClick={handleShowChangelog}
+                  >
+                    <History size={14} />
+                    <span>{t('scenes.changelog', { defaultValue: '更新记录' })}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="bitfun-nav-panel__footer-menu-item"
+                    role="menuitem"
+                    onClick={handleShowRanking}
+                  >
+                    <Trophy size={14} />
+                    <span>{t('scenes.ranking', { defaultValue: '开发者排行榜' })}</span>
+                  </button>
                 </div>
               </>
             )}
@@ -472,10 +540,23 @@ const PersistentFooterActions: React.FC = () => {
         </div>
 
         <div className="bitfun-nav-panel__footer-right">
-          <NotificationButton className="bitfun-nav-panel__footer-btn" navFooterHoverIconSwap />
         </div>
       </div>
+      <Modal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        title={t('configCenter.tabs.account', { defaultValue: '账户' })}
+        showCloseButton
+        size="large"
+        contentInset
+      >
+        <div className="bitfun-nav-panel__auth-modal">
+          <AuthConfig />
+        </div>
+      </Modal>
       <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />
+      <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
+      <RankingModal isOpen={showRanking} onClose={() => setShowRanking(false)} />
       <RemoteConnectDialog isOpen={showRemoteConnect} onClose={() => setShowRemoteConnect(false)} />
       <Modal
         isOpen={showRemoteDisclaimer}

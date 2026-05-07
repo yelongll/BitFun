@@ -607,6 +607,31 @@ const SessionConfig: React.FC = () => {
           </ConfigPageRow>
         </ConfigPageSection>
 
+        {/* ── Thinking process control ──────────────────────────── */}
+        <ConfigPageSection
+          title={t('features.thinkingProcess.title')}
+          description={t('features.thinkingProcess.subtitle')}
+        >
+          <ConfigPageRow label={t('features.thinkingProcess.show')} align="center">
+            <div className="bitfun-func-agent-config__row-control">
+              <Switch
+                checked={settings.show_thinking_process}
+                onChange={(e) => updateSetting('show_thinking_process', e.target.checked)}
+                size="small"
+              />
+            </div>
+          </ConfigPageRow>
+          <ConfigPageRow label={t('features.thinkingProcess.showCompleted')} description={t('features.thinkingProcess.showCompletedDesc')} align="center">
+            <div className="bitfun-func-agent-config__row-control">
+              <Switch
+                checked={settings.show_completed_thinking_item}
+                onChange={(e) => updateSetting('show_completed_thinking_item', e.target.checked)}
+                size="small"
+              />
+            </div>
+          </ConfigPageRow>
+        </ConfigPageSection>
+
         {/* ── Tool execution behavior ────────────────────────────── */}
         <ConfigPageSection
           title={t('toolExecution.sectionTitle')}

@@ -33,6 +33,37 @@
     color: var(--color-accent-400);
   }
 
+  &__bell-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 12px;
+    height: 12px;
+    padding: 0 3px;
+    background: #ef4444;
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: none;
+    animation: badge-pulse 2s ease-in-out infinite;
+  }
+
+  &__badge--new {
+    animation: badge-bounce 0.6s ease-out;
+  }
+
   // ── Progress state ──────────────────────────────
   &__progress {
     display: flex;
@@ -84,6 +115,32 @@
 @keyframes notif-btn-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
+}
+
+@keyframes badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes badge-bounce {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Library } from 'lucide-react';
+import { Library as _Library } from 'lucide-react';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 
 interface LibraryEntryProps {

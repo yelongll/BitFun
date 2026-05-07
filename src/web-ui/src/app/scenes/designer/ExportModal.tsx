@@ -38,9 +38,9 @@ const ExportModal: React.FC<ExportModalProps> = ({
   }, [appName, canvasSettings, elements]);
 
   const tabs: { id: TabType; label: string; filename: string }[] = [
-    { id: 'main', label: 'main.nim', filename: 'main.nim' },
-    { id: 'ui', label: 'ui.nim', filename: 'ui.nim' },
-    { id: 'logic', label: 'logic.nim', filename: 'logic.nim' },
+    { id: 'main', label: 'main.灵', filename: 'main.灵' },
+    { id: 'ui', label: 'ui.灵', filename: 'ui.灵' },
+    { id: 'logic', label: 'logic.灵', filename: 'logic.灵' },
     { id: 'config', label: 'kl.cfg', filename: 'kl.cfg' },
   ];
 
@@ -62,7 +62,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = currentTab?.filename || 'code.nim';
+    a.download = currentTab?.filename || 'code.灵';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -92,7 +92,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
     <div className="export-modal-overlay" onClick={onClose}>
       <div className="export-modal" onClick={e => e.stopPropagation()}>
         <div className="export-modal__header">
-          <h2>导出 Nim 代码</h2>
+          <h2>导出 空灵 代码</h2>
           <button className="export-modal__close" onClick={onClose}>
             <X size={18} />
           </button>

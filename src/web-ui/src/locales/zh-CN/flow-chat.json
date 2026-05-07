@@ -271,14 +271,14 @@
       "Team": "虚拟工程团队：CEO、工程经理、设计师、QA 负责人、安全官、发布工程师 — 按完整冲刺流程协同工作"
     },
     "modeNames": {
-      "agentic": "Agentic",
-      "Claw": "Claw",
-      "Plan": "Plan",
-      "debug": "Debug",
-      "Cowork": "Cowork",
-      "ComputerUse": "Computer Use",
-      "DeepResearch": "Deep Research",
-      "Team": "Team"
+      "agentic": "智能体",
+      "Claw": "个人助理",
+      "Plan": "规划",
+      "debug": "调试",
+      "Cowork": "协作",
+      "ComputerUse": "电脑操作",
+      "DeepResearch": "深度研究",
+      "Team": "团队"
     },
     "openFolder": "打开文件夹…",
     "selectWorkspaceTitle": "选择工作区目录",

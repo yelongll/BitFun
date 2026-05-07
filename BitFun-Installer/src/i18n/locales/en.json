@@ -78,7 +78,7 @@
     "providers": {
       "openbitfun": {
         "name": "OpenBitFun",
-        "description": "Open kongling Model Platform"
+        "description": "OpenkonglingModel Platform"
       },
       "gemini": {
         "name": "Google Gemini",

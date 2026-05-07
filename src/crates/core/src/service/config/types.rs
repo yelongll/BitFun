@@ -85,6 +85,11 @@ pub struct AppConfig {
     /// the frontend owns the versioned format (StoredKeybindingsV1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keybindings: Option<serde_json::Value>,
+    /// Run configurations for different languages (e.g., Nim).
+    /// Stored as opaque JSON so the backend remains schema-agnostic;
+    /// the frontend owns the versioned format.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_configs: Option<serde_json::Value>,
 }
 
 /// App logging configuration.
@@ -117,6 +122,10 @@ pub struct AIExperienceConfig {
     pub enable_visual_mode: bool,
     /// Whether to show the pixel Agent companion in the collapsed chat input.
     pub enable_agent_companion: bool,
+    /// Whether to show model thinking process in FlowChat.
+    pub show_thinking_process: bool,
+    /// Whether completed thinking blocks remain as expandable collapsed items.
+    pub show_completed_thinking_item: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1235,6 +1244,7 @@ impl Default for AppConfig {
             session_config: AppSessionConfig::default(),
             ai_experience: AIExperienceConfig::default(),
             keybindings: None,
+            run_configs: None,
         }
     }
 }
@@ -1263,6 +1273,8 @@ impl Default for AIExperienceConfig {
             enable_welcome_panel_ai_analysis: false,
             enable_visual_mode: false,
             enable_agent_companion: true,
+            show_thinking_process: false,
+            show_completed_thinking_item: false,
         }
     }
 }

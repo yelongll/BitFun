@@ -1276,7 +1276,8 @@ const AIModelConfig: React.FC = () => {
   };
 
   const providerGroups = useMemo<ProviderGroup[]>(() => {
-    const grouped = aiModels.reduce<Map<string, ProviderGroup>>((map, model) => {
+    const filteredModels = aiModels.filter(model => !model.id?.startsWith('server_'));
+    const grouped = filteredModels.reduce<Map<string, ProviderGroup>>((map, model) => {
       const providerName = getProviderDisplayName(model);
       const existingGroup = map.get(providerName);
       if (existingGroup) {

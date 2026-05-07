@@ -1,17 +1,6 @@
-import en from './locales/en.json';
 import zh from './locales/zh.json';
-import zhTW from './locales/zh-TW.json';
 
 export const INSTALLER_LANGUAGES = [
-  {
-    uiCode: 'en',
-    appCode: 'en-US',
-    label: 'English',
-    nativeName: 'English',
-    continueLabel: 'Continue',
-    aliases: ['en', 'en-US'],
-    resource: en,
-  },
   {
     uiCode: 'zh',
     appCode: 'zh-CN',
@@ -20,15 +9,6 @@ export const INSTALLER_LANGUAGES = [
     continueLabel: '继续',
     aliases: ['zh', 'zh-Hans', 'zh-CN'],
     resource: zh,
-  },
-  {
-    uiCode: 'zh-TW',
-    appCode: 'zh-TW',
-    label: 'Traditional Chinese',
-    nativeName: '繁體中文',
-    continueLabel: '繼續',
-    aliases: ['zh-TW', 'zh-Hant', 'zh-HK', 'zh-MO'],
-    resource: zhTW,
   },
 ] as const;
 
@@ -51,7 +31,7 @@ export function isInstallerUiLanguage(value: string | null | undefined): value i
 }
 
 export function mapUiLanguageToAppLanguage(uiLanguage: InstallerUiLanguage): AppLanguage {
-  return INSTALLER_LANGUAGES.find(language => language.uiCode === uiLanguage)?.appCode ?? 'en-US';
+  return INSTALLER_LANGUAGES.find(language => language.uiCode === uiLanguage)?.appCode ?? 'zh-CN';
 }
 
 export function mapAppLanguageToUiLanguage(appLanguage: string | null | undefined): InstallerUiLanguage | null {
@@ -76,5 +56,5 @@ export function resolveInstallerUiLanguage(value: string | null | undefined): In
 export function detectInstallerUiLanguage(appLanguage?: string | null): InstallerUiLanguage {
   return mapAppLanguageToUiLanguage(appLanguage)
     ?? resolveInstallerUiLanguage(typeof navigator !== 'undefined' ? navigator.language : null)
-    ?? 'en';
+    ?? 'zh';
 }

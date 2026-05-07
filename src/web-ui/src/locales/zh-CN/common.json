@@ -79,7 +79,7 @@
     "forwardShortcut": "前进 (Alt+→)",
     "items": {
       "sessions": "会话",
-      "project": "目录",
+      "project": "切换到目录",
       "persona": "代码助理",
       "agents": "专业智能体",
       "skills": "技能",
@@ -91,7 +91,7 @@
     },
     "tooltips": {
       "persona": "助理 — 创建与管理所有助理实例",
-      "agents": "它能调用哪些 Agent",
+      "agents": "它能调用哪些 智能体",
       "skills": "它懂什么专项知识 — 技能知识文件",
       "tools": "它能用什么工具 — 内置工具与 MCP 服务",
       "addWorkspace": "添加工作区"
@@ -855,7 +855,7 @@
     "scenes": "正在加载设计器场景"
   },
   "welcomeScene": {
-    "tabLabel": "欢迎使用空灵语言",
+    "tabLabel": "空灵语言",
     "welcomeBack": "欢迎回到",
     "welcomeTabTitle": "欢迎使用空灵语言",
     "quickStart": "开始",
@@ -1031,6 +1031,23 @@
       "transferNeedsDesktop": "上传与下载仅适用于桌面版应用。",
       "transferring": "正在传输…"
     }
+  },
+  "toolbar": {
+    "run": "运行",
+    "runPython": "运行 Python",
+    "runNode": "运行 Node.js",
+    "runCargo": "运行 Cargo",
+    "runGo": "运行 Go",
+    "runNim": "运行 空灵",
+    "debug": "调试",
+    "build": "构建",
+    "stop": "停止",
+    "restart": "重新运行",
+    "format": "格式化代码",
+    "terminal": "打开终端",
+    "settings": "运行设置",
+    "collapse": "折叠工具栏",
+    "expand": "展开工具栏"
   },
 "notify": {
     "dialogCompleted": "AI 助手已完成任务。",

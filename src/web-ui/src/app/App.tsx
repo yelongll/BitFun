@@ -8,12 +8,16 @@ import { useCurrentModelConfig } from '../hooks/useModelConfigs';
 import { ContextMenuRenderer } from '../shared/context-menu-system/components/ContextMenuRenderer';
 import { NotificationContainer, NotificationCenter } from '../shared/notification-system';
 import { AnnouncementProvider } from '../shared/announcement-system';
-import { ConfirmDialogRenderer } from '../component-library';
+import { ConfirmDialogRenderer } from '@/component-library';
+import { UpdateNotification } from './components/UpdateNotification';
+import { useAppUpdateStore } from '@/shared/services/AppUpdateService';
+import { configureAuth } from '@/infrastructure/api/service-api/AuthAPI';
 import { createLogger } from '@/shared/utils/logger';
 import { useWorkspaceContext } from '../infrastructure/contexts/WorkspaceContext';
 import SplashScreen from './components/SplashScreen/SplashScreen';
 import { useGlobalSceneShortcuts } from './hooks/useGlobalSceneShortcuts';
 import { useDebugInspector } from '@/infrastructure/debug/useDebugInspector';
+import { RealtimeNotificationProvider } from '@/infrastructure/realtime/RealtimeNotificationProvider';
 
 // Toolbar Mode
 import { ToolbarModeProvider } from '../flow_chat';
@@ -157,7 +161,32 @@ function App() {
     initIdeControl();
     initMCPServers();
     initACPClients();
+
+    const serverUrl = localStorage.getItem('kongling_server_url') || 'http://111.228.54.164';
+    if (!localStorage.getItem('kongling_server_url')) {
+      localStorage.setItem('kongling_server_url', serverUrl);
+    }
+    configureAuth({ serverUrl });
+
+    const startUpdateCheck = () => {
+      try {
+        const { startAutoCheck } = useAppUpdateStore.getState();
+        startAutoCheck();
+        log.debug('App update and announcement check started');
+      } catch (error) {
+        log.error('Failed to start update check', error);
+      }
+    };
+
+    const timer = setTimeout(startUpdateCheck, 5000);
     
+    return () => {
+      clearTimeout(timer);
+      try {
+        const { stopAutoCheck } = useAppUpdateStore.getState();
+        stopAutoCheck();
+      } catch {}
+    };
   }, []);
 
   // Observe AI initialization state
@@ -214,26 +243,24 @@ function App() {
         <SSHRemoteProvider>
           <ToolbarModeProvider>
             <ToolbarProvider>
-              {/* Unified app layout with startup/workspace modes */}
-              <AppLayout />
+              <RealtimeNotificationProvider>
+                <AppLayout />
 
-              {/* Context menu renderer */}
-              <ContextMenuRenderer />
+                <ContextMenuRenderer />
 
-              {/* Notification system */}
-              <NotificationContainer />
-              <NotificationCenter />
+                <NotificationContainer />
+                <NotificationCenter />
 
-              {/* Confirm dialog */}
-              <ConfirmDialogRenderer />
+                <ConfirmDialogRenderer />
 
-              {/* Announcement / feature-demo / tips system */}
-              <AnnouncementProvider />
+                <AnnouncementProvider />
 
-              {/* Startup splash — sits above everything, exits once workspace is ready */}
-              {splashVisible && (
-                <SplashScreen isExiting={splashExiting} onExited={handleSplashExited} />
-              )}
+                <UpdateNotification />
+
+                {splashVisible && (
+                  <SplashScreen isExiting={splashExiting} onExited={handleSplashExited} />
+                )}
+              </RealtimeNotificationProvider>
             </ToolbarProvider>
           </ToolbarModeProvider>
         </SSHRemoteProvider>

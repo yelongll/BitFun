@@ -33,12 +33,12 @@ type BrowserLogEntry = {
 function executableCandidates(buildType: 'debug' | 'release'): string[] {
   const root = projectRoot();
   const suffix = process.platform === 'win32' ? '.exe' : '';
-  const binaryName = `bitfun-desktop${suffix}`;
+  const binaryName = `kongling-desktop${suffix}`;
 
   if (process.platform === 'darwin') {
     return [
       path.join(root, 'target', buildType, binaryName),
-      path.join(root, 'target', buildType, 'BitFun.app', 'Contents', 'MacOS', 'BitFun'),
+      path.join(root, 'target', buildType, '空灵语言.app', 'Contents', 'MacOS', '空灵语言'),
     ];
   }
 
@@ -366,7 +366,7 @@ async function startBitFunApp(): Promise<void> {
   if (!fs.existsSync(appPath)) {
     console.error(`Application not found at: ${appPath}`);
     console.error('Please build the debug application first with:');
-    console.error('cargo build -p bitfun-desktop');
+    console.error('cargo build -p kongling-desktop');
     throw new Error('Application not built');
   }
 
@@ -482,7 +482,7 @@ export function createEmbeddedConfig(specs: string[], label: string): Options.Te
       if (!fs.existsSync(appPath)) {
         console.error(`Application not found at: ${appPath}`);
         console.error('Please build the debug application first with:');
-        console.error('cargo build -p bitfun-desktop');
+        console.error('cargo build -p kongling-desktop');
         throw new Error('Application not built');
       }
 

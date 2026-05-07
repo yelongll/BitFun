@@ -29,7 +29,8 @@ export type PanelContentType =
   | 'btw-session'
   | 'terminal'
   | 'generative-widget'
-  | 'browser';
+  | 'browser'
+  | 'designer';
 
 export interface PanelContent {
   type: PanelContentType;

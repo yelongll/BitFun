@@ -111,13 +111,13 @@ class EventCodeService {
       const logicFilePath = `${workspacePath}/${logicFileName}`;
 
       let content = '';
-      let isNewFile = false;
+      let _isNewFile = false;
       
       try {
         const fileData = await readFile(logicFilePath);
         content = new TextDecoder().decode(fileData);
       } catch {
-        isNewFile = true;
+        _isNewFile = true;
         content = `导入 界面_${windowName}
 
 变量

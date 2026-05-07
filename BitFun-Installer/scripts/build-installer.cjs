@@ -159,7 +159,7 @@ function getCandidateAppExePaths(mode) {
         "desktop",
         "target",
         profile,
-        "bitfun-desktop.exe"
+        "kongling-desktop.exe"
       ),
       path.join(
         BITFUN_ROOT,
@@ -168,10 +168,10 @@ function getCandidateAppExePaths(mode) {
         "desktop",
         "target",
         profile,
-        "BitFun.exe"
+        "空灵语言.exe"
       ),
-      path.join(BITFUN_ROOT, "target", profile, "bitfun-desktop.exe"),
-      path.join(BITFUN_ROOT, "target", profile, "BitFun.exe")
+      path.join(BITFUN_ROOT, "target", profile, "kongling-desktop.exe"),
+      path.join(BITFUN_ROOT, "target", profile, "空灵语言.exe")
     );
   }
 
@@ -229,14 +229,14 @@ if (appExePath) {
     files: [],
   };
 
-  const destExe = path.join(PAYLOAD_DIR, "BitFun.exe");
+  const destExe = path.join(PAYLOAD_DIR, "空灵语言.exe");
   writeFileWithManifest(appExePath, destExe, manifest, PAYLOAD_DIR);
   log(`Copied: ${appExePath} -> ${destExe}`);
 
   const exeSize = fs.statSync(destExe).size;
   if (STRICT_PAYLOAD_VALIDATION && exeSize < MIN_APP_EXE_BYTES) {
     error(
-      `BitFun.exe in payload is unexpectedly small (${exeSize} bytes). Refusing to continue.`
+      `空灵语言.exe in payload is unexpectedly small (${exeSize} bytes). Refusing to continue.`
     );
   }
 
@@ -306,7 +306,7 @@ if (isDev) {
       "src-tauri",
       "target",
       installerTargetProfile,
-      "bitfun-installer.exe"
+      "kongling-installer.exe"
     )}`
   );
 }

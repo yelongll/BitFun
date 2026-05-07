@@ -36,6 +36,7 @@ import { SSHContext } from '@/features/ssh-remote/SSHRemoteContext';
 import { shortcutManager, parseStoredKeybindings } from '@/infrastructure/services/ShortcutManager';
 import { useSessionModeStore } from '../stores/sessionModeStore';
 import { isMacOSDesktopRuntime } from '@/infrastructure/runtime';
+import { AnnouncementBanner } from '../components/AnnouncementBanner';
 import './AppLayout.scss';
 
 const log = createLogger('AppLayout');
@@ -493,6 +494,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
   return (
     <>
       <div className={containerClassName} data-testid="app-layout">
+        <AnnouncementBanner />
         {/* Main content — always render WorkspaceBody; WelcomeScene in viewport handles no-workspace state */}
         <main className="bitfun-app-main-workspace" data-testid="app-main-content">
           <WorkspaceBody

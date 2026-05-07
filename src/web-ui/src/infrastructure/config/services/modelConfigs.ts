@@ -11,6 +11,8 @@ type ProviderConfigLike = {
   name?: string;
   model_name?: string;
   base_url?: string;
+  provider?: string;
+  metadata?: Record<string, any>;
 };
 
 function inferProviderTemplate(config: ProviderConfigLike): ProviderTemplate | undefined {
@@ -25,6 +27,14 @@ export function getProviderTemplateId(config: ProviderConfigLike): string | unde
 }
 
 export function getProviderDisplayName(config: ProviderConfigLike): string {
+  if (config.metadata?.provider_display_name?.trim()) {
+    return config.metadata.provider_display_name.trim();
+  }
+  
+  if (config.provider?.trim()) {
+    return config.provider.trim();
+  }
+  
   const inferredTemplate = inferProviderTemplate(config);
   if (inferredTemplate) {
     return t(`settings/ai-model:providers.${inferredTemplate.id}.name`);
@@ -58,32 +68,32 @@ export function getModelDisplayName(config: ProviderConfigLike): string {
 }
 
 export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
-  'opencode-zen': {
-    id: 'opencode-zen',
-    name: t('settings/ai-model:providers.opencode-zen.name'),
-    baseUrl: 'https://opencode.ai/zen/v1/chat/completions',
-    format: 'openai',
-    models: [
-      'gpt-5-nano',
-      'big-pickle',
-      'nemotron-3-super-free',
-      'minimax-m2.5-free',
-      'hy3-preview-free',
-    ],
-    requiresApiKey: false,
-    description: t('settings/ai-model:providers.opencode-zen.description'),
-    helpUrl: 'https://opencode.ai/zen',
-    baseUrlOptions: [
-      { url: 'https://opencode.ai/zen/v1/chat/completions', format: 'openai', note: 'OpenAI Chat' },
-      { url: 'https://opencode.ai/zen/v1/responses', format: 'responses', note: 'Responses API' },
-      { url: 'https://opencode.ai/zen/v1/messages', format: 'anthropic', note: 'Anthropic' },
-    ]
-  },
+  // 'opencode-zen': {
+  //   id: 'opencode-zen',
+  //   name: t('settings/ai-model:providers.opencode-zen.name'),
+  //   baseUrl: 'https://opencode.ai/zen/v1/chat/completions',
+  //   format: 'openai',
+  //   models: [
+  //     'gpt-5-nano',
+  //     'big-pickle',
+  //     'nemotron-3-super-free',
+  //     'minimax-m2.5-free',
+  //     'hy3-preview-free',
+  //   ],
+  //   requiresApiKey: false,
+  //   description: t('settings/ai-model:providers.opencode-zen.description'),
+  //   helpUrl: 'https://opencode.ai/zen',
+  //   baseUrlOptions: [
+  //     { url: 'https://opencode.ai/zen/v1/chat/completions', format: 'openai', note: 'OpenAI Chat' },
+  //     { url: 'https://opencode.ai/zen/v1/responses', format: 'responses', note: 'Responses API' },
+  //     { url: 'https://opencode.ai/zen/v1/messages', format: 'anthropic', note: 'Anthropic' },
+  //   ]
+  // },
 
   openbitfun: {
     id: 'openbitfun',
     name: t('settings/ai-model:providers.openbitfun.name'),
-    baseUrl: 'https://api.openbitfun.com',
+    baseUrl: 'https://api.kongling.com',
     format: 'anthropic',
     models: [],
     requiresApiKey: true,

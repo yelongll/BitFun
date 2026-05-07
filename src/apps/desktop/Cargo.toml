@@ -1,16 +1,16 @@
 [package]
-name = "bitfun-desktop"
+name = "kongling-desktop"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "BitFun Desktop Application (Tauri)"
+description = "空灵语言桌面应用"
 
 [lib]
-name = "bitfun_desktop_lib"
+name = "kongling_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "bitfun-desktop"
+name = "kongling-desktop"
 path = "src/main.rs"
 
 [build-dependencies]

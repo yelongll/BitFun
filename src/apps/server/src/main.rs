@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    tracing::info!("空灵语言 Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("空灵语言服务 v{}", env!("CARGO_PKG_VERSION"));
 
     let app_state = AppState {};
 

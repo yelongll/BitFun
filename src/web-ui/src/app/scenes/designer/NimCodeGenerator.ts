@@ -1,4 +1,4 @@
-import { DesignerElement, ElementStyles, ElementEvents } from './DesignerScene';
+import { DesignerElement, ElementStyles as _ElementStyles, ElementEvents } from './DesignerScene';
 import { generateComponentCode, CodeGenerationContext } from './ComponentCodeGenerator';
 
 const EVENT_CHINESE_NAMES: Record<string, string> = {
@@ -298,7 +298,7 @@ function colorToNimArray(color: string | undefined): string {
   return `[${r.toFixed(3)}f, ${g.toFixed(3)}f, ${b.toFixed(3)}f, ${a.toFixed(3)}f]`;
 }
 
-function getWidgetType(type: string): string {
+function _getWidgetType(type: string): string {
   const typeMap: Record<string, string> = {
     'button': 'Button',
     'text': 'Text',
@@ -497,7 +497,7 @@ function findElementById(elements: DesignerElement[], id: string): DesignerEleme
 }
 
 function generateUICode(options: NimCodeGeneratorOptions): string {
-  const { appName, elements, windowWidth, windowHeight, windowName } = options;
+  const { appName, elements, windowWidth: _windowWidth, windowHeight: _windowHeight, windowName } = options;
   const events = collectEvents(elements);
   const states = collectStateVariables(elements);
   const moduleName = sanitizeNimName(windowName || appName);
@@ -543,7 +543,7 @@ function generateUICode(options: NimCodeGeneratorOptions): string {
   code += `  glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)\n\n`;
   code += `  result = glfwCreateWindow(config.width, config.height, config.title)\n`;
   if (options.windowIcon) {
-    // Escape backslashes for Nim string literal
+    // Escape backslashes for 空灵 string literal
     const escapedIconPath = options.windowIcon.replace(/\\/g, '\\\\');
     code += `\n  # Set window icon\n`;
     code += `  LoadTileBarIcon(cast[GLFWwindow](result), r"${escapedIconPath}")\n`;
@@ -634,11 +634,11 @@ function generateWidgetCodeWithOffset(elements: DesignerElement[], indent: numbe
   for (const el of elements) {
     if (el.hidden) continue;
     
-    const nimName = sanitizeNimName(el.name || el.id);
+    const _nimName = sanitizeNimName(el.name || el.id);
     const x = (el.x || 0) + offsetX;
     const y = (el.y || 0) + offsetY;
-    const width = el.width || 100;
-    const height = el.height || 30;
+    const _width = el.width || 100;
+    const _height = el.height || 30;
 
     // Set cursor position for absolute positioning
     code += `${indentStr}igSetCursorPos(ImVec2(x: ${x}.0f, y: ${y}.0f))\n`;
@@ -662,7 +662,7 @@ function generateWidgetCode(elements: DesignerElement[], indent: number): string
 }
 
 function generateMainCode(options: NimCodeGeneratorOptions): string {
-  const { appName, windowWidth, windowHeight, elements, windowName, isMainWindow } = options;
+  const { appName, windowWidth, windowHeight, elements, windowName, isMainWindow: _isMainWindow } = options;
   const events = collectEvents(elements);
   const moduleName = sanitizeNimName(windowName || appName);
   
@@ -726,7 +726,7 @@ function generateMainCode(options: NimCodeGeneratorOptions): string {
   return code;
 }
 
-function generateConfigCode(options: NimCodeGeneratorOptions): string {
+function generateConfigCode(_options: NimCodeGeneratorOptions): string {
   let code = `# ========================================\n`;
   code += `# 空灵语言 UI 模块自动生成\n`;
   code += `# 请勿手动修改此文件\n`;

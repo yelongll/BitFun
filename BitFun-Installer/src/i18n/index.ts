@@ -4,8 +4,8 @@ import { installerResources } from './languages';
 
 i18n.use(initReactI18next).init({
   resources: installerResources,
-  lng: 'en',
-  fallbackLng: 'en',
+  lng: 'zh',
+  fallbackLng: 'zh',
   interpolation: { escapeValue: false },
 });
 

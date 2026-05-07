@@ -111,7 +111,7 @@ const AssistantQuickInput: React.FC<AssistantQuickInputProps> = ({
           <div className="aqi__footer-left">
             <ModelSelector currentMode="Claw" className="aqi__model" />
             <span className="aqi__hint">
-              {t('input.sendHint', { defaultValue: 'Enter to send · Shift+Enter for new line' })}
+              {t('input.sendHint', { defaultValue: '发送消息 · Shift+Enter 新行' })}
             </span>
           </div>
           <IconButton

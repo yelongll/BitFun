@@ -86,7 +86,9 @@ export const DefaultModelConfig: React.FC = () => {
   const getModelName = useCallback((modelId: string | null | undefined): string | undefined => {
     if (!modelId) return undefined;
     const model = models.find(m => m.id === modelId);
-    return model?.model_name;
+    if (!model) return undefined;
+    const isServerModel = model.id?.startsWith('server_');
+    return isServerModel ? (model.name || model.model_name) : (model.model_name || model.name);
   }, [models]);
 
   const formatContextWindow = useCallback((contextWindow?: number) => {
@@ -109,12 +111,16 @@ export const DefaultModelConfig: React.FC = () => {
     return parts.join(' · ');
   }, [formatContextWindow]);
 
-  const buildModelOption = useCallback((model: AIModelConfig): ModelSelectOption => ({
-    label: model.model_name,
-    value: model.id!,
-    meta: buildModelMeta(model),
-    enableThinking: isReasoningVisiblyEnabled(getEffectiveReasoningMode(model)),
-  }), [buildModelMeta]);
+  const buildModelOption = useCallback((model: AIModelConfig): ModelSelectOption => {
+    const isServerModel = model.id?.startsWith('server_');
+    const label = isServerModel ? model.name : (model.model_name || model.name);
+    return {
+      label,
+      value: model.id!,
+      meta: buildModelMeta(model),
+      enableThinking: isReasoningVisiblyEnabled(getEffectiveReasoningMode(model)),
+    };
+  }, [buildModelMeta]);
 
   const renderModelOption = useCallback((option: SelectOption) => {
     const modelOption = option as ModelSelectOption;
@@ -173,11 +179,15 @@ export const DefaultModelConfig: React.FC = () => {
         [slot]: modelIdStr,
       }));
 
-      const modelName = getModelName(modelIdStr);
+      const model = models.find(m => m.id === modelIdStr);
+      const modelName = model ? getModelName(modelIdStr) : modelIdStr;
+      const providerName = model ? getProviderDisplayName(model) : '';
+      const displayName = providerName ? `${modelName} 提供商:${providerName}` : modelName;
+      
       notificationService.success(
         t('messages.modelUpdated', {
           slot: slot === 'primary' ? t('core.primary.label') : t('core.fast.label'),
-          name: modelName || modelIdStr,
+          name: displayName,
         }),
         { duration: 2000 }
       );

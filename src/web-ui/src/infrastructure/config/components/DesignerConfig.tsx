@@ -45,7 +45,7 @@ const DesignerConfig: React.FC<DesignerConfigProps> = () => {
   const [config, setConfig] = useState<DesignerConfigType>(DEFAULT_DESIGNER_CONFIG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [_hasChanges, setHasChanges] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {

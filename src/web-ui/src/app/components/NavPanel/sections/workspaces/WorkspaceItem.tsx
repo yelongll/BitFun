@@ -733,7 +733,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
                 className="bitfun-nav-panel__assistant-item-menu-trigger"
                 onClick={() => { void handleOpenFiles(); }}
               >
-                <Folder size="var(--bitfun-nav-row-action-icon-size)" />
+                <Folder className="bitfun-nav-panel__action-icon" />
               </button>
             </Tooltip>
             <div ref={menuAnchorRef}>
@@ -742,7 +742,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
                 className={`bitfun-nav-panel__assistant-item-menu-trigger${menuOpen ? ' is-open' : ''}`}
                 onClick={() => setMenuOpen(prev => !prev)}
               >
-                <MoreHorizontal size="var(--bitfun-nav-row-action-icon-size)" />
+                <MoreHorizontal className="bitfun-nav-panel__action-icon" />
               </button>
             </div>
 

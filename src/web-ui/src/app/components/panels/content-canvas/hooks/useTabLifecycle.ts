@@ -59,12 +59,12 @@ export const useTabLifecycle = (options: UseTabLifecycleOptions = {}): UseTabLif
     togglePinTab,
     findTabByMetadata,
     switchToTab,
-    updateTabContent,
+    updateTabContent: _updateTabContent,
     closeTab,
     closeAllTabs,
     activeGroupId,
-    layout,
-    setSplitMode,
+    layout: _layout,
+    setSplitMode: _setSplitMode,
   } = useCanvasStore();
 
   /**

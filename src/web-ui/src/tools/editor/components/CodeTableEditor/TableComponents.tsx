@@ -15,7 +15,7 @@ export interface ParamLineData {
 interface TableLineProps {
   lineIndex: number;
   isSelected: boolean;
-  onLineClick: (lineIndex: number, e: React.MouseEvent) => void;
+  onLineMouseDown: (lineIndex: number, e: React.MouseEvent) => void;
   renderEditableCell: (
     lineIndex: number,
     cellIndex: number,
@@ -46,7 +46,7 @@ interface ProcTableProps extends TableLineProps {
 export const ProcTable: React.FC<ProcTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   renderParamCell,
   keyword: _keyword,
@@ -102,7 +102,7 @@ export const ProcTable: React.FC<ProcTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -159,7 +159,7 @@ export const ProcTable: React.FC<ProcTableProps> = ({
               </div>
             ))}
             {paramLines.map((param, idx) => (
-              <div key={`line-${param.lineIndex}`} className="code-table__table-row code-table__table-row--params" data-line={param.lineIndex} onClick={(e) => onLineClick(param.lineIndex, e)}>
+              <div key={`line-${param.lineIndex}`} className="code-table__table-row code-table__table-row--params" data-line={param.lineIndex} onMouseDown={(e) => onLineMouseDown(param.lineIndex, e)}>
                 {renderParamRow({ name: param.paramName, type: param.paramType, defaultValue: param.defaultValue || '', modifier: param.modifier || '', comment: param.comment }, idx, param.lineIndex)}
               </div>
             ))}
@@ -186,7 +186,7 @@ interface FuncTableProps extends TableLineProps {
 export const FuncTable: React.FC<FuncTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   renderParamCell,
   keyword: _keyword,
@@ -242,7 +242,7 @@ export const FuncTable: React.FC<FuncTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -299,7 +299,7 @@ export const FuncTable: React.FC<FuncTableProps> = ({
               </div>
             ))}
             {paramLines.map((param, idx) => (
-              <div key={`line-${param.lineIndex}`} className="code-table__table-row code-table__table-row--params" data-line={param.lineIndex} onClick={(e) => onLineClick(param.lineIndex, e)}>
+              <div key={`line-${param.lineIndex}`} className="code-table__table-row code-table__table-row--params" data-line={param.lineIndex} onMouseDown={(e) => onLineMouseDown(param.lineIndex, e)}>
                 {renderParamRow({ name: param.paramName, type: param.paramType, defaultValue: param.defaultValue || '', modifier: param.modifier || '', comment: param.comment }, idx, param.lineIndex)}
               </div>
             ))}
@@ -325,7 +325,7 @@ interface DllTableProps extends TableLineProps {
 export const DllTable: React.FC<DllTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   renderParamCell,
   keyword: _keyword,
@@ -380,7 +380,7 @@ export const DllTable: React.FC<DllTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -427,7 +427,7 @@ export const DllTable: React.FC<DllTableProps> = ({
               </div>
             ))}
             {paramLines.map((param, idx) => (
-              <div key={`line-${param.lineIndex}`} className="code-table__table-row code-table__table-row--params" data-line={param.lineIndex} onClick={(e) => onLineClick(param.lineIndex, e)}>
+              <div key={`line-${param.lineIndex}`} className="code-table__table-row code-table__table-row--params" data-line={param.lineIndex} onMouseDown={(e) => onLineMouseDown(param.lineIndex, e)}>
                 {renderParamRow({ name: param.paramName, type: param.paramType, defaultValue: param.defaultValue || '', modifier: param.modifier || '', comment: param.comment }, idx, param.lineIndex)}
               </div>
             ))}
@@ -451,7 +451,7 @@ interface TemplateTableProps extends TableLineProps {
 export const TemplateTable: React.FC<TemplateTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   keyword: _keyword,
   templateName,
@@ -479,7 +479,7 @@ export const TemplateTable: React.FC<TemplateTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -532,7 +532,7 @@ interface VarTableProps extends TableLineProps {
 export const VarTable: React.FC<VarTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   keyword: _keyword,
   varName,
@@ -558,7 +558,7 @@ export const VarTable: React.FC<VarTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -597,7 +597,7 @@ interface ConstTableProps extends TableLineProps {
 export const ConstTable: React.FC<ConstTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   keyword: _keyword,
   constName,
@@ -623,7 +623,7 @@ export const ConstTable: React.FC<ConstTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -660,7 +660,7 @@ interface TypeTableProps extends TableLineProps {
 export const TypeTable: React.FC<TypeTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   keyword: _keyword,
   typeName,
@@ -683,7 +683,7 @@ export const TypeTable: React.FC<TypeTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -716,7 +716,7 @@ interface ImportTableProps extends TableLineProps {
 export const ImportTable: React.FC<ImportTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   moduleName,
   importType,
@@ -745,7 +745,7 @@ export const ImportTable: React.FC<ImportTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -772,7 +772,7 @@ interface IncludeTableProps extends TableLineProps {
 export const IncludeTable: React.FC<IncludeTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   fileName,
   comment,
@@ -790,7 +790,7 @@ export const IncludeTable: React.FC<IncludeTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>
@@ -820,7 +820,7 @@ interface ParamTableProps extends TableLineProps {
 export const ParamTable: React.FC<ParamTableProps> = ({
   lineIndex,
   isSelected,
-  onLineClick,
+  onLineMouseDown,
   renderEditableCell,
   keyword: _keyword,
   paramName,
@@ -842,7 +842,7 @@ export const ParamTable: React.FC<ParamTableProps> = ({
       key={lineIndex}
       data-line={lineIndex}
       className={`code-table__table-line ${isSelected ? 'code-table__line--selected' : ''}`}
-      onClick={(e) => onLineClick(lineIndex, e)}
+      onMouseDown={(e) => onLineMouseDown(lineIndex, e)}
     >
       <div className="code-table__gutter">
         <span className="code-table__line-number">{lineIndex + 1}</span>

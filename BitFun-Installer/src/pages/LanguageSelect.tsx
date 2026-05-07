@@ -9,7 +9,7 @@ interface LanguageSelectProps {
 
 export function LanguageSelect({ onSelect }: LanguageSelectProps) {
   const { i18n } = useTranslation();
-  const [selected, setSelected] = useState<InstallerUiLanguage>('en');
+  const [selected, setSelected] = useState<InstallerUiLanguage>('zh');
 
   const handleSelect = (code: InstallerUiLanguage) => {
     setSelected(code);

@@ -21,11 +21,11 @@ export function getApplicationPath(): string {
   let appName: string;
   
   if (isWindows) {
-    appName = 'bitfun-desktop.exe';
+    appName = 'kongling-desktop.exe';
   } else if (isMac) {
-    appName = 'BitFun.app/Contents/MacOS/BitFun';
+    appName = '空灵语言.app/Contents/MacOS/空灵语言';
   } else {
-    appName = 'bitfun-desktop';
+    appName = 'kongling-desktop';
   }
   
   return path.resolve(__dirname, '..', '..', '..', 'target', 'debug', appName);
