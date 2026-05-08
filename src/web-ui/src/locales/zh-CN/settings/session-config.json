@@ -42,6 +42,11 @@
       "show": "显示思考过程",
       "showCompleted": "显示已完成的思考",
       "showCompletedDesc": "思考输出完成并自动收起后，仍在空灵语言聊天中保留可展开的思考条目"
+    },
+    "workspaceSearch": {
+      "title": "加速工作区搜索",
+      "subtitle": "为本地工作区启用基于 flashgrep 的索引搜索。关闭后 BitFun 会回退到原有搜索。",
+      "enable": "启用加速工作区搜索"
     }
   },
   "toolExecution": {

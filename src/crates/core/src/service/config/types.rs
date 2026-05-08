@@ -131,6 +131,8 @@ pub struct AIExperienceConfig {
     /// Optional Petdex-compatible companion package selected by the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_companion_pet: Option<AgentCompanionPetSelection>,
+    /// Whether to enable flashgrep-backed accelerated workspace search.
+    pub enable_workspace_search: bool,
 }
 
 /// User-selected Agent companion pet package.
@@ -1296,6 +1298,7 @@ impl Default for AIExperienceConfig {
             show_completed_thinking_item: false,
             agent_companion_display_mode: "desktop".to_string(),
             agent_companion_pet: None,
+            enable_workspace_search: false,
         }
     }
 }

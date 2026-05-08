@@ -19,6 +19,8 @@ export interface AIExperienceSettings {
   agent_companion_display_mode: AgentCompanionDisplayMode;
   /** Optional Petdex-compatible companion package selected by the user. */
   agent_companion_pet?: AgentCompanionPetSelection | null;
+  /** Flashgrep-backed accelerated workspace search for local workspaces. */
+  enable_workspace_search: boolean;
 }
 
 export type AgentCompanionDisplayMode = 'input' | 'desktop';
@@ -43,6 +45,7 @@ const defaultSettings: AIExperienceSettings = {
   show_thinking_process: false,
   show_completed_thinking_item: false,
   agent_companion_display_mode: 'desktop',
+  enable_workspace_search: false,
 };
 
  
