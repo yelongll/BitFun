@@ -1,9 +1,9 @@
 use super::{
     Agent, AgenticMode, ArchitectureReviewerAgent, BusinessLogicReviewerAgent, ClawMode,
     CodeReviewAgent, ComputerUseMode, CoworkMode, DebugMode, DeepResearchAgent, DeepReviewAgent,
-    ExploreAgent, FileFinderAgent, FrontendReviewerAgent, GenerateDocAgent, InitAgent,
-    PerformanceReviewerAgent, PlanMode, ReviewFixerAgent, ReviewJudgeAgent, SecurityReviewerAgent,
-    TeamMode,
+    DesignMode, DesignReviewAgent, ExploreAgent, FileFinderAgent, FrontendReviewerAgent,
+    GenerateDocAgent, InitAgent, PerformanceReviewerAgent, PlanMode, ReviewFixerAgent,
+    ReviewJudgeAgent, SecurityReviewerAgent, TeamMode,
 };
 use crate::agentic::agents::custom_subagents::{
     CustomSubagent, CustomSubagentKind, CustomSubagentLoader,
@@ -328,6 +328,7 @@ impl AgentRegistry {
             Arc::new(AgenticMode::new()),
             Arc::new(CoworkMode::new()),
             Arc::new(DebugMode::new()),
+            Arc::new(DesignMode::new()),
             Arc::new(PlanMode::new()),
             Arc::new(ClawMode::new()),
             Arc::new(DeepResearchAgent::new()),
@@ -342,6 +343,7 @@ impl AgentRegistry {
             Arc::new(ComputerUseMode::new()),
             Arc::new(ExploreAgent::new()),
             Arc::new(FileFinderAgent::new()),
+            Arc::new(DesignReviewAgent::new()),
             Arc::new(BusinessLogicReviewerAgent::new()),
             Arc::new(PerformanceReviewerAgent::new()),
             Arc::new(SecurityReviewerAgent::new()),

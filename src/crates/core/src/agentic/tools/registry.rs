@@ -161,6 +161,10 @@ impl ToolRegistry {
 
         // Playbook — predefined step-by-step operation guides for common tasks.
         self.register_tool(Arc::new(PlaybookTool::new()));
+
+        // Design tools — design tokens and artifacts for visual design workflows.
+        self.register_tool(Arc::new(DesignTokensTool::new()));
+        self.register_tool(Arc::new(DesignArtifactTool::new()));
     }
 
     /// Register a single tool

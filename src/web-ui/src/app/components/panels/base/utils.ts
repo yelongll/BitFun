@@ -183,6 +183,30 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
+  'design-tokens-studio': {
+    type: 'design-tokens-studio',
+    displayName: 'Design Tokens Studio',
+    icon: Settings,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
+  'design-artifact': {
+    type: 'design-artifact',
+    displayName: 'Design Artifact',
+    icon: Layout,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
+  'design-artifacts-browser': {
+    type: 'design-artifacts-browser',
+    displayName: 'Design Artifacts Browser',
+    icon: Layout,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
   'task-detail': {
     type: 'task-detail',
     displayName: 'Task Detail',

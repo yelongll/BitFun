@@ -34,6 +34,8 @@ import { GenerativeWidgetToolCard } from './GenerativeWidgetToolCard';
 import { ReviewSessionSummaryCard } from './ReviewSessionSummaryCard';
 import { SessionControlToolCard } from './SessionControlToolCard';
 import { SessionMessageToolCard } from './SessionMessageToolCard';
+import { DesignTokensProposalCard } from './DesignTokensProposalCard';
+import { DesignArtifactIndexCard } from './DesignArtifactIndexCard';
 
 // Tool card config map - uses backend tool names
 export const TOOL_CARD_CONFIGS: Record<string, ToolCardConfig> = {
@@ -323,6 +325,28 @@ export const TOOL_CARD_CONFIGS: Record<string, ToolCardConfig> = {
     displayMode: 'detailed',
     primaryColor: '#38bdf8'
   },
+
+  // Design system tools
+  'DesignTokens': {
+    toolName: 'DesignTokens',
+    displayName: 'Design Tokens',
+    icon: 'DT',
+    requiresConfirmation: false,
+    resultDisplayType: 'detailed',
+    description: 'Manage design system tokens',
+    displayMode: 'standard',
+    primaryColor: '#8b5cf6'
+  },
+  'DesignArtifact': {
+    toolName: 'DesignArtifact',
+    displayName: 'Design Artifact',
+    icon: 'DA',
+    requiresConfirmation: false,
+    resultDisplayType: 'detailed',
+    description: 'Manage design deliverables',
+    displayMode: 'standard',
+    primaryColor: '#6366f1'
+  },
 };
 
 // Tool card component map - uses backend tool names
@@ -385,6 +409,10 @@ export const TOOL_CARD_COMPONENTS = {
 
   // Generative widget tool
   'GenerativeUI': GenerativeWidgetToolCard,
+
+  // Design system tools
+  'DesignTokens': DesignTokensProposalCard,
+  'DesignArtifact': DesignArtifactIndexCard,
 };
 
 /**

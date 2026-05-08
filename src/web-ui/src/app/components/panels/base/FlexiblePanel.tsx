@@ -113,6 +113,18 @@ const DesignerPanel = React.lazy(() =>
   }))
 );
 
+const DesignCanvasPanel = React.lazy(() =>
+  import('@/tools/design-canvas/DesignCanvasPanel')
+);
+
+const DesignArtifactBrowser = React.lazy(() =>
+  import('@/tools/design-canvas/DesignArtifactBrowser')
+);
+
+const DesignTokensStudio = React.lazy(() =>
+  import('@/tools/design-canvas/DesignTokensStudio')
+);
+
 // CodePreview, ChartRenderer and CodeNode removed - visualization features disabled
 import { 
   FlexiblePanelProps
@@ -964,6 +976,43 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
             />
           </React.Suspense>
         );
+
+      case 'design-artifact': {
+        const designData = content.data || {};
+        return (
+          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading design canvas...</div>}>
+            <DesignCanvasPanel
+              artifactId={designData.artifactId}
+              initialManifest={designData.manifest}
+              workspacePath={designData.workspace_path || workspacePath}
+            />
+          </React.Suspense>
+        );
+      }
+
+      case 'design-artifacts-browser': {
+        const browserData = content.data || {};
+        return (
+          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading design artifacts...</div>}>
+            <DesignArtifactBrowser
+              workspacePath={browserData.workspace_path || workspacePath}
+            />
+          </React.Suspense>
+        );
+      }
+
+      case 'design-tokens':
+      case 'design-tokens-studio': {
+        const studioData = content.data || {};
+        return (
+          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading design tokens...</div>}>
+            <DesignTokensStudio
+              artifactId={studioData.artifactId}
+              scopePath={studioData.scope}
+            />
+          </React.Suspense>
+        );
+      }
 
       case 'designer':
         return (
