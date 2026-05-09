@@ -195,7 +195,6 @@ export const LSDisplay: React.FC<ToolCardProps> = ({
             icon={<FolderOpen size={16} className="ls-display-card-icon" />}
             content={renderContent()}
             rightStatusIcon={getStatusIcon()}
-            rightStatusIconWithDivider
           />
         }
         expandedContent={hasDetails ? renderExpandedContent() : undefined}

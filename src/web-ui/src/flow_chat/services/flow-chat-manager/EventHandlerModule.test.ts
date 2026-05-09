@@ -1,8 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { normalizeSubagentParentInfo } from './subagentParentInfo';
-import { formatDialogErrorForNotification, shouldProcessEvent } from './EventHandlerModule';
+import {
+  formatDialogErrorForNotification,
+  handleSessionStateChanged,
+  insertSteeringItemIfAbsent,
+  shouldProcessEvent,
+} from './EventHandlerModule';
 import { stateMachineManager } from '../../state-machine';
-import { SessionExecutionState } from '../../state-machine/types';
+import { SessionExecutionEvent, SessionExecutionState } from '../../state-machine/types';
+import { FlowChatStore } from '../../store/FlowChatStore';
+import type { DialogTurn, FlowUserSteeringItem, ModelRound, Session } from '../../types/flow-chat';
+import type { FlowChatContext } from './types';
 
 vi.mock('@/infrastructure/i18n/core/I18nService', () => ({
   i18nService: {
@@ -146,5 +154,253 @@ describe('formatDialogErrorForNotification', () => {
     expect(formatted.metadata?.aiError?.rawError).toBe(rawError);
     expect(formatted.metadata?.aiError?.diagnostics).toContain('code=invalid_request_error');
     expect(formatted.actions?.map((action) => action.label)).toContain('Copy diagnostics');
+  });
+});
+
+function resetFlowChatStore(): void {
+  FlowChatStore.getInstance().setState(() => ({
+    sessions: new Map(),
+    activeSessionId: null,
+  }));
+}
+
+function makeRound(id: string, items: ModelRound['items'] = []): ModelRound {
+  return {
+    id,
+    index: 0,
+    items,
+    isStreaming: true,
+    isComplete: false,
+    status: 'streaming',
+    startTime: 1000,
+  };
+}
+
+function createSessionWithTurn(turn: DialogTurn): void {
+  const store = FlowChatStore.getInstance();
+  store.createSession('session-1', {});
+  store.addDialogTurn('session-1', turn);
+}
+
+function createFinishingTurn(): DialogTurn {
+  return {
+    id: 'turn-1',
+    sessionId: 'session-1',
+    userMessage: {
+      id: 'user-1',
+      content: 'Initial request',
+      timestamp: 900,
+    },
+    modelRounds: [{
+      ...makeRound('round-1'),
+      items: [],
+    }],
+    status: 'finishing',
+    startTime: 900,
+  };
+}
+
+function createFinishingSession(): Session {
+  return {
+    sessionId: 'session-1',
+    title: 'Session 1',
+    dialogTurns: [createFinishingTurn()],
+    status: 'idle',
+    config: { agentType: 'agentic' },
+    createdAt: 800,
+    lastActiveAt: 1000,
+    error: null,
+    isTransient: true,
+  };
+}
+
+function createFlowChatContext(): FlowChatContext {
+  return {
+    flowChatStore: FlowChatStore.getInstance(),
+    processingManager: {
+      clearSessionStatus: vi.fn(),
+    } as any,
+    eventBatcher: {
+      getBufferSize: vi.fn(() => 0),
+      flushNow: vi.fn(),
+      clear: vi.fn(),
+    } as any,
+    pendingTurnCompletions: new Map(),
+    pendingHistoryLoads: new Map(),
+    contentBuffers: new Map(),
+    activeTextItems: new Map(),
+    saveDebouncers: new Map(),
+    lastSaveTimestamps: new Map(),
+    lastSaveHashes: new Map(),
+    turnSaveInFlight: new Map(),
+    turnSavePending: new Set(),
+    runtimeStatusTimers: new Map(),
+    userCancelledSessionIds: new Set(),
+    handledTerminalTurnEvents: new Set(),
+    currentWorkspacePath: null,
+  };
+}
+
+async function setFinishingMachine(): Promise<void> {
+  await stateMachineManager.transition('session-1', SessionExecutionEvent.START, {
+    taskId: 'session-1',
+    dialogTurnId: 'turn-1',
+  });
+  await stateMachineManager.transition('session-1', SessionExecutionEvent.BACKEND_STREAM_COMPLETED);
+}
+
+function putFinishingSessionInStore(): void {
+  FlowChatStore.getInstance().setState(() => ({
+    sessions: new Map([['session-1', createFinishingSession()]]),
+    activeSessionId: 'session-1',
+  }));
+}
+
+describe('insertSteeringItemIfAbsent', () => {
+  beforeEach(() => {
+    resetFlowChatStore();
+  });
+
+  afterEach(() => {
+    resetFlowChatStore();
+  });
+
+  it('inserts a visible steering item even before the first model round starts', () => {
+    createSessionWithTurn({
+      id: 'turn-1',
+      sessionId: 'session-1',
+      userMessage: {
+        id: 'user-1',
+        content: 'Initial request',
+        timestamp: 900,
+      },
+      modelRounds: [],
+      status: 'processing',
+      startTime: 900,
+    });
+
+    const inserted = insertSteeringItemIfAbsent({
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      steeringId: 'steer-1',
+      content: 'Please adjust this now',
+      status: 'pending',
+    });
+
+    const turn = FlowChatStore.getInstance()
+      .getState()
+      .sessions.get('session-1')
+      ?.dialogTurns.find(item => item.id === 'turn-1');
+
+    expect(inserted).toBe(true);
+    expect(turn?.modelRounds).toHaveLength(1);
+    expect(turn?.modelRounds[0]?.items[0]).toMatchObject({
+      id: 'steering_steer-1',
+      type: 'user-steering',
+      content: 'Please adjust this now',
+      status: 'pending',
+    });
+  });
+
+  it('dedupes an existing steering item across all rounds when backend confirms it', () => {
+    const pendingSteering: FlowUserSteeringItem = {
+      id: 'steering_steer-1',
+      type: 'user-steering',
+      steeringId: 'steer-1',
+      content: 'Original steering',
+      roundIndex: 0,
+      timestamp: 1001,
+      status: 'pending',
+    };
+    createSessionWithTurn({
+      id: 'turn-1',
+      sessionId: 'session-1',
+      userMessage: {
+        id: 'user-1',
+        content: 'Initial request',
+        timestamp: 900,
+      },
+      modelRounds: [
+        makeRound('round-1', [pendingSteering]),
+        makeRound('round-2'),
+      ],
+      status: 'processing',
+      startTime: 900,
+    });
+
+    const inserted = insertSteeringItemIfAbsent({
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      steeringId: 'steer-1',
+      content: 'Original steering',
+      roundIndex: 1,
+      status: 'completed',
+    });
+
+    const rounds = FlowChatStore.getInstance()
+      .getState()
+      .sessions.get('session-1')
+      ?.dialogTurns.find(item => item.id === 'turn-1')
+      ?.modelRounds ?? [];
+    const steeringItems = rounds.flatMap(round =>
+      round.items.filter(item => item.type === 'user-steering'),
+    );
+
+    expect(inserted).toBe(false);
+    expect(steeringItems).toHaveLength(1);
+    expect(steeringItems[0]).toMatchObject({
+      id: 'steering_steer-1',
+      status: 'completed',
+      roundIndex: 1,
+    });
+  });
+});
+
+describe('handleSessionStateChanged', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetFlowChatStore();
+    stateMachineManager.clear();
+  });
+
+  afterEach(() => {
+    resetFlowChatStore();
+    stateMachineManager.clear();
+  });
+
+  it('finalizes pending turn completion when backend reports idle during finishing', async () => {
+    putFinishingSessionInStore();
+    const context = createFlowChatContext();
+    context.pendingTurnCompletions.set('session-1', {
+      turnId: 'turn-1',
+      lastActivityAt: Date.now(),
+      timer: null,
+    });
+    await setFinishingMachine();
+
+    handleSessionStateChanged(context, { sessionId: 'session-1', newState: 'Idle' });
+
+    const turn = FlowChatStore.getInstance()
+      .getState()
+      .sessions.get('session-1')
+      ?.dialogTurns[0];
+    expect(turn?.status).toBe('completed');
+    expect(context.pendingTurnCompletions.has('session-1')).toBe(false);
+    expect(stateMachineManager.getCurrentState('session-1')).toBe(SessionExecutionState.IDLE);
+  });
+
+  it('finalizes a finishing turn even if the pending completion record was lost', async () => {
+    putFinishingSessionInStore();
+    const context = createFlowChatContext();
+    await setFinishingMachine();
+
+    handleSessionStateChanged(context, { sessionId: 'session-1', newState: 'Idle' });
+
+    const turn = FlowChatStore.getInstance()
+      .getState()
+      .sessions.get('session-1')
+      ?.dialogTurns[0];
+    expect(turn?.status).toBe('completed');
+    expect(stateMachineManager.getCurrentState('session-1')).toBe(SessionExecutionState.IDLE);
   });
 });

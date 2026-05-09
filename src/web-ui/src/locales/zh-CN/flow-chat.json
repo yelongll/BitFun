@@ -942,10 +942,6 @@
       "errorLabel": "错误信息",
       "resultLabel": "执行结果",
       "noData": "无法加载任务数据",
-      "stopSubagentFailed": "无法停止该子代理。",
-      "stoppingSubagent": "正在停止子代理……",
-      "stopSubagent": "停止子代理",
-      "stopSubagentHint": "仅取消此审查员/子代理。父级审查仍可继续并生成摘要。",
       "executionContent": "执行内容",
       "duration": "耗时",
       "waitingForModelResponse": "等待模型响应...",
@@ -1809,5 +1805,33 @@
   "subagent": {
     "showingLines": "当前仅显示 {{shown}} / {{total}} 行",
     "showAll": "显示全部"
+  },
+  "pendingQueue": {
+    "title": "待发送 ({{count}})",
+    "hint": "当前对话结束后会按顺序自动发送",
+    "editorHint": "⌘/Ctrl+Enter 保存 · Esc 取消",
+    "emptyPlaceholder": "（空消息）",
+    "statusSending": "正在引导…",
+    "statusFailed": "发送失败 — 请编辑 / 立即发送 / 删除以清除该项",
+    "actions": {
+      "edit": "编辑",
+      "sendNow": "立即发送（引导）",
+      "delete": "删除",
+      "saveEdit": "保存（⌘/Ctrl+Enter）",
+      "cancelEdit": "取消（Esc）"
+    },
+    "tooltip": {
+      "sendNow": "立即作为引导消息插入当前对话"
+    },
+    "errors": {
+      "emptyContent": "消息内容不能为空",
+      "sendNowFailed": "立即发送失败，请稍后重试"
+    }
+  },
+  "steering": {
+    "title": "立即引导",
+    "injectedAt": "已在第 {{round}} 轮前插入",
+    "statusPending": "当前操作完成后注入",
+    "statusInjected": "已在第 {{round}} 轮注入"
   }
 }

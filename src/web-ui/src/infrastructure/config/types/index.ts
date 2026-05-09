@@ -193,7 +193,6 @@ export interface AIConfig {
   tool_confirmation_timeout_secs?: number | null;
   skip_tool_confirmation?: boolean;
   computer_use_enabled?: boolean;
-  max_rounds?: number;
 }
 
 export interface StoredModeConfigItem {

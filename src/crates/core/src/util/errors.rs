@@ -352,9 +352,7 @@ fn action_hints_for_category(category: &ErrorCategory) -> Vec<String> {
         ErrorCategory::Network | ErrorCategory::Timeout => {
             &["retry", "switch_model", "copy_diagnostics"]
         }
-        ErrorCategory::ContentPolicy
-        | ErrorCategory::InvalidRequest
-        | ErrorCategory::LoopDetected => &["copy_diagnostics"],
+        ErrorCategory::ContentPolicy | ErrorCategory::InvalidRequest => &["copy_diagnostics"],
         ErrorCategory::ModelError | ErrorCategory::Unknown => {
             &["retry", "switch_model", "copy_diagnostics"]
         }

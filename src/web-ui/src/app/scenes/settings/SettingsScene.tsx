@@ -17,6 +17,7 @@ import AcpAgentsConfig from '../../../infrastructure/config/components/AcpAgents
 import EditorConfig from '../../../infrastructure/config/components/EditorConfig';
 import BasicsConfig from '../../../infrastructure/config/components/BasicsConfig';
 import DesignerConfig from '../../../infrastructure/config/components/DesignerConfig';
+import AppearanceConfig from '../../../infrastructure/config/components/AppearanceConfig';
 import ReviewConfig from '../../../infrastructure/config/components/ReviewConfig';
 
 const KeyboardShortcutsTab = lazy(() => import('./components/KeyboardShortcutsTab'));
@@ -40,6 +41,7 @@ const SettingsScene: React.FC = () => {
 
   switch (activeTab) {
     case 'basics':           Content = BasicsConfig;         break;
+    case 'appearance':       Content = AppearanceConfig;     break;
     case 'models':           Content = AIModelConfig;        break;
     case 'session-config':   Content = SessionConfig;        break;
     case 'review':           Content = ReviewConfig;         break;

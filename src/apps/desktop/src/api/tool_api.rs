@@ -8,7 +8,11 @@ use std::path::PathBuf;
 use bitfun_core::agentic::{
     tools::framework::ToolUseContext,
     tools::{get_all_tools, get_readonly_tools},
+    workspace::{local_workspace_services, remote_workspace_services},
     WorkspaceBinding,
+};
+use bitfun_core::service::remote_ssh::workspace_state::{
+    get_remote_workspace_manager, lookup_remote_connection, workspace_session_identity,
 };
 use bitfun_core::util::elapsed_ms_u64;
 
@@ -82,23 +86,76 @@ pub struct ToolConfirmationResponse {
     pub message: String,
 }
 
-fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
+async fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
     let normalized_workspace_path = workspace_path
         .map(str::trim)
         .filter(|path| !path.is_empty());
+
+    let workspace = match normalized_workspace_path {
+        Some(path) => {
+            if let Some(entry) = lookup_remote_connection(path).await {
+                let identity = workspace_session_identity(
+                    path,
+                    Some(&entry.connection_id),
+                    Some(&entry.ssh_host),
+                )
+                .unwrap_or_else(|| {
+                    bitfun_core::service::remote_ssh::workspace_state::WorkspaceSessionIdentity {
+                        hostname: entry.ssh_host.clone(),
+                        logical_workspace_path: entry.remote_root.clone(),
+                        remote_connection_id: Some(entry.connection_id.clone()),
+                    }
+                });
+                Some(WorkspaceBinding::new_remote(
+                    None,
+                    PathBuf::from(path),
+                    entry.connection_id,
+                    entry.connection_name,
+                    identity,
+                ))
+            } else {
+                Some(WorkspaceBinding::new(None, PathBuf::from(path)))
+            }
+        }
+        None => None,
+    };
+
+    let workspace_services = match workspace.as_ref() {
+        Some(binding) if binding.is_remote() => {
+            let connection_id = binding.connection_id().map(str::to_string);
+            match (connection_id, get_remote_workspace_manager()) {
+                (Some(connection_id), Some(manager)) => {
+                    match (
+                        manager.get_file_service().await,
+                        manager.get_ssh_manager().await,
+                    ) {
+                        (Some(file_service), Some(ssh_manager)) => Some(remote_workspace_services(
+                            connection_id,
+                            file_service,
+                            ssh_manager,
+                            binding.root_path_string(),
+                        )),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            }
+        }
+        Some(binding) => Some(local_workspace_services(binding.root_path_string())),
+        None => None,
+    };
 
     ToolUseContext {
         tool_call_id: None,
         agent_type: None,
         session_id: None,
         dialog_turn_id: None,
-        workspace: normalized_workspace_path
-            .map(|path| WorkspaceBinding::new(None, PathBuf::from(path))),
+        workspace,
         custom_data: HashMap::new(),
         computer_use_host: None,
         cancellation_token: None,
         runtime_tool_restrictions: Default::default(),
-        workspace_services: None,
+        workspace_services,
     }
 }
 
@@ -229,7 +286,7 @@ pub async fn validate_tool_input(
                 request.workspace_path.as_deref(),
             )?;
 
-            let context = build_tool_context(request.workspace_path.as_deref());
+            let context = build_tool_context(request.workspace_path.as_deref()).await;
 
             let validation_result = tool.validate_input(&request.input, Some(&context)).await;
 
@@ -260,7 +317,7 @@ pub async fn execute_tool(request: ToolExecutionRequest) -> Result<ToolExecution
                 request.workspace_path.as_deref(),
             )?;
 
-            let context = build_tool_context(request.workspace_path.as_deref());
+            let context = build_tool_context(request.workspace_path.as_deref()).await;
 
             let validation_result = tool.validate_input(&request.input, Some(&context)).await;
             if !validation_result.result {

@@ -61,6 +61,19 @@ async fn list_prompts_for_server(
     Ok(prompts)
 }
 
+async fn ensure_mcp_server_available_for_context(
+    manager: &Arc<MCPServerManager>,
+    server_id: &str,
+    _context: &ToolUseContext,
+) -> BitFunResult<()> {
+    manager
+        .get_connection(server_id)
+        .await
+        .ok_or_else(|| tool_error(format!("MCP server not connected: {}", server_id)))?;
+
+    Ok(())
+}
+
 fn validate_required_string(input: &Value, field_name: &str) -> ValidationResult {
     match input.get(field_name).and_then(|value| value.as_str()) {
         Some(value) if !value.trim().is_empty() => ValidationResult::default(),
@@ -276,7 +289,7 @@ impl Tool for ListMCPResourcesTool {
     async fn call_impl(
         &self,
         input: &Value,
-        _context: &ToolUseContext,
+        context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>> {
         let server_id = input
             .get("server_id")
@@ -288,6 +301,7 @@ impl Tool for ListMCPResourcesTool {
             .unwrap_or(false);
 
         let manager = get_mcp_server_manager().await?;
+        ensure_mcp_server_available_for_context(&manager, server_id, context).await?;
         let resources = list_resources_for_server(&manager, server_id, refresh).await?;
         let count = resources.len();
         let rendered = render_resource_catalog(&resources);
@@ -388,7 +402,7 @@ impl Tool for ReadMCPResourceTool {
     async fn call_impl(
         &self,
         input: &Value,
-        _context: &ToolUseContext,
+        context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>> {
         let server_id = input
             .get("server_id")
@@ -400,6 +414,7 @@ impl Tool for ReadMCPResourceTool {
             .ok_or_else(|| tool_error("uri is required"))?;
 
         let manager = get_mcp_server_manager().await?;
+        ensure_mcp_server_available_for_context(&manager, server_id, context).await?;
         let connection = manager
             .get_connection(server_id)
             .await
@@ -498,7 +513,7 @@ impl Tool for ListMCPPromptsTool {
     async fn call_impl(
         &self,
         input: &Value,
-        _context: &ToolUseContext,
+        context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>> {
         let server_id = input
             .get("server_id")
@@ -510,6 +525,7 @@ impl Tool for ListMCPPromptsTool {
             .unwrap_or(false);
 
         let manager = get_mcp_server_manager().await?;
+        ensure_mcp_server_available_for_context(&manager, server_id, context).await?;
         let prompts = list_prompts_for_server(&manager, server_id, refresh).await?;
         let count = prompts.len();
         let rendered = render_prompt_catalog(&prompts);
@@ -650,7 +666,7 @@ impl Tool for GetMCPPromptTool {
     async fn call_impl(
         &self,
         input: &Value,
-        _context: &ToolUseContext,
+        context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>> {
         let server_id = input
             .get("server_id")
@@ -675,6 +691,7 @@ impl Tool for GetMCPPromptTool {
         });
 
         let manager = get_mcp_server_manager().await?;
+        ensure_mcp_server_available_for_context(&manager, server_id, context).await?;
         let connection = manager
             .get_connection(server_id)
             .await

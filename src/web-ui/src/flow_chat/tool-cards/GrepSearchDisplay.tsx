@@ -154,7 +154,6 @@ export const GrepSearchDisplay: React.FC<ToolCardProps> = ({
             icon={<Search size={16} className="grep-search-card-icon" />}
             content={renderContent()}
             rightStatusIcon={getStatusIcon()}
-            rightStatusIconWithDivider
           />
         }
         expandedContent={hasDetails ? renderExpandedContent() : undefined}

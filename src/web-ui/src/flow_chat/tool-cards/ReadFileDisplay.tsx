@@ -137,7 +137,6 @@ export const ReadFileDisplay: React.FC<ToolCardProps> = React.memo(({
           icon={<FileText size={16} className="read-file-card-icon" />}
           content={renderContent()}
           rightStatusIcon={getStatusIcon()}
-          rightStatusIconWithDivider
         />
       }
     />

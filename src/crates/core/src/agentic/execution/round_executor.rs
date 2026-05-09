@@ -35,6 +35,10 @@ impl RoundExecutor {
     const MAX_RETRIES_WITHOUT_OUTPUT: usize = 1;
     const RETRY_BASE_DELAY_MS: u64 = 500;
 
+    fn has_user_visible_assistant_text(text: &str) -> bool {
+        !text.trim().is_empty()
+    }
+
     pub fn new(
         stream_processor: Arc<StreamProcessor>,
         event_queue: Arc<EventQueue>,
@@ -375,7 +379,11 @@ impl RoundExecutor {
 
             // Create assistant message (includes thinking content, supports interleaved thinking mode)
             let reasoning = if stream_result.full_thinking.is_empty() {
-                None
+                if stream_result.reasoning_content_present {
+                    Some(String::new())
+                } else {
+                    None
+                }
             } else {
                 Some(stream_result.full_thinking.clone())
             };
@@ -413,6 +421,8 @@ impl RoundExecutor {
                 usage: stream_result.usage.clone(),
                 provider_metadata: stream_result.provider_metadata.clone(),
                 partial_recovery_reason: stream_result.partial_recovery_reason.clone(),
+                had_assistant_text: Self::has_user_visible_assistant_text(&stream_result.full_text),
+                had_thinking_content: !stream_result.full_thinking.is_empty(),
             });
         }
 
@@ -443,6 +453,7 @@ impl RoundExecutor {
                 subagent_parent_info,
                 allowed_tools: context.available_tools.clone(),
                 runtime_tool_restrictions: context.runtime_tool_restrictions.clone(),
+                steering_interrupt: context.steering_interrupt.clone(),
                 workspace_services: context.workspace_services.clone(),
             };
 
@@ -552,7 +563,11 @@ impl RoundExecutor {
 
         // Create assistant message (includes tool calls and thinking content, supports interleaved thinking mode)
         let reasoning = if stream_result.full_thinking.is_empty() {
-            None
+            if stream_result.reasoning_content_present {
+                Some(String::new())
+            } else {
+                None
+            }
         } else {
             Some(stream_result.full_thinking.clone())
         };
@@ -587,15 +602,7 @@ impl RoundExecutor {
             })
             .collect();
 
-        // P4: Check if any tool result signals loop termination
-        let loop_terminated = tool_results.iter().any(|r| {
-            r.result
-                .get("loop_terminated")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        });
-
-        let has_more_rounds = !tool_result_messages.is_empty() && !loop_terminated;
+        let has_more_rounds = !tool_result_messages.is_empty();
 
         debug!(
             "Returning RoundResult: has_more_rounds={}, tool_result_messages={}",
@@ -626,9 +633,7 @@ impl RoundExecutor {
             tool_calls: stream_result.tool_calls.clone(),
             tool_result_messages,
             has_more_rounds,
-            finish_reason: if loop_terminated {
-                FinishReason::LoopDetected
-            } else if has_more_rounds {
+            finish_reason: if has_more_rounds {
                 FinishReason::ToolCalls
             } else {
                 FinishReason::Complete
@@ -636,6 +641,8 @@ impl RoundExecutor {
             usage: stream_result.usage.clone(),
             provider_metadata: stream_result.provider_metadata.clone(),
             partial_recovery_reason: stream_result.partial_recovery_reason.clone(),
+            had_assistant_text: Self::has_user_visible_assistant_text(&stream_result.full_text),
+            had_thinking_content: !stream_result.full_thinking.is_empty(),
         })
     }
 
@@ -832,6 +839,7 @@ mod tests {
     fn detects_interrupted_invalid_tool_only_recovery() {
         let result = crate::agentic::execution::stream_processor::StreamResult {
             full_thinking: String::new(),
+            reasoning_content_present: false,
             thinking_signature: None,
             full_text: String::new(),
             tool_calls: vec![crate::agentic::core::ToolCall {
@@ -855,6 +863,7 @@ mod tests {
     fn keeps_partial_text_recovery_as_non_retryable_output() {
         let result = crate::agentic::execution::stream_processor::StreamResult {
             full_thinking: String::new(),
+            reasoning_content_present: false,
             thinking_signature: None,
             full_text: "I started answering before the stream failed.".to_string(),
             tool_calls: vec![crate::agentic::core::ToolCall {
@@ -872,5 +881,13 @@ mod tests {
         };
 
         assert!(!RoundExecutor::is_interrupted_invalid_tool_only(&result));
+    }
+
+    #[test]
+    fn whitespace_only_text_is_not_user_visible_assistant_text() {
+        assert!(!RoundExecutor::has_user_visible_assistant_text("\n\n "));
+        assert!(RoundExecutor::has_user_visible_assistant_text(
+            "I can help with that."
+        ));
     }
 }

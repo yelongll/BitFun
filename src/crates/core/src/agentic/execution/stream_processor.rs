@@ -112,6 +112,8 @@ const UNKNOWN_TOOL_PLACEHOLDER: &str = "unknown_tool";
 #[derive(Debug, Clone)]
 pub struct StreamResult {
     pub full_thinking: String,
+    /// Whether the provider emitted a reasoning/thinking field even if its content was empty.
+    pub reasoning_content_present: bool,
     /// Signature of Anthropic extended thinking (passed back in multi-turn conversations)
     pub thinking_signature: Option<String>,
     pub full_text: String,
@@ -158,6 +160,7 @@ struct StreamContext {
 
     // Accumulated results
     full_thinking: String,
+    reasoning_content_present: bool,
     /// Signature of Anthropic extended thinking (passed back in multi-turn conversations)
     thinking_signature: Option<String>,
     full_text: String,
@@ -194,6 +197,7 @@ impl StreamContext {
             event_subagent_parent_info,
             subagent_parent_info,
             full_thinking: String::new(),
+            reasoning_content_present: false,
             thinking_signature: None,
             full_text: String::new(),
             tool_calls: Vec::new(),
@@ -214,6 +218,7 @@ impl StreamContext {
     fn into_result(self) -> StreamResult {
         StreamResult {
             full_thinking: self.full_thinking,
+            reasoning_content_present: self.reasoning_content_present,
             thinking_signature: self.thinking_signature,
             full_text: self.full_text,
             tool_calls: self.tool_calls,
@@ -583,8 +588,10 @@ impl StreamProcessor {
 
     /// Handle text chunk
     async fn handle_text_chunk(&self, ctx: &mut StreamContext, text: String) {
-        ctx.has_effective_output = true;
-        ctx.mark_first_visible_output();
+        if !text.trim().is_empty() {
+            ctx.has_effective_output = true;
+            ctx.mark_first_visible_output();
+        }
         ctx.full_text.push_str(&text);
         ctx.text_chunks_count += 1;
 
@@ -820,6 +827,7 @@ impl StreamProcessor {
                     // Handle thinking_signature
                     if let Some(signature) = thinking_signature {
                         if !signature.is_empty() {
+                            ctx.reasoning_content_present = true;
                             ctx.thinking_signature = Some(signature);
                             trace!("Received thinking_signature");
                         }
@@ -829,12 +837,14 @@ impl StreamProcessor {
                     // Normalize empty strings to None
                     //  (some models send empty text alongside reasoning content)
                     let text = text.filter(|t| !t.is_empty());
-                    let reasoning_content = reasoning_content.filter(|t| !t.is_empty());
 
                     if let Some(thinking_content) = reasoning_content {
-                        self.handle_thinking_chunk(&mut ctx, thinking_content).await;
-                        if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing thinking chunk").await {
-                            return err;
+                        ctx.reasoning_content_present = true;
+                        if !thinking_content.is_empty() {
+                            self.handle_thinking_chunk(&mut ctx, thinking_content).await;
+                            if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing thinking chunk").await {
+                                return err;
+                            }
                         }
                     }
 
@@ -974,6 +984,34 @@ mod tests {
         assert_eq!(result.tool_calls[0].arguments, json!({"a": 1}));
         assert!(!result.tool_calls[0].is_error);
         assert_eq!(result.usage.as_ref().map(|u| u.total_token_count), Some(7));
+    }
+
+    #[tokio::test]
+    async fn whitespace_only_text_is_not_effective_output() {
+        let processor = build_processor();
+        let stream = iter(vec![Ok(UnifiedResponse {
+            text: Some("\n\n ".to_string()),
+            ..Default::default()
+        })])
+        .boxed();
+
+        let result = processor
+            .process_stream(
+                stream,
+                None,
+                None,
+                "session_1".to_string(),
+                "turn_1".to_string(),
+                "round_1".to_string(),
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("stream result");
+
+        assert_eq!(result.full_text, "\n\n ");
+        assert!(!result.has_effective_output);
+        assert_eq!(result.first_visible_output_ms, None);
     }
 
     #[tokio::test]
@@ -1167,5 +1205,34 @@ mod tests {
         assert_eq!(result.tool_calls[1].tool_id, "call_1");
         assert_eq!(result.tool_calls[1].tool_name, "tool_b");
         assert_eq!(result.tool_calls[1].arguments, json!({"b": 2}));
+    }
+
+    #[tokio::test]
+    async fn preserves_empty_reasoning_presence_for_replay() {
+        let processor = build_processor();
+        let stream = iter(vec![Ok(UnifiedResponse {
+            reasoning_content: Some(String::new()),
+            finish_reason: Some("stop".to_string()),
+            ..Default::default()
+        })])
+        .boxed();
+
+        let result = processor
+            .process_stream(
+                stream,
+                None,
+                None,
+                "session_1".to_string(),
+                "turn_1".to_string(),
+                "round_1".to_string(),
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("stream result");
+
+        assert!(result.reasoning_content_present);
+        assert!(result.full_thinking.is_empty());
+        assert!(!result.has_effective_output);
     }
 }
