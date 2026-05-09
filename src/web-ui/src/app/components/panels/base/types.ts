@@ -33,7 +33,9 @@ export type PanelContentType =
   | 'terminal'
   | 'generative-widget'
   | 'browser'
-  | 'designer';
+  | 'designer'
+  | 'agent-app-studio'
+  | 'live-app-studio';
 
 export interface PanelContent {
   type: PanelContentType;
