@@ -263,22 +263,6 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
-  'agent-app-studio': {
-    type: 'agent-app-studio',
-    displayName: 'Agent App Studio',
-    icon: Layout,
-    supportsCopy: false,
-    supportsDownload: false,
-    showHeader: false
-  },
-  'live-app-studio': {
-    type: 'live-app-studio',
-    displayName: 'Live App Studio',
-    icon: Layout,
-    supportsCopy: false,
-    supportsDownload: false,
-    showHeader: false
-  },
 };
 
 /**

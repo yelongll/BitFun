@@ -127,15 +127,4 @@ export const useWorkspaceEvents = (
   }, [onWorkspaceOpened, onWorkspaceClosed, onWorkspaceSwitched, onWorkspaceUpdated]);
 };
 
-export const useLastUsedWorkspace = () => {
-  const { activeWorkspace, openedWorkspacesList } = useWorkspaceContext();
-  
-  return {
-    lastUsedWorkspace: activeWorkspace,
-    lastUsedWorkspacePath: activeWorkspace?.rootPath || '',
-    workspacePath: activeWorkspace?.rootPath || '',
-    hasLastUsedWorkspace: !!activeWorkspace,
-  };
-};
-
 export { WorkspaceContext };

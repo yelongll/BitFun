@@ -16,8 +16,11 @@ import McpToolsConfig from '../../../infrastructure/config/components/McpToolsCo
 import AcpAgentsConfig from '../../../infrastructure/config/components/AcpAgentsConfig';
 import EditorConfig from '../../../infrastructure/config/components/EditorConfig';
 import BasicsConfig from '../../../infrastructure/config/components/BasicsConfig';
+<<<<<<< HEAD
 import DesignerConfig from '../../../infrastructure/config/components/DesignerConfig';
+=======
 import AppearanceConfig from '../../../infrastructure/config/components/AppearanceConfig';
+>>>>>>> upstream/main
 import ReviewConfig from '../../../infrastructure/config/components/ReviewConfig';
 
 const KeyboardShortcutsTab = lazy(() => import('./components/KeyboardShortcutsTab'));

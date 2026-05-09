@@ -114,10 +114,6 @@ export interface CompactToolCardHeaderProps {
   rightStatusIcon?: ReactNode;
   /** Whether right status icon has a divider */
   rightStatusIconWithDivider?: boolean;
-  /** Status icon (alias for rightStatusIcon) */
-  statusIcon?: ReactNode;
-  /** Right icon */
-  rightIcon?: ReactNode;
 }
 
 export const CompactToolCardHeader: React.FC<CompactToolCardHeaderProps> = ({
@@ -133,11 +129,7 @@ export const CompactToolCardHeader: React.FC<CompactToolCardHeaderProps> = ({
   extra,
   rightStatusIcon,
   rightStatusIconWithDivider = false,
-  statusIcon,
-  rightIcon,
 }) => {
-  const effectiveStatusIcon = statusIcon || rightStatusIcon;
-  
   return (
     <>
       {icon && (
@@ -154,10 +146,9 @@ export const CompactToolCardHeader: React.FC<CompactToolCardHeaderProps> = ({
       {action && <span className="compact-card-action">{action}</span>}
       {content && <span className="compact-card-content">{content}</span>}
       {extra && <span className="compact-card-extra">{extra}</span>}
-      {rightIcon && <span className="compact-card-right-icon">{rightIcon}</span>}
-      {effectiveStatusIcon && (
+      {rightStatusIcon && (
         <ToolCardStatusIcon
-          icon={effectiveStatusIcon}
+          icon={rightStatusIcon}
           withDivider={rightStatusIconWithDivider}
           className="compact-card-right-status-icon"
         />

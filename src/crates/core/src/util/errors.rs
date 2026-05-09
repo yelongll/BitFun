@@ -308,8 +308,11 @@ fn classify_ai_error(msg: &str) -> ErrorCategory {
         ],
     ) {
         ErrorCategory::InvalidRequest
+<<<<<<< HEAD
     } else if m.contains("循环检测") || m.contains("连续使用相同工具错误") {
         ErrorCategory::LoopDetected
+=======
+>>>>>>> upstream/main
     } else if m.contains("timeout") || m.contains("timed out") {
         ErrorCategory::Timeout
     } else if m.contains("流已关闭")
