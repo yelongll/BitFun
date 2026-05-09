@@ -2,7 +2,7 @@
 
 .editor-floating-toolbar {
   position: absolute;
-  pointer-events: auto;
+  pointer-events: none;
   z-index: 100;
   top: 8px;
   left: 50%;
@@ -43,6 +43,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     transition: padding 0.2s ease, gap 0.2s ease;
+    pointer-events: auto;
   }
 
   &__run-group {

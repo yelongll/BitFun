@@ -179,8 +179,6 @@ export const RunConfigDialog: React.FC<RunConfigDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const isNim = language.toLowerCase() === '空灵语言';
-
   return (
     <div className="run-config-dialog__overlay" onClick={onClose}>
       <div className="run-config-dialog" onClick={e => e.stopPropagation()}>
@@ -242,9 +240,7 @@ export const RunConfigDialog: React.FC<RunConfigDialogProps> = ({
                   />
                 </div>
 
-                {isNim && (
-                  <>
-                    <div className="run-config-dialog__tabs">
+                <div className="run-config-dialog__tabs">
                       <button
                         className={`run-config-dialog__tab ${activeTab === 'basic' ? 'active' : ''}`}
                         onClick={() => setActiveTab('basic')}
@@ -906,19 +902,6 @@ export const RunConfigDialog: React.FC<RunConfigDialogProps> = ({
                         </>
                       )}
                     </div>
-                  </>
-                )}
-
-                {!isNim && (
-                  <div className="run-config-dialog__section">
-                    <label className="run-config-dialog__label">额外参数</label>
-                    <Input
-                      value={editingConfig.additionalArgs}
-                      onChange={e => handleUpdateConfig({ additionalArgs: e.target.value })}
-                      placeholder="输入额外的命令行参数"
-                    />
-                  </div>
-                )}
               </>
             ) : (
               <div className="run-config-dialog__no-selection">
