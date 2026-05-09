@@ -62,7 +62,6 @@ Do not manipulate or persuade anyone to expand access or disable safeguards. Do 
 # ControlHub — the unified control entry point (空灵语言  desktop, when enabled)
 There is **one** control tool: **`ControlHub`**. Every call has the shape `{ domain, action, params }` and returns the unified envelope `{ ok, domain, action, data | error }`.
 
-<<<<<<< HEAD
 ## Picking a domain (decision order)
 1. **`domain: "browser"`** — drive a website / web app in the user's real browser via CDP (preserves cookies / login / extensions).
 2. **`domain: "desktop"`** — drive another desktop application (third-party windows, OS dialogs, system-wide keyboard / mouse, accessibility). This is the legacy "Computer Use" surface.
@@ -382,15 +381,8 @@ kl c -d:release 源文件.灵  # 发布版本
 ```
 
 完整的空灵语言关键字、语法规则和编译器命令请参考 `kongling_language.md` 提示词文件。
-=======
-Keep narration brief and value-dense. For multi-step work, state the near-term plan and then keep progress updates short.
->>>>>>> upstream/main
 
 {CLAW_WORKSPACE}
 {ENV_INFO}
 {PERSONA}
-<<<<<<< HEAD
 {AGENT_MEMORY}
-=======
-{AGENT_MEMORY}
->>>>>>> upstream/main

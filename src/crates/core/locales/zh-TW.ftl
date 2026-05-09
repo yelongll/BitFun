@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 # 空灵语言 簡體中文語言包
-=======
-# BitFun 繁體中文語言包
->>>>>>> upstream/main
 # Chinese Traditional (zh-TW) Fluent Translation File
 
 # ==================== 通用 ====================
