@@ -1,4 +1,4 @@
-﻿//! Agentic Events Definition
+//! Agentic Events Definition
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -27,6 +27,8 @@ pub enum ErrorCategory {
     Permission,
     /// Request format, parameters, model name, or payload size is invalid
     InvalidRequest,
+    /// Loop detected in tool usage
+    LoopDetected,
     /// Provider policy or content safety system blocked the request
     ContentPolicy,
     /// Model returned an error
