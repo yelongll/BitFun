@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
-import { Code, Package, Star, Zap, Wrench, Cpu, Layers, Database, Shield, Download, X, FileCode, FolderArchive, Plus } from 'lucide-react';
+import { Code, Package, Star, Zap, Wrench, Cpu, Layers, Database, Shield, Download, X, FileCode, FolderArchive, Plus, FolderOpen, ChevronRight, SquareFunction, Hash, Type, Box, ArrowLeft, Search } from 'lucide-react';
 import { createLogger } from '@/shared/utils/logger';
 import {
   getLibraries,
@@ -13,9 +13,60 @@ import {
   LibraryItem,
   isLoggedIn,
 } from '@/infrastructure/api/service-api/AuthAPI';
+import { api } from '@/infrastructure/api/tauri-api';
 import './LibraryScene.scss';
 
 const log = createLogger('LibraryScene');
+
+interface SymbolParam {
+  name: string;
+  paramType: string;
+  defaultValue?: string;
+}
+
+interface LocalLibrarySymbol {
+  name: string;
+  symbolType: string;
+  signature?: string;
+  docComment?: string;
+  params?: SymbolParam[];
+  returnType?: string;
+}
+
+interface LocalLibraryInfo {
+  name: string;
+  path: string;
+  relativePath: string;
+  fileSize: number;
+  symbols: LocalLibrarySymbol[];
+  docComment?: string;
+}
+
+const symbolTypeIcons: Record<string, React.ReactNode> = {
+  proc: <SquareFunction size={14} />,
+  func: <SquareFunction size={14} />,
+  template: <Code size={14} />,
+  macro: <Code size={14} />,
+  method: <SquareFunction size={14} />,
+  converter: <SquareFunction size={14} />,
+  type: <Type size={14} />,
+  const: <Hash size={14} />,
+  let: <Box size={14} />,
+  var: <Box size={14} />,
+};
+
+const symbolTypeColors: Record<string, string> = {
+  proc: '#3b82f6',
+  func: '#8b5cf6',
+  template: '#10b981',
+  macro: '#f59e0b',
+  method: '#6366f1',
+  converter: '#ec4899',
+  type: '#06b6d4',
+  const: '#f97316',
+  let: '#84cc16',
+  var: '#a3e635',
+};
 
 const categoryIcons: Record<string, React.ReactNode> = {
   standard: <Layers size={20} />,
@@ -45,7 +96,7 @@ const LibraryScene: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
-  const [activeTab, setActiveTab] = useState<'official' | 'my'>('official');
+  const [activeTab, setActiveTab] = useState<'official' | 'my' | 'local'>('official');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMode, setUploadMode] = useState<'text' | 'file'>('text');
@@ -58,6 +109,31 @@ const LibraryScene: React.FC = () => {
     tags: '',
     file_content: '',
   });
+
+  const [localLibraries, setLocalLibraries] = useState<LocalLibraryInfo[]>([]);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localSearch, setLocalSearch] = useState('');
+  const [selectedLocalLib, setSelectedLocalLib] = useState<LocalLibraryInfo | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<LocalLibrarySymbol | null>(null);
+  const [symbolFilter, setSymbolFilter] = useState<string>('all');
+
+  const fetchLocalLibraries = useCallback(async () => {
+    setLocalLoading(true);
+    try {
+      const result = await api.invoke<LocalLibraryInfo[]>('get_local_libraries', {});
+      setLocalLibraries(result);
+    } catch (err) {
+      log.error('Failed to fetch local libraries', err);
+    } finally {
+      setLocalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'local') {
+      fetchLocalLibraries();
+    }
+  }, [activeTab, fetchLocalLibraries]);
 
   const fetchLibraries = useCallback(async () => {
     setLoading(true);
@@ -300,6 +376,13 @@ const LibraryScene: React.FC = () => {
           >
             {t('libraries.myLibraries', { defaultValue: '我的库' })}
           </button>
+          <button
+            className={`bitfun-library-scene__tab ${activeTab === 'local' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('local')}
+          >
+            <FolderOpen size={14} />
+            {t('libraries.local', { defaultValue: '本地库' })}
+          </button>
           {isLoggedIn() && (
             <button
               className="bitfun-library-scene__tab-btn"
@@ -345,7 +428,176 @@ const LibraryScene: React.FC = () => {
       </div>
 
       <div className="bitfun-library-scene__content">
-        {loading ? (
+        {activeTab === 'local' ? (
+          <div className="bitfun-library-scene__local-view">
+            {selectedLocalLib ? (
+              <div className="bitfun-library-scene__local-detail">
+                <div className="bitfun-library-scene__local-detail-header">
+                  <button className="bitfun-library-scene__back-btn" onClick={() => { setSelectedLocalLib(null); setSelectedSymbol(null); }}>
+                    <ArrowLeft size={16} />
+                    {t('libraries.backToList', { defaultValue: '返回列表' })}
+                  </button>
+                  <div className="bitfun-library-scene__local-detail-title">
+                    <FileCode size={20} />
+                    <h2>{selectedLocalLib.name}</h2>
+                    <span className="bitfun-library-scene__local-detail-path">{selectedLocalLib.relativePath}</span>
+                  </div>
+                  {selectedLocalLib.docComment && (
+                    <p className="bitfun-library-scene__local-detail-doc">{selectedLocalLib.docComment}</p>
+                  )}
+                  <div className="bitfun-library-scene__symbol-filters">
+                    {['all', 'proc', 'func', 'type', 'const', 'template', 'macro', 'method'].map(filter => (
+                      <button
+                        key={filter}
+                        className={`bitfun-library-scene__symbol-filter-btn ${symbolFilter === filter ? 'is-active' : ''}`}
+                        onClick={() => { setSymbolFilter(filter); setSelectedSymbol(null); }}
+                      >
+                        {filter === 'all' ? t('library.filterAll', { defaultValue: '全部' }) : filter}
+                        {filter !== 'all' && (
+                          <span className="bitfun-library-scene__symbol-filter-count">
+                            {selectedLocalLib.symbols.filter(s => s.symbolType === filter).length}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bitfun-library-scene__local-detail-body">
+                  <div className="bitfun-library-scene__symbol-list">
+                    {selectedLocalLib.symbols
+                      .filter(s => symbolFilter === 'all' || s.symbolType === symbolFilter)
+                      .map((symbol, idx) => (
+                      <div
+                        key={idx}
+                        className={`bitfun-library-scene__symbol-item ${selectedSymbol?.name === symbol.name && selectedSymbol?.symbolType === symbol.symbolType ? 'is-active' : ''}`}
+                        onClick={() => setSelectedSymbol(symbol)}
+                      >
+                        <div className="bitfun-library-scene__symbol-icon" style={{ color: symbolTypeColors[symbol.symbolType] || '#64748b' }}>
+                          {symbolTypeIcons[symbol.symbolType] || <Code size={14} />}
+                        </div>
+                        <div className="bitfun-library-scene__symbol-info">
+                          <span className="bitfun-library-scene__symbol-name">{symbol.name}</span>
+                          {symbol.returnType && (
+                            <span className="bitfun-library-scene__symbol-return">: {symbol.returnType}</span>
+                          )}
+                        </div>
+                        <span className="bitfun-library-scene__symbol-type-badge" style={{ backgroundColor: `${symbolTypeColors[symbol.symbolType] || '#64748b'}20`, color: symbolTypeColors[symbol.symbolType] || '#64748b' }}>
+                          {symbol.symbolType}
+                        </span>
+                        <ChevronRight size={14} className="bitfun-library-scene__symbol-chevron" />
+                      </div>
+                    ))}
+                    {selectedLocalLib.symbols.filter(s => symbolFilter === 'all' || s.symbolType === symbolFilter).length === 0 && (
+                      <div className="bitfun-library-scene__empty">{t('libraries.noSymbols', { defaultValue: '没有匹配的符号' })}</div>
+                    )}
+                  </div>
+                  {selectedSymbol && (
+                    <div className="bitfun-library-scene__symbol-detail">
+                      <div className="bitfun-library-scene__symbol-detail-header">
+                        <div className="bitfun-library-scene__symbol-detail-type" style={{ color: symbolTypeColors[selectedSymbol.symbolType] || '#64748b' }}>
+                          {symbolTypeIcons[selectedSymbol.symbolType] || <Code size={16} />}
+                          <span>{selectedSymbol.symbolType}</span>
+                        </div>
+                        <h3 className="bitfun-library-scene__symbol-detail-name">{selectedSymbol.name}</h3>
+                      </div>
+                      {selectedSymbol.signature && (
+                        <div className="bitfun-library-scene__symbol-detail-section">
+                          <label>签名</label>
+                          <code className="bitfun-library-scene__symbol-signature">{selectedSymbol.signature}</code>
+                        </div>
+                      )}
+                      {selectedSymbol.params && selectedSymbol.params.length > 0 && (
+                        <div className="bitfun-library-scene__symbol-detail-section">
+                          <label>参数</label>
+                          <div className="bitfun-library-scene__param-list">
+                            {selectedSymbol.params.map((param, pIdx) => (
+                              <div key={pIdx} className="bitfun-library-scene__param-item">
+                                <span className="bitfun-library-scene__param-name">{param.name}</span>
+                                <span className="bitfun-library-scene__param-type">: {param.paramType}</span>
+                                {param.defaultValue && (
+                                  <span className="bitfun-library-scene__param-default"> = {param.defaultValue}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {selectedSymbol.returnType && (
+                        <div className="bitfun-library-scene__symbol-detail-section">
+                          <label>返回值</label>
+                          <code className="bitfun-library-scene__symbol-return-type">{selectedSymbol.returnType}</code>
+                        </div>
+                      )}
+                      {selectedSymbol.docComment && (
+                        <div className="bitfun-library-scene__symbol-detail-section">
+                          <label>文档</label>
+                          <p className="bitfun-library-scene__symbol-doc">{selectedSymbol.docComment}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="bitfun-library-scene__local-toolbar">
+                  <div className="bitfun-library-scene__local-search">
+                    <Search size={16} />
+                    <input
+                      type="text"
+                      placeholder={t('libraries.searchLocal', { defaultValue: '搜索本地库...' })}
+                      value={localSearch}
+                      onChange={(e) => setLocalSearch(e.target.value)}
+                    />
+                  </div>
+                  <span className="bitfun-library-scene__local-count">
+                    {t('libraries.localCount', { defaultValue: '{{count}} 个库', count: localLibraries.filter(l => 
+                      !localSearch || l.name.toLowerCase().includes(localSearch.toLowerCase()) || l.relativePath.toLowerCase().includes(localSearch.toLowerCase())
+                    ).length })}
+                  </span>
+                </div>
+                {localLoading ? (
+                  <div className="bitfun-library-scene__loading">{t('common.loading', { defaultValue: '加载中...' })}</div>
+                ) : localLibraries.length === 0 ? (
+                  <div className="bitfun-library-scene__empty">{t('libraries.noLocalLibraries', { defaultValue: '未找到本地库，请确保 compiler/lib 目录存在' })}</div>
+                ) : (
+                  <div className="bitfun-library-scene__local-list">
+                    {localLibraries
+                      .filter(l => !localSearch || l.name.toLowerCase().includes(localSearch.toLowerCase()) || l.relativePath.toLowerCase().includes(localSearch.toLowerCase()))
+                      .map((lib) => {
+                        const procs = lib.symbols.filter(s => s.symbolType === 'proc' || s.symbolType === 'func').length;
+                        const types = lib.symbols.filter(s => s.symbolType === 'type').length;
+                        const consts = lib.symbols.filter(s => s.symbolType === 'const').length;
+                        const others = lib.symbols.length - procs - types - consts;
+                        return (
+                          <div
+                            key={lib.path}
+                            className="bitfun-library-scene__local-item"
+                            onClick={() => { setSelectedLocalLib(lib); setSymbolFilter('all'); setSelectedSymbol(null); }}
+                          >
+                            <div className="bitfun-library-scene__local-item-icon">
+                              <FileCode size={18} />
+                            </div>
+                            <div className="bitfun-library-scene__local-item-info">
+                              <div className="bitfun-library-scene__local-item-name">{lib.name}</div>
+                              <div className="bitfun-library-scene__local-item-path">{lib.relativePath}</div>
+                            </div>
+                            <div className="bitfun-library-scene__local-item-stats">
+                              {procs > 0 && <span className="bitfun-library-scene__stat-badge" style={{ backgroundColor: '#3b82f620', color: '#3b82f6' }}>{procs} 函数</span>}
+                              {types > 0 && <span className="bitfun-library-scene__stat-badge" style={{ backgroundColor: '#06b6d420', color: '#06b6d4' }}>{types} 类型</span>}
+                              {consts > 0 && <span className="bitfun-library-scene__stat-badge" style={{ backgroundColor: '#f9731620', color: '#f97316' }}>{consts} 常量</span>}
+                              {others > 0 && <span className="bitfun-library-scene__stat-badge" style={{ backgroundColor: '#64748b20', color: '#64748b' }}>{others} 其他</span>}
+                            </div>
+                            <ChevronRight size={16} className="bitfun-library-scene__local-item-chevron" />
+                          </div>
+                        );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : loading ? (
           <div className="bitfun-library-scene__loading">{t('common.loading', { defaultValue: '加载中...' })}</div>
         ) : libraries.length === 0 ? (
           <div className="bitfun-library-scene__empty">

@@ -848,6 +848,8 @@ pub async fn run() {
             api::nim_api::get_nim_compiler_info,
             api::nim_api::compile_nim,
             api::nim_api::run_nim,
+            api::nim_api::get_local_libraries,
+            api::nim_api::get_local_library_detail,
         ])
         .build(tauri::generate_context!());
 

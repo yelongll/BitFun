@@ -694,3 +694,394 @@ pub async fn run_nim(request: NimCompileRequest) -> Result<NimCompileResponse, S
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalLibrarySymbol {
+    pub name: String,
+    pub symbol_type: String,
+    pub signature: Option<String>,
+    pub doc_comment: Option<String>,
+    pub params: Option<Vec<SymbolParam>>,
+    pub return_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolParam {
+    pub name: String,
+    pub param_type: String,
+    pub default_value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalLibraryInfo {
+    pub name: String,
+    pub path: String,
+    pub relative_path: String,
+    pub file_size: u64,
+    pub symbols: Vec<LocalLibrarySymbol>,
+    pub doc_comment: Option<String>,
+}
+
+fn get_compiler_lib_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+
+    let lib_dir = exe_dir.join("compiler/lib");
+    if lib_dir.exists() {
+        info!("在可执行文件目录找到 compiler/lib: {}", lib_dir.display());
+        return Some(lib_dir);
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        let cwd_lib = cwd.join("compiler/lib");
+        if cwd_lib.exists() {
+            info!("在当前工作目录找到 compiler/lib: {}", cwd_lib.display());
+            return Some(cwd_lib);
+        }
+
+        let mut parent = cwd.parent();
+        while let Some(p) = parent {
+            let p_lib = p.join("compiler/lib");
+            if p_lib.exists() {
+                info!("在父目录找到 compiler/lib: {}", p_lib.display());
+                return Some(p_lib);
+            }
+            parent = p.parent();
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            let manifest_path = PathBuf::from(manifest_dir);
+            let project_root = manifest_path
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent());
+            if let Some(root) = project_root {
+                let root_lib = root.join("compiler/lib");
+                if root_lib.exists() {
+                    info!("在项目根目录找到 compiler/lib: {}", root_lib.display());
+                    return Some(root_lib);
+                }
+            }
+        }
+    }
+
+    warn!("未找到 compiler/lib 目录，已搜索: 可执行文件目录={}, 当前工作目录, 父目录链", exe_dir.display());
+    None
+}
+
+fn parse_nim_symbols(content: &str) -> Vec<LocalLibrarySymbol> {
+    let mut symbols = Vec::new();
+    let mut current_doc: Option<String> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("##") {
+            let doc_text = trimmed.trim_start_matches('#').trim();
+            current_doc = Some(match current_doc.take() {
+                Some(prev) => format!("{}\n{}", prev, doc_text),
+                None => doc_text.to_string(),
+            });
+            continue;
+        }
+
+        if trimmed.is_empty() || trimmed.starts_with('#') && !trimmed.starts_with("##") {
+            if !trimmed.starts_with('#') {
+                current_doc = None;
+            }
+            continue;
+        }
+
+        let symbol = if let Some(rest) = trimmed.strip_prefix("proc ") {
+            parse_proc_signature(rest, "proc", current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("func ") {
+            parse_proc_signature(rest, "func", current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("template ") {
+            parse_proc_signature(rest, "template", current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("macro ") {
+            parse_proc_signature(rest, "macro", current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("method ") {
+            parse_proc_signature(rest, "method", current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("converter ") {
+            parse_proc_signature(rest, "converter", current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("type ") {
+            parse_type_definition(rest, current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("const ") {
+            parse_const_definition(rest, current_doc.take())
+        } else if let Some(rest) = trimmed.strip_prefix("let ") {
+            Some(LocalLibrarySymbol {
+                name: extract_identifier(rest),
+                symbol_type: "let".to_string(),
+                signature: Some(trimmed.to_string()),
+                doc_comment: current_doc.take(),
+                params: None,
+                return_type: extract_type_after_colon(rest),
+            })
+        } else if let Some(rest) = trimmed.strip_prefix("var ") {
+            Some(LocalLibrarySymbol {
+                name: extract_identifier(rest),
+                symbol_type: "var".to_string(),
+                signature: Some(trimmed.to_string()),
+                doc_comment: current_doc.take(),
+                params: None,
+                return_type: extract_type_after_colon(rest),
+            })
+        } else {
+            current_doc = None;
+            None
+        };
+
+        if let Some(sym) = symbol {
+            symbols.push(sym);
+        }
+    }
+
+    symbols
+}
+
+fn parse_proc_signature(rest: &str, symbol_type: &str, doc: Option<String>) -> Option<LocalLibrarySymbol> {
+    let name = extract_identifier(rest);
+    if name.is_empty() {
+        return None;
+    }
+
+    let signature = format!("{} {}", symbol_type, rest.trim_end_matches(':').trim());
+
+    let (params, return_type) = parse_params_and_return(rest);
+
+    Some(LocalLibrarySymbol {
+        name,
+        symbol_type: symbol_type.to_string(),
+        signature: Some(signature),
+        doc_comment: doc,
+        params: if params.is_empty() { None } else { Some(params) },
+        return_type,
+    })
+}
+
+fn parse_type_definition(rest: &str, doc: Option<String>) -> Option<LocalLibrarySymbol> {
+    let name = extract_identifier(rest);
+    if name.is_empty() {
+        return None;
+    }
+
+    let return_type = extract_type_after_eq(rest);
+
+    Some(LocalLibrarySymbol {
+        name,
+        symbol_type: "type".to_string(),
+        signature: Some(format!("type {}", rest.trim_end_matches(':').trim())),
+        doc_comment: doc,
+        params: None,
+        return_type,
+    })
+}
+
+fn parse_const_definition(rest: &str, doc: Option<String>) -> Option<LocalLibrarySymbol> {
+    let name = extract_identifier(rest);
+    if name.is_empty() {
+        return None;
+    }
+
+    let return_type = extract_type_after_colon(rest);
+
+    Some(LocalLibrarySymbol {
+        name,
+        symbol_type: "const".to_string(),
+        signature: Some(format!("const {}", rest.trim_end_matches(':').trim())),
+        doc_comment: doc,
+        params: None,
+        return_type,
+    })
+}
+
+fn extract_identifier(rest: &str) -> String {
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '*')
+        .collect();
+    name.trim_end_matches('*').to_string()
+}
+
+fn extract_type_after_colon(rest: &str) -> Option<String> {
+    if let Some(colon_pos) = rest.find(':') {
+        let after_colon = &rest[colon_pos + 1..];
+        let type_str: String = after_colon
+            .chars()
+            .take_while(|c| *c != '=' && *c != '{' && *c != '#' && !c.is_whitespace() || *c == '[' || *c == ']')
+            .collect();
+        let trimmed = type_str.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn extract_type_after_eq(rest: &str) -> Option<String> {
+    if let Some(eq_pos) = rest.find('=') {
+        let after_eq = &rest[eq_pos + 1..];
+        let type_str: String = after_eq
+            .chars()
+            .take_while(|c| *c != '{' && *c != '#' && *c != '\n')
+            .collect();
+        let trimmed = type_str.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn parse_params_and_return(rest: &str) -> (Vec<SymbolParam>, Option<String>) {
+    let mut params = Vec::new();
+    let mut return_type = None;
+
+    if let Some(open) = rest.find('(') {
+        let close = rest.find(')').unwrap_or(rest.len());
+        let params_str = &rest[open + 1..close];
+
+        if !params_str.trim().is_empty() {
+            for param_group in params_str.split(';') {
+                let group = param_group.trim();
+                if group.is_empty() {
+                    continue;
+                }
+                if let Some(colon_pos) = group.find(':') {
+                    let names_str = &group[..colon_pos];
+                    let type_and_default = &group[colon_pos + 1..];
+
+                    let (param_type, default_value) = if let Some(eq_pos) = type_and_default.find('=') {
+                        (type_and_default[..eq_pos].trim().to_string(), Some(type_and_default[eq_pos + 1..].trim().to_string()))
+                    } else {
+                        (type_and_default.trim().to_string(), None)
+                    };
+
+                    for name in names_str.split(',') {
+                        let name = name.trim();
+                        if !name.is_empty() {
+                            params.push(SymbolParam {
+                                name: name.to_string(),
+                                param_type: param_type.clone(),
+                                default_value: default_value.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        let after_params = &rest[close + 1..];
+        if let Some(colon_pos) = after_params.find(':') {
+            let ret = after_params[colon_pos + 1..]
+                .chars()
+                .take_while(|c| *c != '=' && *c != '{' && *c != '#')
+                .collect::<String>();
+            let trimmed = ret.trim();
+            if !trimmed.is_empty() {
+                return_type = Some(trimmed.to_string());
+            }
+        }
+    }
+
+    (params, return_type)
+}
+
+fn scan_lib_directory(lib_dir: &PathBuf) -> Vec<LocalLibraryInfo> {
+    let mut libraries = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(lib_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan_lib_subdirectory(&path, lib_dir, &mut libraries);
+            } else if is_nim_file(&path) {
+                if let Some(lib_info) = read_library_file(&path, lib_dir) {
+                    libraries.push(lib_info);
+                }
+            }
+        }
+    }
+
+    libraries.sort_by(|a, b| a.name.cmp(&b.name));
+    libraries
+}
+
+fn scan_lib_subdirectory(dir: &PathBuf, base_dir: &PathBuf, libraries: &mut Vec<LocalLibraryInfo>) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan_lib_subdirectory(&path, base_dir, libraries);
+            } else if is_nim_file(&path) {
+                if let Some(lib_info) = read_library_file(&path, base_dir) {
+                    libraries.push(lib_info);
+                }
+            }
+        }
+    }
+}
+
+fn is_nim_file(path: &PathBuf) -> bool {
+    path.extension()
+        .map(|ext| ext == "灵" || ext == "nim")
+        .unwrap_or(false)
+}
+
+fn read_library_file(path: &PathBuf, base_dir: &PathBuf) -> Option<LocalLibraryInfo> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let metadata = std::fs::metadata(path).ok()?;
+    let name = path.file_stem()?.to_string_lossy().to_string();
+    let relative_path = path.strip_prefix(base_dir)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .to_string();
+
+    let doc_comment = content.lines()
+        .take_while(|line| line.trim().starts_with("##"))
+        .map(|line| line.trim_start_matches('#').trim())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let symbols = parse_nim_symbols(&content);
+
+    Some(LocalLibraryInfo {
+        name,
+        path: path.to_string_lossy().to_string(),
+        relative_path,
+        file_size: metadata.len(),
+        symbols,
+        doc_comment: if doc_comment.is_empty() { None } else { Some(doc_comment) },
+    })
+}
+
+#[tauri::command]
+pub async fn get_local_libraries() -> Result<Vec<LocalLibraryInfo>, String> {
+    let lib_dir = get_compiler_lib_dir()
+        .ok_or_else(|| "compiler/lib 目录未找到，请确保程序目录下存在 compiler/lib.".to_string())?;
+
+    info!("扫描本地库目录: {}", lib_dir.display());
+    let libraries = scan_lib_directory(&lib_dir);
+    info!("找到 {} 个本地库", libraries.len());
+    Ok(libraries)
+}
+
+#[tauri::command]
+pub async fn get_local_library_detail(file_path: String) -> Result<LocalLibraryInfo, String> {
+    let path = PathBuf::from(&file_path);
+    if !path.exists() {
+        return Err(format!("文件不存在: {}", file_path));
+    }
+
+    let base_dir = get_compiler_lib_dir()
+        .ok_or_else(|| "compiler/lib 目录未找到".to_string())?;
+
+    read_library_file(&path, &base_dir)
+        .ok_or_else(|| format!("无法读取库文件: {}", file_path))
+}

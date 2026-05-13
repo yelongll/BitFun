@@ -156,7 +156,7 @@ class LibrariesController
         }
 
         if (!$content && !$downloadUrl) {
-            $fileName .= '.kl';
+            $fileName .= '.灵';
             $content = $library['file_content'] ?: '';
             $downloadUrl = 'data:text/plain;charset=utf-8,' . urlencode($content);
         }
