@@ -851,7 +851,7 @@
     "uploadRequired": "请填写名称和分类",
     "codeRequired": "请输入代码内容",
     "fileRequired": "请选择文件",
-    "uploadSuccess": "上传成功！您可以在"我的库"中查看",
+    "uploadSuccess": "上传成功！您可以在 \"我的库\" 中查看",
     "uploadError": "上传失败",
     "description": "描述",
     "descriptionPlaceholder": "请输入描述",
