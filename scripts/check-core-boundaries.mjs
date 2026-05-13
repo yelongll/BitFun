@@ -219,6 +219,7 @@ const dependencyProfileRules = [
       'anyhow',
       'async-trait',
       'base64',
+      'bitfun-runtime-ports',
       'bitfun-services-core',
       'chrono',
       'futures',
@@ -316,6 +317,69 @@ const facadeOnlyFiles = [
 ];
 
 const forbiddenContentRules = [
+  {
+    path: 'src/crates/core/src/agentic/tools/framework.rs',
+    patterns: [
+      {
+        regex: /\bpub struct DynamicMcpToolInfo\b/,
+        message: 'core tool framework must not redefine DynamicMcpToolInfo; use bitfun-agent-tools',
+      },
+      {
+        regex: /\bpub struct DynamicToolInfo\b/,
+        message: 'core tool framework must not redefine DynamicToolInfo; use bitfun-agent-tools',
+      },
+      {
+        regex: /\bpub struct ToolRenderOptions\b/,
+        message: 'core tool framework must not redefine ToolRenderOptions; use bitfun-agent-tools',
+      },
+      {
+        regex: /\bpub enum ToolPathBackend\b/,
+        message: 'core tool framework must not redefine ToolPathBackend; use bitfun-agent-tools',
+      },
+      {
+        regex: /\bpub struct ToolPathResolution\b/,
+        message: 'core tool framework must not redefine ToolPathResolution; use bitfun-agent-tools',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/agentic/tools/restrictions.rs',
+    patterns: [
+      {
+        regex: /\bpub enum ToolPathOperation\b/,
+        message: 'core tool restrictions must not redefine ToolPathOperation; use bitfun-agent-tools',
+      },
+      {
+        regex: /\bpub struct ToolPathPolicy\b/,
+        message: 'core tool restrictions must not redefine ToolPathPolicy; use bitfun-agent-tools',
+      },
+      {
+        regex: /\bpub struct ToolRuntimeRestrictions\b/,
+        message:
+          'core tool restrictions must not redefine ToolRuntimeRestrictions; use bitfun-agent-tools',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/agentic/tools/registry.rs',
+    patterns: [
+      {
+        regex: /\bstruct DynamicToolMetadata\b/,
+        message:
+          'core tool registry must not own dynamic tool metadata storage; use bitfun-agent-tools ToolRegistry',
+      },
+      {
+        regex: /\btools\s*:\s*IndexMap\b/,
+        message:
+          'core tool registry must not own the generic tool map; use bitfun-agent-tools ToolRegistry',
+      },
+      {
+        regex: /\bdynamic_tools\s*:\s*IndexMap\b/,
+        message:
+          'core tool registry must not own the dynamic tool map; use bitfun-agent-tools ToolRegistry',
+      },
+    ],
+  },
   {
     path: 'src/crates/core/src/service/mcp/server/process.rs',
     patterns: [
@@ -715,6 +779,39 @@ const forbiddenContentRules = [
     ],
   },
   {
+    path: 'src/crates/core/src/service/remote_connect/remote_server.rs',
+    patterns: [
+      {
+        regex: /\bpub struct ImageAttachment\b/,
+        message: 'core remote-connect server must not redefine image attachment wire DTOs; use the integrations contract',
+      },
+      {
+        regex: /\bpub struct ChatImageAttachment\b/,
+        message: 'core remote-connect server must not redefine chat image wire DTOs; use the integrations contract',
+      },
+      {
+        regex: /\bpub struct ChatMessage\b/,
+        message: 'core remote-connect server must not redefine chat message wire DTOs; use the integrations contract',
+      },
+      {
+        regex: /\bpub struct ChatMessageItem\b/,
+        message: 'core remote-connect server must not redefine chat message item DTOs; use the integrations contract',
+      },
+      {
+        regex: /\bpub struct RemoteToolStatus\b/,
+        message: 'core remote-connect server must not redefine remote tool status DTOs; use the integrations contract',
+      },
+      {
+        regex: /\bpub struct ActiveTurnSnapshot\b/,
+        message: 'core remote-connect server must not redefine active turn snapshot DTOs; use the integrations contract',
+      },
+      {
+        regex: /\bpub struct SessionInfo\b/,
+        message: 'core remote-connect server must not redefine session info DTOs; use the integrations contract',
+      },
+    ],
+  },
+  {
     path: 'src/crates/core/src/service/announcement/state_store.rs',
     patterns: [
       {
@@ -964,6 +1061,65 @@ function runManifestParserSelfTest() {
   const agentToolsRule = lightweightBoundaryRules.find((rule) => rule.crateName === 'agent-tools');
   if (!agentToolsRule?.forbiddenDeps.includes('bitfun-ai-adapters')) {
     throw new Error('agent-tools lightweight boundary must forbid bitfun-ai-adapters');
+  }
+  const coreToolFrameworkRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/agentic/tools/framework.rs',
+  );
+  if (!coreToolFrameworkRule) {
+    throw new Error('missing core tool framework boundary rule');
+  }
+  const coreToolFrameworkContracts = [
+    'DynamicMcpToolInfo',
+    'DynamicToolInfo',
+    'ToolRenderOptions',
+    'ToolPathBackend',
+    'ToolPathResolution',
+  ];
+  const coreToolFrameworkRuleText = coreToolFrameworkRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  for (const contract of coreToolFrameworkContracts) {
+    if (!coreToolFrameworkRuleText.includes(contract)) {
+      throw new Error(`core tool framework boundary rule must forbid contract: ${contract}`);
+    }
+  }
+  const coreToolRestrictionRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/agentic/tools/restrictions.rs',
+  );
+  if (!coreToolRestrictionRule) {
+    throw new Error('missing core tool restrictions boundary rule');
+  }
+  const coreToolRestrictionContracts = [
+    'ToolPathOperation',
+    'ToolPathPolicy',
+    'ToolRuntimeRestrictions',
+  ];
+  const coreToolRestrictionRuleText = coreToolRestrictionRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  for (const contract of coreToolRestrictionContracts) {
+    if (!coreToolRestrictionRuleText.includes(contract)) {
+      throw new Error(`core tool restrictions boundary rule must forbid contract: ${contract}`);
+    }
+  }
+  const coreToolRegistryRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/agentic/tools/registry.rs',
+  );
+  if (!coreToolRegistryRule) {
+    throw new Error('missing core tool registry boundary rule');
+  }
+  const coreToolRegistryRuleText = coreToolRegistryRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  const coreToolRegistryContracts = [
+    'DynamicToolMetadata',
+    'tools\\s*:\\s*IndexMap',
+    'dynamic_tools\\s*:\\s*IndexMap',
+  ];
+  for (const contract of coreToolRegistryContracts) {
+    if (!coreToolRegistryRuleText.includes(contract)) {
+      throw new Error(`core tool registry boundary rule must forbid contract: ${contract}`);
+    }
   }
 
   const productDomainProfile = dependencyProfileRules.find(
@@ -1286,6 +1442,30 @@ function runManifestParserSelfTest() {
   for (const dep of ['futures', 'reqwest', 'sse-stream']) {
     if (!servicesIntegrationsProfile?.forbiddenNonOptionalDeps.includes(dep)) {
       throw new Error(`services-integrations default profile must forbid non-optional ${dep}`);
+    }
+  }
+
+  const remoteConnectRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/service/remote_connect/remote_server.rs',
+  );
+  if (!remoteConnectRule) {
+    throw new Error('missing remote-connect remote_server boundary rule');
+  }
+  const remoteConnectContracts = [
+    'ImageAttachment',
+    'ChatImageAttachment',
+    'ChatMessage',
+    'ChatMessageItem',
+    'RemoteToolStatus',
+    'ActiveTurnSnapshot',
+    'SessionInfo',
+  ];
+  const remoteConnectRuleText = remoteConnectRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  for (const contract of remoteConnectContracts) {
+    if (!remoteConnectRuleText.includes(contract)) {
+      throw new Error(`remote-connect boundary rule must forbid contract: ${contract}`);
     }
   }
 

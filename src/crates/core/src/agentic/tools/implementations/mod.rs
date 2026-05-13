@@ -39,6 +39,7 @@ pub mod skills;
 pub mod task_tool;
 pub mod terminal_control_tool;
 pub mod todo_write_tool;
+pub mod get_tool_spec_tool;
 pub mod util;
 pub mod web_tools;
 
@@ -77,4 +78,5 @@ pub use skill_tool::SkillTool;
 pub use task_tool::TaskTool;
 pub use terminal_control_tool::TerminalControlTool;
 pub use todo_write_tool::TodoWriteTool;
+pub use get_tool_spec_tool::GetToolSpecTool;
 pub use web_tools::{WebFetchTool, WebSearchTool};

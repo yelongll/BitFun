@@ -1,22 +1,22 @@
 //! Tool registry
 
-use crate::agentic::tools::framework::{DynamicToolInfo, Tool};
+use crate::agentic::tools::framework::{DynamicToolInfo, Tool, ToolExposure};
 use crate::agentic::tools::implementations::*;
 use crate::util::errors::BitFunResult;
-use bitfun_runtime_ports::{DynamicToolDescriptor, DynamicToolProvider, ToolDecorator};
-use indexmap::IndexMap;
+use bitfun_agent_tools::{
+    DynamicToolDescriptor, DynamicToolProvider, PortResult, ToolDecorator,
+    ToolRegistry as AgentToolRegistry, ToolRegistryItem,
+};
 use log::{debug, info, trace, warn};
+use serde_json::Value;
 use std::sync::Arc;
 
 type ToolRef = Arc<dyn Tool>;
 type ToolDecoratorRef = Arc<dyn ToolDecorator<ToolRef>>;
 
-#[derive(Debug, Clone)]
-struct DynamicToolMetadata {
-    provider_id: String,
-    info: DynamicToolInfo,
-}
+pub const GET_TOOL_SPEC_TOOL_NAME: &str = "GetToolSpec";
 
+#[derive(Debug, Clone)]
 struct SnapshotToolDecorator;
 
 impl ToolDecorator<ToolRef> for SnapshotToolDecorator {
@@ -27,9 +27,7 @@ impl ToolDecorator<ToolRef> for SnapshotToolDecorator {
 
 /// Tool registry - manages all available tools (using IndexMap to maintain registration order)
 pub struct ToolRegistry {
-    tools: IndexMap<String, ToolRef>,
-    dynamic_tools: IndexMap<String, DynamicToolMetadata>,
-    tool_decorator: ToolDecoratorRef,
+    inner: AgentToolRegistry<dyn Tool>,
 }
 
 impl Default for ToolRegistry {
@@ -51,9 +49,7 @@ impl ToolRegistry {
     /// through the `bitfun-runtime-ports` interface.
     pub fn with_tool_decorator(tool_decorator: ToolDecoratorRef) -> Self {
         let mut registry = Self {
-            tools: IndexMap::new(),
-            dynamic_tools: IndexMap::new(),
-            tool_decorator,
+            inner: AgentToolRegistry::with_tool_decorator(tool_decorator),
         };
 
         // Register all tools
@@ -66,7 +62,7 @@ impl ToolRegistry {
         let tool_count = tools.len();
         info!("Registering MCP tools: count={}", tool_count);
 
-        let before_count = self.tools.len();
+        let before_count = self.get_tool_names().len();
         debug!("Tool count before registration: {}", before_count);
 
         for (index, tool) in tools.into_iter().enumerate() {
@@ -79,7 +75,7 @@ impl ToolRegistry {
             );
 
             // Check if a tool with the same name already exists
-            if self.tools.contains_key(&name) {
+            if self.get_tool(&name).is_some() {
                 warn!(
                     "Tool already exists, will be overwritten: tool_name={}",
                     name
@@ -90,7 +86,7 @@ impl ToolRegistry {
             debug!("MCP tool registered: tool_name={}", name);
         }
 
-        let after_count = self.tools.len();
+        let after_count = self.get_tool_names().len();
         let added_count = after_count - before_count;
 
         info!(
@@ -101,41 +97,36 @@ impl ToolRegistry {
 
     /// Remove all tools from the MCP server
     pub fn unregister_mcp_server_tools(&mut self, server_id: &str) {
-        let to_remove: Vec<String> = self
-            .dynamic_tools
-            .iter()
-            .filter(|(_, metadata)| {
-                metadata
-                    .info
-                    .mcp
-                    .as_ref()
-                    .is_some_and(|info| info.server_id == server_id)
+        let removed_tool_names = self
+            .get_tool_names()
+            .into_iter()
+            .filter(|name| {
+                self.get_dynamic_tool_info(name)
+                    .and_then(|info| info.mcp)
+                    .is_some_and(|mcp| mcp.server_id == server_id)
             })
-            .map(|(tool_name, _)| tool_name.clone())
-            .collect();
+            .collect::<Vec<_>>();
 
-        for key in to_remove {
+        self.inner.unregister_mcp_server_tools(server_id);
+
+        for key in removed_tool_names {
             info!("Unregistering dynamic tool: tool_name={}", key);
-            self.tools.shift_remove(&key);
-            self.dynamic_tools.shift_remove(&key);
         }
     }
 
     /// Remove all tools whose registry name starts with the given prefix.
     pub fn unregister_tools_by_prefix(&mut self, prefix: &str) -> usize {
-        let to_remove: Vec<String> = self
-            .tools
-            .keys()
-            .filter(|k| k.starts_with(prefix))
-            .cloned()
-            .collect();
-        let count = to_remove.len();
+        let removed_tool_names = self
+            .get_tool_names()
+            .into_iter()
+            .filter(|name| name.starts_with(prefix))
+            .collect::<Vec<_>>();
+        let count = self.inner.unregister_tools_by_prefix(prefix);
 
-        for key in to_remove {
+        for key in removed_tool_names {
             info!("Unregistering dynamic tool: tool_name={}", key);
-            self.tools.shift_remove(&key);
-            self.dynamic_tools.shift_remove(&key);
         }
+
         count
     }
 
@@ -150,31 +141,42 @@ impl ToolRegistry {
         self.register_tool(Arc::new(FileEditTool::new()));
         self.register_tool(Arc::new(DeleteFileTool::new()));
         self.register_tool(Arc::new(BashTool::new()));
+        // TaskTool, execute subagent
+        self.register_tool(Arc::new(TaskTool::new()));
+        // Skill tool
+        self.register_tool(Arc::new(SkillTool::new()));
+        // AskUserQuestion tool
+        self.register_tool(Arc::new(AskUserQuestionTool::new()));
+        // TodoWrite tool
+        self.register_tool(Arc::new(TodoWriteTool::new()));
+        // CreatePlan tool
+        self.register_tool(Arc::new(CreatePlanTool::new()));
+        // Code review submit tool
+        self.register_tool(Arc::new(CodeReviewTool::new()));
+
+        // GetToolSpec — the discovery entry point for collapsed tools.
+        self.register_tool(Arc::new(GetToolSpecTool::new()));
+
+        // GetFileDiff tool
+        self.register_tool(Arc::new(GetFileDiffTool::new()));
+        // Log tool (debug mode only)
+        self.register_tool(Arc::new(LogTool::new()));
+
         // TerminalControl is now accessible via ControlHub's "terminal" domain,
         // but we keep it registered separately for backward compatibility.
         self.register_tool(Arc::new(TerminalControlTool::new()));
+
         self.register_tool(Arc::new(SessionControlTool::new()));
         self.register_tool(Arc::new(SessionMessageTool::new()));
         self.register_tool(Arc::new(SessionHistoryTool::new()));
 
-        // TodoWrite tool
-        self.register_tool(Arc::new(TodoWriteTool::new()));
-
         // Cron scheduled jobs tool
         self.register_tool(Arc::new(CronTool::new()));
-
-        // TaskTool, execute subagent
-        self.register_tool(Arc::new(TaskTool::new()));
-
-        // Skill tool
-        self.register_tool(Arc::new(SkillTool::new()));
-
-        // AskUserQuestion tool
-        self.register_tool(Arc::new(AskUserQuestionTool::new()));
 
         // Web tool
         self.register_tool(Arc::new(WebSearchTool::new()));
         self.register_tool(Arc::new(WebFetchTool::new()));
+
         self.register_tool(Arc::new(ListMCPResourcesTool::new()));
         self.register_tool(Arc::new(ReadMCPResourceTool::new()));
         self.register_tool(Arc::new(ListMCPPromptsTool::new()));
@@ -182,20 +184,8 @@ impl ToolRegistry {
 
         self.register_tool(Arc::new(GenerativeUITool::new()));
 
-        // GetFileDiff tool
-        self.register_tool(Arc::new(GetFileDiffTool::new()));
-
-        // Log tool
-        self.register_tool(Arc::new(LogTool::new()));
-
         // Git version control tool
         self.register_tool(Arc::new(GitTool::new()));
-
-        // CreatePlan tool
-        self.register_tool(Arc::new(CreatePlanTool::new()));
-
-        // Code review submit tool
-        self.register_tool(Arc::new(CodeReviewTool::new()));
 
         // MiniApp Agent tool (single InitMiniApp)
         self.register_tool(Arc::new(InitMiniAppTool::new()));
@@ -215,85 +205,80 @@ impl ToolRegistry {
 
     /// Register a single tool
     pub fn register_tool(&mut self, tool: ToolRef) {
-        // Snapshot-aware wrapping happens once at registration time so every
-        // subsequent lookup returns the same runtime implementation.
-        let tool = self.tool_decorator.decorate(tool);
-        let name = tool.name().to_string();
-        let dynamic_info = tool.dynamic_tool_info().and_then(|info| {
-            if info.provider_id.trim().is_empty() {
-                None
-            } else {
-                Some(info)
-            }
-        });
-
-        if let Some(info) = dynamic_info {
-            self.dynamic_tools.insert(
-                name.clone(),
-                DynamicToolMetadata {
-                    provider_id: info.provider_id.clone(),
-                    info,
-                },
-            );
-        } else {
-            self.dynamic_tools.shift_remove(&name);
-        }
-        self.tools.insert(name, tool);
+        self.inner.register_tool(tool);
     }
 
     /// Get tool
     pub fn get_tool(&self, name: &str) -> Option<Arc<dyn Tool>> {
-        self.tools.get(name).cloned()
+        self.inner.get_tool(name)
     }
 
     pub fn get_dynamic_tool_info(&self, name: &str) -> Option<DynamicToolInfo> {
-        self.dynamic_tools
-            .get(name)
-            .map(|metadata| metadata.info.clone())
+        self.inner.get_dynamic_tool_info(name)
+    }
+
+    pub fn is_tool_collapsed(&self, name: &str) -> bool {
+        self.inner
+            .get_tool(name)
+            .is_some_and(|tool| tool.default_exposure() == ToolExposure::Collapsed)
+    }
+
+    pub fn get_collapsed_tool_names(&self) -> Vec<String> {
+        self.get_tool_names()
+            .into_iter()
+            .filter(|name| self.is_tool_collapsed(name))
+            .collect()
     }
 
     /// Get all tool names
     pub fn get_tool_names(&self) -> Vec<String> {
-        self.tools.keys().cloned().collect()
+        self.inner.get_tool_names()
     }
 
     /// Get all tools
     pub fn get_all_tools(&self) -> Vec<Arc<dyn Tool>> {
         trace!(
             "ToolRegistry::get_all_tools() called: total={}",
-            self.tools.len()
+            self.get_tool_names().len()
         );
-        self.tools.values().cloned().collect()
+        self.inner.get_all_tools()
     }
+
 }
 
 #[async_trait::async_trait]
 impl DynamicToolProvider for ToolRegistry {
-    async fn list_dynamic_tools(
-        &self,
-    ) -> bitfun_runtime_ports::PortResult<Vec<DynamicToolDescriptor>> {
-        let mut descriptors = Vec::new();
+    async fn list_dynamic_tools(&self) -> PortResult<Vec<DynamicToolDescriptor>> {
+        self.inner.list_dynamic_tools().await
+    }
+}
 
-        for (name, tool) in self.tools.iter() {
-            let Some(metadata) = self.dynamic_tools.get(name) else {
-                continue;
-            };
-            let description = tool.description().await.map_err(|error| {
-                bitfun_runtime_ports::PortError::new(
-                    bitfun_runtime_ports::PortErrorKind::Backend,
-                    error.to_string(),
-                )
-            })?;
+#[async_trait::async_trait]
+impl ToolRegistryItem for dyn Tool {
+    fn name(&self) -> &str {
+        Tool::name(self)
+    }
 
-            descriptors.push(DynamicToolDescriptor {
-                name: tool.name().to_string(),
-                description,
-                input_schema: tool.input_schema_for_model().await,
-                provider_id: Some(metadata.provider_id.clone()),
-            });
-        }
+    async fn description(&self) -> Result<String, String> {
+        Tool::description(self)
+            .await
+            .map_err(|error| error.to_string())
+    }
 
-        Ok(descriptors)
+    fn input_schema(&self) -> Value {
+        Tool::input_schema(self)
+    }
+
+    async fn input_schema_for_model(&self) -> Value {
+        Tool::input_schema_for_model(self).await
+    }
+
+    fn dynamic_provider_id(&self) -> Option<&str> {
+        Tool::dynamic_provider_id(self)
+    }
+
+    fn dynamic_tool_info(&self) -> Option<DynamicToolInfo> {
+        Tool::dynamic_tool_info(self)
     }
 }
 
@@ -303,10 +288,10 @@ mod tests {
     use super::ToolRef;
     use super::ToolRegistry;
     use crate::agentic::tools::framework::{
-        DynamicToolInfo, Tool, ToolResult, ToolUseContext, ValidationResult,
+        DynamicMcpToolInfo, DynamicToolInfo, Tool, ToolResult, ToolUseContext, ValidationResult,
     };
     use async_trait::async_trait;
-    use bitfun_runtime_ports::DynamicToolProvider;
+    use bitfun_agent_tools::DynamicToolProvider;
     use serde_json::json;
     use serde_json::Value;
     use std::sync::Arc;
@@ -324,6 +309,10 @@ mod tests {
 
         async fn description(&self) -> crate::util::errors::BitFunResult<String> {
             Ok("dynamic test tool".to_string())
+        }
+
+        fn short_description(&self) -> String {
+            "dynamic test tool".to_string()
         }
 
         fn input_schema(&self) -> Value {
@@ -385,7 +374,7 @@ mod tests {
             dynamic_info: Some(DynamicToolInfo {
                 provider_id: server_id.to_string(),
                 provider_kind: Some("mcp".to_string()),
-                mcp: Some(crate::service::mcp::McpToolInfo {
+                mcp: Some(DynamicMcpToolInfo {
                     server_id: server_id.to_string(),
                     server_name: server_name.to_string(),
                     tool_name: tool_name.to_string(),
@@ -418,15 +407,20 @@ mod tests {
             "Edit",
             "Delete",
             "Bash",
+            "Task",
+            "Skill",
+            "AskUserQuestion",
+            "TodoWrite",
+            "CreatePlan",
+            "submit_code_review",
+            "GetToolSpec",
+            "GetFileDiff",
+            "Log",
             "TerminalControl",
             "SessionControl",
             "SessionMessage",
             "SessionHistory",
-            "TodoWrite",
             "Cron",
-            "Task",
-            "Skill",
-            "AskUserQuestion",
             "WebSearch",
             "WebFetch",
             "ListMCPResources",
@@ -434,11 +428,7 @@ mod tests {
             "ListMCPPrompts",
             "GetMCPPrompt",
             "GenerativeUI",
-            "GetFileDiff",
-            "Log",
             "Git",
-            "CreatePlan",
-            "submit_code_review",
             "InitMiniApp",
             "ControlHub",
             "ComputerUse",
@@ -462,6 +452,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn registry_marks_collapsed_tools_for_get_tool_spec() {
+        let registry = create_tool_registry();
+
+        assert!(registry.is_tool_collapsed("WebFetch"));
+        assert!(registry.is_tool_collapsed("GetFileDiff"));
+        assert!(!registry.is_tool_collapsed("GetToolSpec"));
+        assert!(registry.is_tool_collapsed("Git"));
+    }
+
     #[tokio::test]
     async fn registry_preserves_readonly_tool_manifest_for_owner_migration() {
         let readonly_names = super::get_readonly_tools()
@@ -478,10 +478,15 @@ mod tests {
                 "Read",
                 "Glob",
                 "Grep",
-                "SessionHistory",
-                "TodoWrite",
                 "Skill",
                 "AskUserQuestion",
+                "TodoWrite",
+                "CreatePlan",
+                "submit_code_review",
+                "GetToolSpec",
+                "GetFileDiff",
+                "Log",
+                "SessionHistory",
                 "WebSearch",
                 "WebFetch",
                 "ListMCPResources",
@@ -489,10 +494,6 @@ mod tests {
                 "ListMCPPrompts",
                 "GetMCPPrompt",
                 "GenerativeUI",
-                "GetFileDiff",
-                "Log",
-                "CreatePlan",
-                "submit_code_review",
                 "Playbook",
             ],
             "readonly tool manifest must stay stable before moving registry ownership"
@@ -529,6 +530,76 @@ mod tests {
         assert_eq!(
             descriptors[0].provider_id.as_deref(),
             Some("github__enterprise/prod")
+        );
+    }
+
+    #[tokio::test]
+    async fn dynamic_tool_provider_preserves_descriptor_shape_and_order() {
+        let mut registry = ToolRegistry::new();
+        registry.register_tool(dynamic_tool("external_search", Some("provider-a")));
+        registry.register_tool(dynamic_tool("local_docs", Some("provider-b")));
+
+        let descriptors = registry
+            .list_dynamic_tools()
+            .await
+            .expect("list dynamic tools");
+
+        let dynamic_descriptors = descriptors
+            .iter()
+            .map(|descriptor| {
+                (
+                    descriptor.name.as_str(),
+                    descriptor.description.as_str(),
+                    descriptor.input_schema.clone(),
+                    descriptor.provider_id.as_deref(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            dynamic_descriptors,
+            vec![
+                (
+                    "external_search",
+                    "dynamic test tool",
+                    json!({ "type": "object" }),
+                    Some("provider-a"),
+                ),
+                (
+                    "local_docs",
+                    "dynamic test tool",
+                    json!({ "type": "object" }),
+                    Some("provider-b"),
+                ),
+            ],
+            "dynamic descriptor shape and registration order must remain stable before provider owner migration"
+        );
+    }
+
+    #[tokio::test]
+    async fn registering_static_tool_clears_stale_dynamic_metadata_for_same_name() {
+        let mut registry = ToolRegistry::new();
+        registry.register_tool(dynamic_tool("external_search", Some("provider-a")));
+        assert!(
+            registry.get_dynamic_tool_info("external_search").is_some(),
+            "dynamic metadata should be registered before overwrite"
+        );
+
+        registry.register_tool(dynamic_tool("external_search", None));
+
+        assert!(
+            registry.get_dynamic_tool_info("external_search").is_none(),
+            "stale dynamic metadata must be removed when a static tool overwrites a dynamic tool"
+        );
+        let descriptors = registry
+            .list_dynamic_tools()
+            .await
+            .expect("list dynamic tools");
+        assert!(
+            descriptors
+                .iter()
+                .all(|descriptor| descriptor.name != "external_search"),
+            "stale dynamic descriptor must not leak after static overwrite"
         );
     }
 

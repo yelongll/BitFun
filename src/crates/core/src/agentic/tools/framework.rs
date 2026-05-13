@@ -14,12 +14,14 @@ use crate::agentic::workspace::WorkspaceServices;
 use crate::agentic::WorkspaceBinding;
 use crate::infrastructure::get_path_manager_arc;
 use crate::service::git::{GitDiffParams, GitService};
-use crate::service::mcp::McpToolInfo;
 use crate::service::remote_ssh::workspace_state::remote_workspace_runtime_root;
 use crate::service::{get_workspace_runtime_service_arc, WorkspaceRuntimeContext};
 use crate::util::errors::BitFunResult;
 use async_trait::async_trait;
-pub use bitfun_agent_tools::{ToolResult, ValidationResult};
+pub use bitfun_agent_tools::{
+    DynamicMcpToolInfo, DynamicToolInfo, ToolPathBackend, ToolPathResolution, ToolRenderOptions,
+    ToolResult, ValidationResult,
+};
 use log::warn;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -28,46 +30,10 @@ use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolPathBackend {
-    Local,
-    RemoteWorkspace,
+pub enum ToolExposure {
+    Expanded,
+    Collapsed,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DynamicToolInfo {
-    pub provider_id: String,
-    pub provider_kind: Option<String>,
-    pub mcp: Option<McpToolInfo>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ToolPathResolution {
-    pub requested_path: String,
-    pub logical_path: String,
-    pub resolved_path: String,
-    pub backend: ToolPathBackend,
-    pub runtime_scope: Option<String>,
-    pub runtime_root: Option<PathBuf>,
-}
-
-impl ToolPathResolution {
-    pub fn uses_remote_workspace_backend(&self) -> bool {
-        matches!(self.backend, ToolPathBackend::RemoteWorkspace)
-    }
-
-    pub fn is_runtime_artifact(&self) -> bool {
-        self.runtime_scope.is_some()
-    }
-
-    pub fn logical_child_path(&self, absolute_child_path: &Path) -> Option<String> {
-        let scope = self.runtime_scope.as_deref()?;
-        let root = self.runtime_root.as_ref()?;
-        let relative = absolute_child_path.strip_prefix(root).ok()?;
-        let relative_str = relative.to_string_lossy().replace('\\', "/");
-        build_bitfun_runtime_uri(scope, &relative_str).ok()
-    }
-}
-
 /// Tool use context
 #[derive(Debug, Clone)]
 pub struct ToolUseContext {
@@ -76,6 +42,7 @@ pub struct ToolUseContext {
     pub session_id: Option<String>,
     pub dialog_turn_id: Option<String>,
     pub workspace: Option<WorkspaceBinding>,
+    pub unlocked_collapsed_tools: Vec<String>,
     /// Extended context data passed from execution layer to tools.
     pub custom_data: HashMap<String, Value>,
     /// Desktop automation (Computer use); only set in BitFun desktop.
@@ -212,6 +179,7 @@ impl ToolUseContext {
     pub fn enforce_tool_runtime_restrictions(&self, tool_name: &str) -> BitFunResult<()> {
         self.runtime_tool_restrictions
             .ensure_tool_allowed(tool_name)
+            .map_err(Into::into)
     }
 
     pub fn enforce_path_operation(
@@ -486,6 +454,7 @@ mod path_resolution_tests {
             session_id: None,
             dialog_turn_id: None,
             workspace: Some(WorkspaceBinding::new(None, PathBuf::from(root))),
+            unlocked_collapsed_tools: Vec::new(),
             custom_data: HashMap::new(),
             computer_use_host: None,
             cancellation_token: None,
@@ -501,6 +470,7 @@ mod path_resolution_tests {
             session_id: None,
             dialog_turn_id: None,
             workspace: None,
+            unlocked_collapsed_tools: Vec::new(),
             custom_data: HashMap::new(),
             computer_use_host: None,
             cancellation_token: None,
@@ -576,6 +546,17 @@ pub trait Tool: Send + Sync {
         _context: Option<&ToolUseContext>,
     ) -> BitFunResult<String> {
         self.description().await
+    }
+
+    /// Short description used in condensed tool listings such as GetToolSpec.
+    fn short_description(&self) -> String;
+
+    /// Default exposure level when building the model tool manifest.
+    ///
+    /// This is tool-owned metadata: registries and agent manifests may use it
+    /// as the baseline before applying any higher-level overrides.
+    fn default_exposure(&self) -> ToolExposure {
+        ToolExposure::Expanded
     }
 
     /// Input mode definition - using JSON Schema
@@ -727,12 +708,6 @@ pub trait Tool: Send + Sync {
     }
 }
 
-/// Tool render options
-#[derive(Debug, Clone)]
-pub struct ToolRenderOptions {
-    pub verbose: bool,
-}
-
 #[cfg(test)]
 mod shared_context_tests {
     use super::{Tool, ToolResult, ToolUseContext};
@@ -753,6 +728,10 @@ mod shared_context_tests {
 
         async fn description(&self) -> BitFunResult<String> {
             Ok("Read file".to_string())
+        }
+
+        fn short_description(&self) -> String {
+            "Read file".to_string()
         }
 
         fn input_schema(&self) -> Value {
@@ -795,6 +774,7 @@ mod shared_context_tests {
             session_id: Some("subagent-session".to_string()),
             dialog_turn_id: Some("subagent-turn".to_string()),
             workspace: None,
+            unlocked_collapsed_tools: Vec::new(),
             custom_data,
             computer_use_host: None,
             cancellation_token: None,

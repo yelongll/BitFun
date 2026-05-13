@@ -178,6 +178,7 @@ async fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
         session_id: None,
         dialog_turn_id: None,
         workspace,
+        unlocked_collapsed_tools: Vec::new(),
         custom_data: HashMap::new(),
         computer_use_host: None,
         cancellation_token: None,
@@ -186,7 +187,9 @@ async fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
     }
 }
 
-fn to_dynamic_mcp_tool_info(info: bitfun_core::service::mcp::McpToolInfo) -> DynamicMcpToolInfo {
+fn to_dynamic_mcp_tool_info(
+    info: bitfun_core::agentic::tools::framework::DynamicMcpToolInfo,
+) -> DynamicMcpToolInfo {
     DynamicMcpToolInfo {
         server_id: info.server_id,
         server_name: info.server_name,
