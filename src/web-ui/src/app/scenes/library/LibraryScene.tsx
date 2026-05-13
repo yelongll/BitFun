@@ -13,7 +13,7 @@ import {
   LibraryItem,
   isLoggedIn,
 } from '@/infrastructure/api/service-api/AuthAPI';
-import { api } from '@/infrastructure/api/tauri-api';
+import { api } from '@/infrastructure/api/service-api/ApiClient';
 import './LibraryScene.scss';
 
 const log = createLogger('LibraryScene');
