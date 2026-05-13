@@ -29,7 +29,11 @@ import { AboutDialog } from '../components/AboutDialog';
 import { MCPInteractionDialog } from '../components/MCPInteractionDialog/MCPInteractionDialog';
 import { WorkspaceManager } from '../../tools/workspace';
 import { workspaceAPI } from '@/infrastructure/api';
+import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
+import type { CloseBehavior } from '@/infrastructure/api/service-api/SystemAPI';
+import { confirmDialog } from '@/component-library';
 import { createLogger } from '@/shared/utils/logger';
+import { DailyAppUpdateGate } from '@/infrastructure/update';
 import { useI18n } from '@/infrastructure/i18n';
 import { WorkspaceKind } from '@/shared/types';
 import { SSHContext } from '@/features/ssh-remote/SSHRemoteContext';
@@ -48,6 +52,7 @@ interface AppLayoutProps {
 interface AcpSessionCreationEventDetail {
   phase?: 'start' | 'finish';
   clientId?: string;
+  action?: 'create' | 'restore';
 }
 
 const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
@@ -123,7 +128,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [showWorkspaceStatus, setShowWorkspaceStatus] = useState(false);
-  const [pendingAcpSessionClients, setPendingAcpSessionClients] = useState<string[]>([]);
+  const [pendingAcpSessionClients, setPendingAcpSessionClients] = useState<Array<{
+    clientId: string;
+    action: 'create' | 'restore';
+  }>>([]);
   const handleOpenProject = useCallback(async () => {
     try {
       const selected = await open({
@@ -299,26 +307,86 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     t,
   ]);
 
-  // Save in-progress conversations on window close
+  // When the user hides the main window (tray / macOS dock), the app keeps running.
+  // `saveAllInProgressTurns` settles in-flight dialog turns for disk persistence, which
+  // clears Agent companion desktop bubbles until the next chat update—so only run it
+  // immediately before we actually exit the process.
   React.useEffect(() => {
     let unlistenFn: (() => void) | null = null;
+    let handlingClose = false;
 
     const setupWindowCloseListener = async () => {
       if (!canUseNativeWindowControls) return;
 
       try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        const currentWindow = getCurrentWindow();
+        // Both macOS and Windows/Linux: Rust intercepts the native close request
+        // and emits this event. We decide hide vs quit; persist interrupted turns only on quit.
+        const [{ listen }, { invoke }] = await Promise.all([
+          import('@tauri-apps/api/event'),
+          import('@tauri-apps/api/core'),
+        ]);
 
-        unlistenFn = await currentWindow.onCloseRequested(async (event: { preventDefault: () => void }) => {
+        const persistInterruptedTurnsForExit = async () => {
           try {
-            event.preventDefault();
-            const flowChatManager = FlowChatManager.getInstance();
-            await flowChatManager.saveAllInProgressTurns();
-            await currentWindow.close();
+            await FlowChatManager.getInstance().saveAllInProgressTurns();
           } catch (error) {
-            log.error('Failed to save conversations, closing anyway', error);
-            await currentWindow.close();
+            log.error('Failed to save conversations before quit', error);
+          }
+        };
+
+        unlistenFn = await listen('bitfun_main_window_close_requested', async () => {
+          if (handlingClose) return;
+          handlingClose = true;
+
+          if (isMacOS) {
+            // macOS always hides to keep the app alive in the dock.
+            try {
+              await invoke('hide_main_window_after_close_request');
+            } catch (error) {
+              log.error('Failed to hide main window after close request', error);
+            }
+            handlingClose = false;
+            return;
+          }
+
+          // Windows / Linux: read the user's close-button preference.
+          let behavior: CloseBehavior = 'quit';
+          try {
+            behavior = (await configManager.getConfig<CloseBehavior>('app.close_button_behavior')) ?? 'quit';
+          } catch {
+            // Fall back to quit if config cannot be read.
+          }
+
+          try {
+            if (behavior === 'minimize_to_tray') {
+              await systemAPI.minimizeToTray();
+            } else if (behavior === 'ask') {
+              const shouldQuit = await confirmDialog({
+                title: tCommon('closeDialog.title'),
+                message: tCommon('closeDialog.message'),
+                confirmText: tCommon('closeDialog.quit'),
+                cancelText: tCommon('closeDialog.minimizeToTray'),
+                showCancel: true,
+              });
+              if (shouldQuit) {
+                await persistInterruptedTurnsForExit();
+                await systemAPI.quitApp();
+              } else {
+                await systemAPI.minimizeToTray();
+              }
+            } else {
+              // quit
+              await persistInterruptedTurnsForExit();
+              await systemAPI.quitApp();
+            }
+          } catch (error) {
+            log.error('Failed to handle close request', { behavior, error });
+            try {
+              await persistInterruptedTurnsForExit();
+              await systemAPI.quitApp();
+            } catch { /* ignore */ }
+          } finally {
+            handlingClose = false;
           }
         });
       } catch (error) {
@@ -328,7 +396,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
     setupWindowCloseListener();
     return () => { if (unlistenFn) unlistenFn(); };
-  }, [canUseNativeWindowControls]);
+  }, [canUseNativeWindowControls, isMacOS, tCommon]);
 
   // Handle switch-to-files-panel event
   React.useEffect(() => {
@@ -443,11 +511,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<AcpSessionCreationEventDetail>).detail;
       const clientId = detail?.clientId?.trim() || 'ACP';
+      const action = detail?.action === 'restore' ? 'restore' : 'create';
       if (detail?.phase === 'start') {
-        setPendingAcpSessionClients(prev => [...prev, clientId]);
+        setPendingAcpSessionClients(prev => [...prev, { clientId, action }]);
       } else if (detail?.phase === 'finish') {
         setPendingAcpSessionClients(prev => {
-          const index = prev.indexOf(clientId);
+          const index = prev.findIndex(item => item.clientId === clientId && item.action === action);
           if (index === -1) return prev;
           return prev.filter((_, currentIndex) => currentIndex !== index);
         });
@@ -489,10 +558,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     isTransitioning ? 'bitfun-app-layout--transitioning' : '',
   ].filter(Boolean).join(' ');
 
-  if (isToolbarMode) return <ToolbarMode />;
+  if (isToolbarMode) {
+    return (
+      <>
+        <DailyAppUpdateGate />
+        <ToolbarMode />
+      </>
+    );
+  }
 
   return (
     <>
+      <DailyAppUpdateGate />
       <div className={containerClassName} data-testid="app-layout">
         <AnnouncementBanner />
         {/* Main content — always render WorkspaceBody; WelcomeScene in viewport handles no-workspace state */}
@@ -513,9 +590,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
           <div className="bitfun-app-acp-session-loading" role="status" aria-live="polite">
             <LoaderCircle size={18} className="bitfun-app-acp-session-loading__spinner" />
             <span>
-              {tCommon('nav.workspaces.creatingAcpSession', {
-                agentName: pendingAcpSessionClients[pendingAcpSessionClients.length - 1],
-              })}
+              {pendingAcpSessionClients[pendingAcpSessionClients.length - 1].action === 'restore'
+                ? tCommon('nav.workspaces.restoringAcpSession', {
+                  agentName: pendingAcpSessionClients[pendingAcpSessionClients.length - 1].clientId,
+                })
+                : tCommon('nav.workspaces.creatingAcpSession', {
+                  agentName: pendingAcpSessionClients[pendingAcpSessionClients.length - 1].clientId,
+                })}
             </span>
           </div>
         )}

@@ -7,6 +7,7 @@ use super::types::{ExecutionContext, ExecutionResult, RoundContext, RoundResult}
 use crate::agentic::agents::{
     get_agent_registry, PromptBuilder, PromptBuilderContext, RemoteExecutionHints,
 };
+use crate::agentic::context_profile::{ContextProfilePolicy, ModelCapabilityProfile};
 use crate::agentic::core::{
     render_system_reminder, Message, MessageContent, MessageHelper, MessageRole,
     MessageSemanticKind, RequestReasoningTokenPolicy, Session,
@@ -27,20 +28,34 @@ use crate::infrastructure::ai::get_global_ai_client_factory;
 use crate::service::config::get_global_config_service;
 use crate::service::config::types::{ModelCapability, ModelCategory};
 use crate::service::remote_ssh::workspace_state::get_remote_workspace_manager;
-use crate::util::elapsed_ms_u64;
 use crate::util::errors::{BitFunError, BitFunResult};
 use crate::util::token_counter::TokenCounter;
 use crate::util::types::Message as AIMessage;
 use crate::util::types::ToolDefinition;
+use crate::util::{elapsed_ms_u64, truncate_at_char_boundary};
 use log::{debug, error, info, trace, warn};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 /// Execution engine configuration
-#[derive(Debug, Clone, Default)]
-pub struct ExecutionEngineConfig;
+#[derive(Debug, Clone)]
+pub struct ExecutionEngineConfig {
+    pub max_rounds: usize,
+    /// Max consecutive rounds with identical tool-call signatures before loop detection triggers.
+    pub max_consecutive_same_tool: usize,
+}
+
+impl Default for ExecutionEngineConfig {
+    fn default() -> Self {
+        Self {
+            max_rounds: crate::service::config::types::DEFAULT_MAX_ROUNDS,
+            max_consecutive_same_tool: 3,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ContextCompactionOutcome {
@@ -55,12 +70,164 @@ pub struct ContextCompactionOutcome {
     pub applied: bool,
 }
 
+#[derive(Debug, Clone)]
+struct ContextHealthSnapshot {
+    token_usage_ratio: f32,
+    full_compression_count: usize,
+    compression_failure_count: u32,
+    repeated_tool_signature_count: usize,
+    consecutive_failed_commands: usize,
+}
+
+impl ContextHealthSnapshot {
+    fn from_runtime_observations(
+        token_usage_ratio: f32,
+        full_compression_count: usize,
+        compression_failure_count: u32,
+        recent_tool_signatures: &[String],
+        messages: &[Message],
+    ) -> Self {
+        Self {
+            token_usage_ratio,
+            full_compression_count,
+            compression_failure_count,
+            repeated_tool_signature_count: Self::repeated_tool_signature_count(
+                recent_tool_signatures,
+            ),
+            consecutive_failed_commands: Self::consecutive_failed_commands(messages),
+        }
+    }
+
+    fn token_usage_ratio(current_tokens: usize, context_window: usize) -> f32 {
+        if context_window == 0 {
+            return 0.0;
+        }
+        current_tokens as f32 / context_window as f32
+    }
+
+    fn log(&self, session_id: &str, turn_id: &str, round_index: usize, stage: &str) {
+        debug!(
+            "Context health snapshot: session_id={}, turn_id={}, round_index={}, stage={}, token_usage={:.3}, full_compression_count={}, compression_failure_count={}, repeated_tool_signature_count={}, consecutive_failed_commands={}",
+            session_id,
+            turn_id,
+            round_index,
+            stage,
+            self.token_usage_ratio,
+            self.full_compression_count,
+            self.compression_failure_count,
+            self.repeated_tool_signature_count,
+            self.consecutive_failed_commands
+        );
+    }
+
+    fn log_policy_thresholds(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        round_index: usize,
+        policy: &ContextProfilePolicy,
+    ) {
+        if policy.has_repeated_tool_loop(self.repeated_tool_signature_count) {
+            debug!(
+                "Context profile repeated-tool threshold reached: session_id={}, turn_id={}, round_index={}, profile={:?}, repeated_tool_signature_count={}, threshold={}",
+                session_id,
+                turn_id,
+                round_index,
+                policy.profile,
+                self.repeated_tool_signature_count,
+                policy.repeated_tool_signature_threshold
+            );
+        }
+
+        if policy.has_consecutive_command_failure_loop(self.consecutive_failed_commands) {
+            warn!(
+                "Context profile command-failure threshold reached: session_id={}, turn_id={}, round_index={}, profile={:?}, consecutive_failed_commands={}, threshold={}",
+                session_id,
+                turn_id,
+                round_index,
+                policy.profile,
+                self.consecutive_failed_commands,
+                policy.consecutive_failed_command_threshold
+            );
+        }
+    }
+
+    fn repeated_tool_signature_count(recent_tool_signatures: &[String]) -> usize {
+        let Some(last_signature) = recent_tool_signatures.last() else {
+            return 0;
+        };
+
+        let repeated_count = recent_tool_signatures
+            .iter()
+            .rev()
+            .take_while(|signature| *signature == last_signature)
+            .count();
+
+        if repeated_count >= 2 {
+            repeated_count
+        } else {
+            0
+        }
+    }
+
+    fn consecutive_failed_commands(messages: &[Message]) -> usize {
+        let mut failures = 0;
+        for message in messages.iter().rev() {
+            let Some(failed) = Self::command_result_failed(message) else {
+                continue;
+            };
+
+            if failed {
+                failures += 1;
+            } else {
+                break;
+            }
+        }
+        failures
+    }
+
+    fn command_result_failed(message: &Message) -> Option<bool> {
+        let MessageContent::ToolResult {
+            tool_name,
+            result,
+            is_error,
+            ..
+        } = &message.content
+        else {
+            return None;
+        };
+
+        if !matches!(tool_name.as_str(), "Bash" | "Git") {
+            return None;
+        }
+
+        Some(Self::tool_result_failed(result, *is_error))
+    }
+
+    fn tool_result_failed(result: &serde_json::Value, is_error: bool) -> bool {
+        is_error
+            || Self::bool_field(result, "timed_out") == Some(true)
+            || Self::bool_field(result, "interrupted") == Some(true)
+            || Self::bool_field(result, "success") == Some(false)
+            || Self::numeric_field(result, "exit_code").is_some_and(|code| code != 0)
+    }
+
+    fn bool_field(value: &serde_json::Value, key: &str) -> Option<bool> {
+        value.get(key).and_then(|field| field.as_bool())
+    }
+
+    fn numeric_field(value: &serde_json::Value, key: &str) -> Option<i64> {
+        value.get(key).and_then(|field| field.as_i64())
+    }
+}
+
 /// Execution engine
 pub struct ExecutionEngine {
     round_executor: Arc<RoundExecutor>,
     event_queue: Arc<EventQueue>,
     session_manager: Arc<SessionManager>,
     context_compressor: Arc<ContextCompressor>,
+    config: ExecutionEngineConfig,
 }
 
 impl ExecutionEngine {
@@ -72,13 +239,14 @@ impl ExecutionEngine {
         event_queue: Arc<EventQueue>,
         session_manager: Arc<SessionManager>,
         context_compressor: Arc<ContextCompressor>,
-        _config: ExecutionEngineConfig,
+        config: ExecutionEngineConfig,
     ) -> Self {
         Self {
             round_executor,
             event_queue,
             session_manager,
             context_compressor,
+            config,
         }
     }
 
@@ -91,6 +259,52 @@ impl ExecutionEngine {
             tools,
             RequestReasoningTokenPolicy::LatestTurnOnly,
         )
+    }
+
+    fn tool_signature_args_summary(args_str: &str) -> String {
+        if args_str.len() <= 128 {
+            return args_str.to_string();
+        }
+
+        let args_hash = hex::encode(Sha256::digest(args_str.as_bytes()));
+        format!(
+            "{}..#{}:sha256={}",
+            truncate_at_char_boundary(args_str, 64),
+            args_str.len(),
+            args_hash
+        )
+    }
+
+    /// Detect periodic tool-signature loops in the trailing window.
+    ///
+    /// Returns `true` when the last `2 * threshold` rounds contain at most
+    /// `threshold` distinct signatures AND every signature in that window
+    /// appeared at least twice. Such windows have no new exploration and
+    /// represent the model toggling between a small fixed set of calls
+    /// (e.g. `A-B-A-B-A-B`, `A-B-C-A-B-C`).
+    ///
+    /// The window length is `2 * threshold` (rather than `threshold`) so the
+    /// strict consecutive check (`windows(2).all(eq)`) keeps owning the
+    /// `A-A-A` case at threshold rounds, and this detector only fires once
+    /// the alternating pattern has had room to repeat.
+    fn is_periodic_tool_signature_loop(recent_signatures: &[String], threshold: usize) -> bool {
+        let threshold = threshold.max(1);
+        let window_size = threshold.saturating_mul(2);
+        if window_size == 0 || recent_signatures.len() < window_size {
+            return false;
+        }
+
+        let tail = &recent_signatures[recent_signatures.len() - window_size..];
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for sig in tail {
+            *counts.entry(sig.as_str()).or_insert(0) += 1;
+        }
+
+        if counts.len() > threshold {
+            return false;
+        }
+
+        counts.values().all(|&count| count >= 2)
     }
 
     fn assistant_has_tool_calls(message: &Message) -> bool {
@@ -512,6 +726,7 @@ impl ExecutionEngine {
             steering_interrupt: None,
             cancellation_token: CancellationToken::new(),
             workspace_services: context.workspace_services.clone(),
+            recover_partial_on_cancel: context.recover_partial_on_cancel,
         };
 
         // Tools are disabled here (None) — model must respond in plain text.
@@ -742,6 +957,7 @@ impl ExecutionEngine {
         context_window: usize,
         tool_definitions: &Option<Vec<ToolDefinition>>,
         system_prompt_message: Message,
+        compression_contract_limit: usize,
         tail_policy: CompressionTailPolicy,
     ) -> BitFunResult<Option<(usize, Vec<Message>)>> {
         let event_subagent_parent_info = subagent_parent_info.map(|info| info.clone().into());
@@ -783,14 +999,18 @@ impl ExecutionEngine {
         .await;
 
         // Execute compression
+        let compression_contract = self
+            .session_manager
+            .compression_contract_for_session(session_id, compression_contract_limit);
         match self
             .context_compressor
-            .compress_turns(
+            .compress_turns_with_contract(
                 session_id,
                 context_window,
                 turn_index_to_keep,
                 turns,
                 tail_policy,
+                compression_contract,
             )
             .await
         {
@@ -955,9 +1175,30 @@ impl ExecutionEngine {
             });
         }
 
+        let is_review_subagent = get_agent_registry()
+            .get_subagent_is_review(&session.agent_type)
+            .unwrap_or(false);
+        let model_id = session.config.model_id.as_deref().unwrap_or_default();
+        let context_profile_policy = ContextProfilePolicy::for_agent_context_and_model(
+            &session.agent_type,
+            is_review_subagent,
+            model_id,
+            model_id,
+        );
+        let compression_contract = self.session_manager.compression_contract_for_session(
+            session_id,
+            context_profile_policy.compression_contract_limit,
+        );
         match self
             .context_compressor
-            .compress_turns(session_id, context_window, turns.len(), turns, tail_policy)
+            .compress_turns_with_contract(
+                session_id,
+                context_window,
+                turns.len(),
+                turns,
+                tail_policy,
+                compression_contract,
+            )
             .await
         {
             Ok(compression_result) => {
@@ -1215,6 +1456,30 @@ impl ExecutionEngine {
             );
         }
 
+        let model_capability_profile = ModelCapabilityProfile::from_resolved_model(
+            &resolved_primary_model_id,
+            &ai_client.config.model,
+        );
+        let is_review_subagent = agent_registry
+            .get_subagent_is_review(&agent_type)
+            .unwrap_or(false);
+        let context_profile_policy = ContextProfilePolicy::for_agent_context(
+            &agent_type,
+            is_review_subagent,
+            model_capability_profile,
+        );
+        debug!(
+            "Context profile policy selected: session_id={}, agent_type={}, profile={:?}, model_capability={:?}, compression_contract_limit={}, subagent_concurrency_cap={}, repeated_tool_signature_threshold={}, consecutive_failed_command_threshold={}",
+            context.session_id,
+            agent_type,
+            context_profile_policy.profile,
+            model_capability_profile,
+            context_profile_policy.compression_contract_limit,
+            context_profile_policy.subagent_concurrency_cap,
+            context_profile_policy.repeated_tool_signature_threshold,
+            context_profile_policy.consecutive_failed_command_threshold
+        );
+
         // 3. Get System Prompt from current Agent
         debug!(
             "Building system prompt from agent: {}, model={}",
@@ -1258,6 +1523,14 @@ impl ExecutionEngine {
         let mut finalization_reason: Option<&'static str> = None;
         let mut consecutive_compression_failures: u32 = 0;
         const MAX_CONSECUTIVE_COMPRESSION_FAILURES: u32 = 3;
+
+        // P0: Loop detection: track recent tool call signatures
+        let mut recent_tool_signatures: Vec<String> = Vec::new();
+        let mut loop_detected = false;
+        let mut loop_recovery_attempts: usize = 0;
+        const MAX_LOOP_RECOVERY_ATTEMPTS: usize = 3;
+        let mut full_compression_count = 0usize;
+        let mut compression_failure_count = 0u32;
 
         // Save the last token usage statistics
         let mut last_usage: Option<crate::util::types::ai::GeminiUsage> = None;
@@ -1320,8 +1593,6 @@ impl ExecutionEngine {
 
         let enable_context_compression = session.config.enable_context_compression;
         let compression_threshold = session.config.compression_threshold;
-        let microcompact_config =
-            crate::agentic::session::compression::microcompact::MicrocompactConfig::default();
 
         let mut execution_context_vars = context.context.clone();
         execution_context_vars.insert(
@@ -1363,8 +1634,30 @@ impl ExecutionEngine {
 
         // Loop to execute model rounds
         loop {
+            if completed_rounds >= self.config.max_rounds {
+                warn!(
+                    "Reached max rounds limit: {}, stopping execution",
+                    self.config.max_rounds
+                );
+                finalization_reason = Some("max_rounds");
+                break;
+            }
+
             // Check and compress before sending AI request
-            let mut current_tokens =
+            //
+            // NOTE: There used to be a "microcompact" pre-pass here that
+            // silently rewrote older tool-result contents into a placeholder.
+            // It has been removed: it mutated already-sent message prefixes —
+            // killing provider KV-cache hits on every round — and stripped the
+            // model of memory of what it had already done, which directly
+            // drove repetitive tool-call loops in long exploratory subagents
+            // (see deep-review subagent loop incident, 2026-05-12).
+            //
+            // The remaining context-pressure layers are:
+            //   - L1: AI-summary based full compression (preserves semantics).
+            //   - L2: Emergency truncation (only if tokens still exceed the
+            //         provider context window after L1).
+            let current_tokens =
                 Self::estimate_request_tokens_internal(&messages, tool_definitions.as_deref());
             debug!(
                 "Round {} token usage before send: {} / {} tokens ({:.1}%)",
@@ -1373,33 +1666,6 @@ impl ExecutionEngine {
                 context_window,
                 (current_tokens as f32 / context_window as f32) * 100.0
             );
-
-            // L0: Microcompact — clear old compactable tool results before
-            // considering full compression.  This is a cheap, local-only
-            // operation that can free significant tokens.
-            let token_usage_ratio = current_tokens as f32 / context_window as f32;
-            if enable_context_compression && token_usage_ratio >= microcompact_config.trigger_ratio
-            {
-                if let Some(mc_result) =
-                    crate::agentic::session::compression::microcompact::microcompact_messages(
-                        &mut messages,
-                        &microcompact_config,
-                    )
-                {
-                    current_tokens = Self::estimate_request_tokens_internal(
-                        &mut messages,
-                        tool_definitions.as_deref(),
-                    );
-                    debug!(
-                        "Round {} after microcompact: cleared={}, kept={}, tokens now {} ({:.1}%)",
-                        round_index,
-                        mc_result.tools_cleared,
-                        mc_result.tools_kept,
-                        current_tokens,
-                        (current_tokens as f32 / context_window as f32) * 100.0
-                    );
-                }
-            }
 
             let token_usage_ratio = current_tokens as f32 / context_window as f32;
             let should_compress =
@@ -1440,6 +1706,7 @@ impl ExecutionEngine {
                         context_window,
                         &tool_definitions,
                         system_prompt_message.clone(),
+                        context_profile_policy.compression_contract_limit,
                         CompressionTailPolicy::PreserveLiveFrontier,
                     )
                     .await
@@ -1455,6 +1722,7 @@ impl ExecutionEngine {
                         );
 
                         messages = compressed_messages;
+                        full_compression_count += 1;
                         consecutive_compression_failures = 0;
                     }
                     Ok(None) => {
@@ -1463,6 +1731,7 @@ impl ExecutionEngine {
                     }
                     Err(e) => {
                         consecutive_compression_failures += 1;
+                        compression_failure_count += 1;
                         error!(
                             "Round {} compression failed ({}/{}): {}, continuing with uncompressed context",
                             round_index,
@@ -1496,6 +1765,22 @@ impl ExecutionEngine {
                 );
             }
 
+            let before_send_tokens =
+                Self::estimate_request_tokens_internal(&messages, tool_definitions.as_deref());
+            ContextHealthSnapshot::from_runtime_observations(
+                ContextHealthSnapshot::token_usage_ratio(before_send_tokens, context_window),
+                full_compression_count,
+                compression_failure_count,
+                &recent_tool_signatures,
+                &messages,
+            )
+            .log(
+                &context.session_id,
+                &context.dialog_turn_id,
+                round_index,
+                "before_send",
+            );
+
             // Create round context
             let mut round_context_vars = execution_context_vars.clone();
             if context.skip_tool_confirmation {
@@ -1523,6 +1808,7 @@ impl ExecutionEngine {
                 }),
                 cancellation_token: CancellationToken::new(),
                 workspace_services: context.workspace_services.clone(),
+                recover_partial_on_cancel: context.recover_partial_on_cancel,
             };
 
             // Execute single model round
@@ -1606,6 +1892,144 @@ impl ExecutionEngine {
             // Track partial recovery reason from the last round
             if round_result.partial_recovery_reason.is_some() {
                 last_partial_recovery_reason = round_result.partial_recovery_reason.clone();
+            }
+
+            // P0: Consecutive same-tool-call loop detection
+            if !round_result.tool_calls.is_empty() {
+                let mut sigs: Vec<String> = round_result
+                    .tool_calls
+                    .iter()
+                    .map(|tc| {
+                        let args_str = tc.arguments.to_string();
+                        let args_summary = Self::tool_signature_args_summary(&args_str);
+                        format!("{}:{}", tc.tool_name, args_summary)
+                    })
+                    .collect();
+                sigs.sort();
+                let round_sig = sigs.join("|");
+                recent_tool_signatures.push(round_sig);
+            } else {
+                recent_tool_signatures.clear();
+            }
+
+            let after_round_tokens =
+                Self::estimate_request_tokens_internal(&messages, tool_definitions.as_deref());
+            let after_round_health = ContextHealthSnapshot::from_runtime_observations(
+                ContextHealthSnapshot::token_usage_ratio(after_round_tokens, context_window),
+                full_compression_count,
+                compression_failure_count,
+                &recent_tool_signatures,
+                &messages,
+            );
+            after_round_health.log(
+                &context.session_id,
+                &context.dialog_turn_id,
+                round_index,
+                "after_round",
+            );
+            after_round_health.log_policy_thresholds(
+                &context.session_id,
+                &context.dialog_turn_id,
+                round_index,
+                &context_profile_policy,
+            );
+
+            let max_consec = context_profile_policy
+                .effective_loop_threshold(self.config.max_consecutive_same_tool);
+            if recent_tool_signatures.len() >= max_consec {
+                let tail = &recent_tool_signatures[recent_tool_signatures.len() - max_consec..];
+                if tail.windows(2).all(|w| w[0] == w[1]) {
+                    if loop_recovery_attempts < MAX_LOOP_RECOVERY_ATTEMPTS {
+                        loop_recovery_attempts += 1;
+                        warn!(
+                            "Loop detected: {} consecutive rounds with identical tool signatures, injecting recovery prompt #{}",
+                            max_consec, loop_recovery_attempts
+                        );
+                        let reminder = format!(
+                            "<system_reminder>Loop detected: you have repeated the same tool call with identical arguments {} times in a row. \
+                            This means the approach is not making progress. You MUST now change your strategy: \
+                            (1) if the tool keeps failing, try a completely different approach or tool; \
+                            (2) if you are stuck, step back and reason about the root cause before acting; \
+                            (3) if the task is genuinely impossible with the available tools, provide a clear explanation to the user. \
+                            Do NOT repeat the same tool call again.</system_reminder>",
+                            max_consec
+                        );
+                        let user_msg = Message::user(reminder);
+                        messages.push(user_msg.clone());
+                        if let Err(e) = self
+                            .session_manager
+                            .add_message(&context.session_id, user_msg)
+                            .await
+                        {
+                            warn!("Failed to persist loop recovery reminder: {}", e);
+                        }
+                        // Clear the recent signatures so the detector resets after recovery.
+                        recent_tool_signatures.clear();
+                        // Do NOT break — continue the loop so the model gets a chance to recover.
+                    } else {
+                        warn!(
+                            "Loop detected: {} consecutive rounds with identical tool signatures, max recovery attempts ({}) exhausted, stopping",
+                            max_consec, MAX_LOOP_RECOVERY_ATTEMPTS
+                        );
+                        loop_detected = true;
+                        finalization_reason = Some("loop_detected");
+                        break;
+                    }
+                }
+            }
+
+            // Periodic-pattern loop detection.
+            //
+            // The strict consecutive check above only fires on `A-A-A` patterns.
+            // Real-world subagent loops often alternate between a small set of
+            // signatures (e.g. `A-B-A-B-A-B` when the model toggles a single
+            // argument such as the regex pattern, while every other call is
+            // identical). Such rounds never collapse to a single signature, so
+            // the model can stay stuck for hundreds of rounds without tripping
+            // the strict check.
+            //
+            // The periodic detector inspects the last `2 * max_consec` rounds:
+            // if at most `max_consec` distinct signatures appear AND every one
+            // of those signatures appears at least twice, the window contains
+            // no genuine new exploration and we treat it as a loop.
+            if Self::is_periodic_tool_signature_loop(&recent_tool_signatures, max_consec) {
+                let window_size = max_consec.max(1).saturating_mul(2);
+                if loop_recovery_attempts < MAX_LOOP_RECOVERY_ATTEMPTS {
+                    loop_recovery_attempts += 1;
+                    warn!(
+                        "Loop detected: last {} rounds form a periodic tool-call pattern (<= {} distinct signatures, each repeated), injecting recovery prompt #{}",
+                        window_size, max_consec, loop_recovery_attempts
+                    );
+                    let reminder = format!(
+                        "<system_reminder>Loop detected: your last {} tool calls form a repeating pattern with no new progress. \
+                        You are cycling between the same actions without advancing the task. You MUST now change your strategy: \
+                        (1) try a completely different approach or tool; \
+                        (2) step back and reason about the root cause before acting; \
+                        (3) if the task is genuinely impossible with the available tools, provide a clear explanation to the user. \
+                        Do NOT repeat the same pattern of tool calls.</system_reminder>",
+                        window_size
+                    );
+                    let user_msg = Message::user(reminder);
+                    messages.push(user_msg.clone());
+                    if let Err(e) = self
+                        .session_manager
+                        .add_message(&context.session_id, user_msg)
+                        .await
+                    {
+                        warn!("Failed to persist periodic loop recovery reminder: {}", e);
+                    }
+                    // Clear the recent signatures so the detector resets after recovery.
+                    recent_tool_signatures.clear();
+                    // Do NOT break — continue the loop so the model gets a chance to recover.
+                } else {
+                    warn!(
+                        "Loop detected: last {} rounds form a periodic tool-call pattern, max recovery attempts ({}) exhausted, stopping",
+                        window_size, MAX_LOOP_RECOVERY_ATTEMPTS
+                    );
+                    loop_detected = true;
+                    finalization_reason = Some("loop_detected");
+                    break;
+                }
             }
 
             // User-steering messages submitted while this turn is running: drain and inject
@@ -1731,10 +2155,13 @@ impl ExecutionEngine {
                 }
             }
 
-            // Check if cancelled after each round
-            let dialog_turn_cancelled =
-                !self.round_executor.has_active_dialog_turn(&dialog_turn_id);
-            if dialog_turn_cancelled {
+            // Check if cancellation was requested after each round. Tokens stay
+            // registered until final cleanup so early cancellation can be
+            // observed by the first round.
+            if self
+                .round_executor
+                .is_dialog_turn_cancelled(&dialog_turn_id)
+            {
                 debug!(
                     "Dialog turn cancelled, stopping execution: dialog_turn_id={}",
                     dialog_turn_id
@@ -1881,7 +2308,11 @@ impl ExecutionEngine {
 
         let finish_reason = FinishReason::Complete;
         // success reflects whether we ended with a usable final answer.
-        let success = !matches!(effective_finish_reason, "finalize_failed" | "empty_round");
+        let success = !loop_detected
+            && !matches!(
+                effective_finish_reason,
+                "finalize_failed" | "empty_round" | "max_rounds"
+            );
 
         // Emit dialog turn completed event
         debug!("Preparing to send DialogTurnCompleted event");
@@ -2061,8 +2492,7 @@ impl ExecutionEngine {
             ("TodoWrite", 12),
             ("Skill", 13),
             ("Log", 14),
-            ("MermaidInteractive", 15),
-            ("ControlHub", 16),
+            ("ControlHub", 15),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
@@ -2083,11 +2513,12 @@ impl ExecutionEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::ExecutionEngine;
+    use super::{ContextHealthSnapshot, ExecutionEngine};
     use crate::agentic::core::{Message, ToolCall, ToolResult};
     use crate::service::config::types::AIConfig;
     use crate::service::config::types::AIModelConfig;
     use serde_json::json;
+    use sha2::{Digest, Sha256};
 
     fn build_model(id: &str, name: &str, model_name: &str) -> AIModelConfig {
         AIModelConfig {
@@ -2133,6 +2564,173 @@ mod tests {
     }
 
     #[test]
+    fn tool_signature_args_summary_truncates_on_utf8_boundary() {
+        let args = format!("{}{}", "a".repeat(62), "案".repeat(30));
+        let args_hash = hex::encode(Sha256::digest(args.as_bytes()));
+
+        let summary = ExecutionEngine::tool_signature_args_summary(&args);
+
+        assert_eq!(
+            summary,
+            format!("{}..#{}:sha256={}", "a".repeat(62), args.len(), args_hash)
+        );
+    }
+
+    #[test]
+    fn tool_signature_args_summary_keeps_short_arguments() {
+        let args = r#"{"content":"short"}"#;
+
+        let summary = ExecutionEngine::tool_signature_args_summary(args);
+
+        assert_eq!(summary, args);
+    }
+
+    #[test]
+    fn tool_signature_args_summary_distinguishes_same_prefix_and_length() {
+        let first = format!("{}{}", "x".repeat(64), "a".repeat(80));
+        let second = format!("{}{}", "x".repeat(64), "b".repeat(80));
+
+        let first_summary = ExecutionEngine::tool_signature_args_summary(&first);
+        let second_summary = ExecutionEngine::tool_signature_args_summary(&second);
+
+        assert_eq!(first.len(), second.len());
+        assert_ne!(first, second);
+        assert_ne!(first_summary, second_summary);
+    }
+
+    #[test]
+    fn periodic_loop_detector_ignores_short_windows() {
+        let signatures: Vec<String> = vec!["A".to_string(), "B".to_string(), "A".to_string()];
+        assert!(!ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_catches_consecutive_identical_window() {
+        let signatures: Vec<String> = std::iter::repeat_n("A".to_string(), 6).collect();
+        assert!(ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_catches_alternating_pattern() {
+        // A-B-A-B-A-B is a stable period-2 loop with 3 distinct rounds per
+        // signature. The strict consecutive check cannot see this because no
+        // two adjacent rounds share the same signature.
+        let signatures: Vec<String> = ["A", "B", "A", "B", "A", "B"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_catches_three_signature_cycle() {
+        // A-B-C-A-B-C: window size 6, three distinct signatures, each twice.
+        let signatures: Vec<String> = ["A", "B", "C", "A", "B", "C"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_skips_genuine_progress() {
+        // Six distinct signatures means each tool call is a new exploration
+        // step - not a loop, even if the same tool name keeps appearing.
+        let signatures: Vec<String> = ["A", "B", "C", "D", "E", "F"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(!ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_skips_when_a_signature_appears_only_once() {
+        // A-B-A-B-A-C: trailing window has 3 distinct signatures, but C
+        // appeared exactly once - the model is still introducing new work.
+        let signatures: Vec<String> = ["A", "B", "A", "B", "A", "C"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(!ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_only_inspects_trailing_window() {
+        // The first 4 rounds were genuine exploration, but the last 6 are a
+        // stable A-B alternation. We should still flag the loop.
+        let signatures: Vec<String> = ["X1", "X2", "X3", "X4", "A", "B", "A", "B", "A", "B"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            3
+        ));
+    }
+
+    #[test]
+    fn periodic_loop_detector_treats_threshold_zero_like_one() {
+        let signatures: Vec<String> = ["A", "A"].iter().map(|s| (*s).to_string()).collect();
+        // A two-round window of identical signatures with threshold 0 should
+        // still register as a loop (threshold is clamped to 1, window = 2).
+        assert!(ExecutionEngine::is_periodic_tool_signature_loop(
+            &signatures,
+            0
+        ));
+    }
+
+    #[test]
+    fn context_health_snapshot_scores_repeated_tool_signatures() {
+        let signatures = vec![
+            r#"Bash:{"command":"cargo test"}"#.to_string(),
+            r#"Bash:{"command":"cargo test"}"#.to_string(),
+            r#"Bash:{"command":"cargo test"}"#.to_string(),
+        ];
+
+        let snapshot =
+            ContextHealthSnapshot::from_runtime_observations(0.82, 1, 0, &signatures, &[]);
+
+        assert!((snapshot.token_usage_ratio - 0.82).abs() < f32::EPSILON);
+        assert_eq!(snapshot.full_compression_count, 1);
+        assert_eq!(snapshot.compression_failure_count, 0);
+        assert_eq!(snapshot.repeated_tool_signature_count, 3);
+        assert_eq!(snapshot.consecutive_failed_commands, 0);
+    }
+
+    #[test]
+    fn context_health_snapshot_counts_consecutive_failed_commands() {
+        let messages = vec![
+            command_result("Bash", true, Some(0)),
+            command_result("Bash", false, Some(1)),
+            command_result("Git", false, Some(128)),
+        ];
+
+        let snapshot = ContextHealthSnapshot::from_runtime_observations(0.44, 0, 2, &[], &messages);
+
+        assert_eq!(snapshot.repeated_tool_signature_count, 0);
+        assert_eq!(snapshot.consecutive_failed_commands, 2);
+        assert_eq!(snapshot.compression_failure_count, 2);
+    }
+
+    #[test]
     fn assistant_has_tool_calls_detects_mixed_tool_message() {
         let message = Message::assistant_with_tools(
             String::new(),
@@ -2140,7 +2738,9 @@ mod tests {
                 tool_id: "tool-1".to_string(),
                 tool_name: "Read".to_string(),
                 arguments: json!({ "path": "README.md" }),
+                raw_arguments: None,
                 is_error: false,
+                recovered_from_truncation: false,
             }],
         );
 
@@ -2158,7 +2758,9 @@ mod tests {
                 tool_id: "tool-1".to_string(),
                 tool_name: "Read".to_string(),
                 arguments: json!({ "path": "README.md" }),
+                raw_arguments: None,
                 is_error: false,
+                recovered_from_truncation: false,
             }],
         );
         let tool_result = Message::tool_result(ToolResult {
@@ -2180,5 +2782,21 @@ mod tests {
             Message::user("read it".to_string()),
             assistant,
         ]));
+    }
+
+    fn command_result(tool_name: &str, success: bool, exit_code: Option<i32>) -> Message {
+        Message::tool_result(ToolResult {
+            tool_id: format!("{}-tool", tool_name),
+            tool_name: tool_name.to_string(),
+            result: json!({
+                "success": success,
+                "exit_code": exit_code,
+                "command": format!("{} command", tool_name),
+            }),
+            result_for_assistant: None,
+            is_error: !success,
+            duration_ms: Some(1),
+            image_attachments: None,
+        })
     }
 }

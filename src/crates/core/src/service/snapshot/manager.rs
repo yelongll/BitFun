@@ -1,4 +1,4 @@
-use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
+use crate::agentic::tools::framework::{DynamicToolInfo, Tool, ToolResult, ToolUseContext};
 use crate::agentic::tools::registry::ToolRegistry;
 use crate::service::remote_ssh::workspace_state::is_remote_path;
 use crate::service::snapshot::service::SnapshotService;
@@ -383,6 +383,14 @@ impl Tool for WrappedTool {
 
     fn input_json_schema(&self) -> Option<Value> {
         self.original_tool.input_json_schema()
+    }
+
+    fn dynamic_provider_id(&self) -> Option<&str> {
+        self.original_tool.dynamic_provider_id()
+    }
+
+    fn dynamic_tool_info(&self) -> Option<DynamicToolInfo> {
+        self.original_tool.dynamic_tool_info()
     }
 
     fn user_facing_name(&self) -> String {

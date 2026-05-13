@@ -41,7 +41,7 @@ import { createLogger } from '@/shared/utils/logger';
 import './AIFeaturesConfig.scss';
 import './DebugConfig.scss';
 
-const log = createLogger('SessionConfig');
+const log = createLogger('SessionSettingsPanels');
 
 const IS_TAURI_DESKTOP = typeof window !== 'undefined' && '__TAURI__' in window;
 
@@ -61,9 +61,24 @@ type BrowserControlLaunchResponse = {
   browserKind: string;
 };
 
+type BrowserControlBrowserOption = {
+  value: string;
+  label: string;
+  installed: boolean;
+};
+
+const DEFAULT_BROWSER_CONTROL_BROWSER = 'default';
+
 const DEFAULT_COMPANION_PET_VALUE = '__default_panda__';
 
-const SessionConfig: React.FC = () => {
+export type SessionSettingsPanelVariant = 'personalization' | 'permissions';
+
+interface SessionSettingsPanelsProps {
+  variant: SessionSettingsPanelVariant;
+}
+
+
+const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }) => {
   const { t } = useTranslation('settings/session-config');
   const { t: tTools } = useTranslation('settings/agentic-tools');
   const { t: tDebug } = useTranslation('settings/debug');
@@ -94,6 +109,8 @@ const SessionConfig: React.FC = () => {
   const [browserKind, setBrowserKind] = useState('');
   const [browserVersion, setBrowserVersion] = useState<string | null>(null);
   const [browserPageCount, setBrowserPageCount] = useState(0);
+  const [browserOptions, setBrowserOptions] = useState<BrowserControlBrowserOption[]>([]);
+  const [preferredBrowser, setPreferredBrowser] = useState(DEFAULT_BROWSER_CONTROL_BROWSER);
   const [browserControlBusy, setBrowserControlBusy] = useState(false);
   const [browserStatusLoading, setBrowserStatusLoading] = useState(false);
   const [platform, setPlatform] = useState<string>('');
@@ -129,17 +146,21 @@ const SessionConfig: React.FC = () => {
     setBrowserStatusLoading(true);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const s = await invoke<{
-        cdpAvailable: boolean;
-        browserKind: string;
-        browserVersion: string | null;
-        port: number;
-        pageCount: number;
-      }>('browser_control_get_status', { request: { port: 9222 } });
+      const [s, browsers] = await Promise.all([
+        invoke<{
+          cdpAvailable: boolean;
+          browserKind: string;
+          browserVersion: string | null;
+          port: number;
+          pageCount: number;
+        }>('browser_control_get_status', { request: { port: 9222 } }),
+        invoke<{ options: BrowserControlBrowserOption[] }>('browser_control_list_browsers'),
+      ]);
       setBrowserCdpAvailable(s.cdpAvailable);
       setBrowserKind(s.browserKind);
       setBrowserVersion(s.browserVersion);
       setBrowserPageCount(s.pageCount);
+      setBrowserOptions(browsers.options);
     } catch (error) {
       log.error('browser_control_get_status failed', error);
     } finally {
@@ -176,6 +197,7 @@ const SessionConfig: React.FC = () => {
         confirmTimeout,
         debugConfigData,
         computerUseCfg,
+        browserControlPreferredBrowser,
         loadedCompanionPets,
       ] = await Promise.all([
         aiExperienceConfigService.getSettingsAsync(),
@@ -186,6 +208,7 @@ const SessionConfig: React.FC = () => {
         configManager.getConfig<number | null>('ai.tool_confirmation_timeout_secs'),
         configManager.getConfig<DebugModeConfig>('ai.debug_mode_config'),
         configManager.getConfig<boolean>('ai.computer_use_enabled'),
+        configManager.getConfig<string>('ai.browser_control_preferred_browser'),
         listAgentCompanionPets(),
       ]);
 
@@ -197,6 +220,7 @@ const SessionConfig: React.FC = () => {
       setExecutionTimeout(execTimeout != null ? String(execTimeout) : '');
       setConfirmationTimeout(confirmTimeout != null ? String(confirmTimeout) : '');
       if (debugConfigData) setDebugConfig(debugConfigData);
+      setPreferredBrowser(browserControlPreferredBrowser || DEFAULT_BROWSER_CONTROL_BROWSER);
 
       refreshDesktopStatus(computerUseCfg);
     } catch (error) {
@@ -436,6 +460,28 @@ const SessionConfig: React.FC = () => {
     }
   };
 
+  const handleBrowserControlBrowserChange = async (value: string | number) => {
+    const nextValue = String(value || DEFAULT_BROWSER_CONTROL_BROWSER);
+    const previousValue = preferredBrowser;
+    setPreferredBrowser(nextValue);
+    setBrowserControlBusy(true);
+    try {
+      await configManager.setConfig(
+        'ai.browser_control_preferred_browser',
+        nextValue === DEFAULT_BROWSER_CONTROL_BROWSER ? '' : nextValue,
+      );
+      await refreshBrowserControlStatus();
+    } catch (error) {
+      log.error('Failed to save browser_control_preferred_browser', error);
+      setPreferredBrowser(previousValue);
+      notificationService.error(
+        `${tTools('messages.saveFailed')}: ` + (error instanceof Error ? error.message : String(error))
+      );
+    } finally {
+      setBrowserControlBusy(false);
+    }
+  };
+
   const handleBrowserControlLaunch = async () => {
     setBrowserControlBusy(true);
     try {
@@ -662,11 +708,23 @@ const SessionConfig: React.FC = () => {
   const browserStatusLabel = browserCdpAvailable
     ? `${browserKind} · ${browserPageCount} ${t('browserControl.tabs')}`
     : browserStatusLoading ? t('loading.text') : t('browserControl.notConnected');
+  const browserSelectOptions: SelectOption[] = browserOptions.map((option) => ({
+    value: option.value,
+    label: option.installed ? option.label : `${option.label} (${t('browserControl.notInstalled')})`,
+    disabled: !option.installed,
+  }));
+
+  const pageTitle = variant === 'personalization'
+    ? t('personalizationPage.title')
+    : t('permissionsPage.title');
+  const pageSubtitle = variant === 'personalization'
+    ? t('personalizationPage.subtitle')
+    : t('permissionsPage.subtitle');
 
   if (isLoading || !settings) {
     return (
       <ConfigPageLayout className="bitfun-func-agent-config">
-        <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
+        <ConfigPageHeader title={pageTitle} subtitle={pageSubtitle} />
         <ConfigPageContent className="bitfun-func-agent-config__content">
           <ConfigPageLoading text={t('loading.text')} />
         </ConfigPageContent>
@@ -676,9 +734,12 @@ const SessionConfig: React.FC = () => {
 
   return (
     <ConfigPageLayout className="bitfun-func-agent-config">
-      <ConfigPageHeader title={t('title')} subtitle={t('subtitle')} />
+      <ConfigPageHeader title={pageTitle} subtitle={pageSubtitle} />
 
       <ConfigPageContent className="bitfun-func-agent-config__content">
+
+        {variant === 'personalization' ? (
+          <>
 
         {/* ── Auto session title ─────────────────────────────────── */}
         <ConfigPageSection
@@ -843,30 +904,11 @@ const SessionConfig: React.FC = () => {
           </ConfigPageRow>
         </ConfigPageSection>
 
-        {/* ── Thinking process control ──────────────────────────── */}
-        <ConfigPageSection
-          title={t('features.thinkingProcess.title')}
-          description={t('features.thinkingProcess.subtitle')}
-        >
-          <ConfigPageRow label={t('features.thinkingProcess.show')} align="center">
-            <div className="bitfun-func-agent-config__row-control">
-              <Switch
-                checked={settings.show_thinking_process}
-                onChange={(e) => updateSetting('show_thinking_process', e.target.checked)}
-                size="small"
-              />
-            </div>
-          </ConfigPageRow>
-          <ConfigPageRow label={t('features.thinkingProcess.showCompleted')} description={t('features.thinkingProcess.showCompletedDesc')} align="center">
-            <div className="bitfun-func-agent-config__row-control">
-              <Switch
-                checked={settings.show_completed_thinking_item}
-                onChange={(e) => updateSetting('show_completed_thinking_item', e.target.checked)}
-                size="small"
-              />
-            </div>
-          </ConfigPageRow>
-        </ConfigPageSection>
+          </>
+        ) : null}
+
+        {variant === 'permissions' ? (
+          <>
 
         {/* ── Accelerated workspace search ───────────────────────── */}
         <ConfigPageSection
@@ -1049,6 +1091,27 @@ const SessionConfig: React.FC = () => {
         >
           {IS_TAURI_DESKTOP ? (
             <>
+              {/* Only show browser selector when CDP is not connected */}
+              {!browserCdpAvailable && (
+              <ConfigPageRow
+                label={t('browserControl.preferredBrowser')}
+                description={t('browserControl.preferredBrowserDesc')}
+                align="center"
+                balanced
+              >
+                <div className="bitfun-func-agent-config__row-control">
+                  <Select
+                    value={preferredBrowser}
+                    options={browserSelectOptions}
+                    size="small"
+                    disabled={browserControlBusy || browserStatusLoading || browserSelectOptions.length === 0}
+                    onChange={(value) => {
+                      if (!Array.isArray(value)) void handleBrowserControlBrowserChange(value);
+                    }}
+                  />
+                </div>
+              </ConfigPageRow>
+              )}
               <ConfigPageRow
                 label={t('browserControl.status')}
                 description={t('browserControl.statusDesc') || undefined}
@@ -1383,9 +1446,18 @@ const SessionConfig: React.FC = () => {
           </div>
         </Modal>
 
+          </>
+        ) : null}
+
       </ConfigPageContent>
     </ConfigPageLayout>
   );
 };
 
-export default SessionConfig;
+export function SessionPersonalizationConfig(): React.ReactElement {
+  return <SessionSettingsPanels variant="personalization" />;
+}
+
+export function SessionPermissionsConfig(): React.ReactElement {
+  return <SessionSettingsPanels variant="permissions" />;
+}

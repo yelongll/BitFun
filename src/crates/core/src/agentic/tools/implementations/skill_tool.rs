@@ -9,10 +9,10 @@ use crate::agentic::tools::framework::{
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use log::debug;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 // Use skills module
-use super::skills::{SkillLocation, get_skill_registry};
+use super::skills::{get_skill_registry, SkillLocation};
 
 /// Skill tool
 pub struct SkillTool;
@@ -265,12 +265,15 @@ impl Default for SkillTool {
 #[cfg(test)]
 mod tests {
     use super::SkillTool;
-    use crate::agentic::WorkspaceBinding;
+    use crate::agentic::tools::implementations::skills::{
+        registry::SkillRegistry, SkillLocation,
+    };
     use crate::agentic::tools::framework::{Tool, ToolResult};
     use crate::agentic::workspace::{
         WorkspaceCommandOptions, WorkspaceCommandResult, WorkspaceDirEntry, WorkspaceFileSystem,
         WorkspaceServices, WorkspaceShell,
     };
+    use crate::agentic::WorkspaceBinding;
     use crate::service::remote_ssh::workspace_state::workspace_session_identity;
     use async_trait::async_trait;
     use serde_json::json;
@@ -432,11 +435,120 @@ Use the remote project skill.
         };
         assert_eq!(data["skill_name"], "cso");
         assert_eq!(data["location"], "user");
-        assert!(
-            data["content"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("# /cso")
+        assert!(data["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("# /cso"));
+    }
+
+    struct OrderingRemoteFs;
+
+    #[async_trait]
+    impl WorkspaceFileSystem for OrderingRemoteFs {
+        async fn read_file(&self, path: &str) -> anyhow::Result<Vec<u8>> {
+            Ok(self.read_file_text(path).await?.into_bytes())
+        }
+
+        async fn read_file_text(&self, path: &str) -> anyhow::Result<String> {
+            match path {
+                "/remote/project/.bitfun/skills/z-last/SKILL.md" => Ok(
+                    "---\nname: z-last\ndescription: last\n---\n\nz\n".to_string(),
+                ),
+                "/remote/project/.bitfun/skills/a-first/SKILL.md" => Ok(
+                    "---\nname: A-First\ndescription: first\n---\n\na\n".to_string(),
+                ),
+                "/remote/project/.bitfun/skills/dup-one/SKILL.md" => Ok(
+                    "---\nname: dup\ndescription: dup one\n---\n\none\n".to_string(),
+                ),
+                "/remote/project/.bitfun/skills/dup-two/SKILL.md" => Ok(
+                    "---\nname: dup\ndescription: dup two\n---\n\ntwo\n".to_string(),
+                ),
+                _ => anyhow::bail!("not found: {}", path),
+            }
+        }
+
+        async fn write_file(&self, _path: &str, _contents: &[u8]) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn exists(&self, path: &str) -> anyhow::Result<bool> {
+            Ok(self.is_dir(path).await? || self.is_file(path).await?)
+        }
+
+        async fn is_file(&self, path: &str) -> anyhow::Result<bool> {
+            Ok(matches!(
+                path,
+                "/remote/project/.bitfun/skills/z-last/SKILL.md"
+                    | "/remote/project/.bitfun/skills/a-first/SKILL.md"
+                    | "/remote/project/.bitfun/skills/dup-one/SKILL.md"
+                    | "/remote/project/.bitfun/skills/dup-two/SKILL.md"
+            ))
+        }
+
+        async fn is_dir(&self, path: &str) -> anyhow::Result<bool> {
+            Ok(matches!(
+                path,
+                "/remote/project/.bitfun/skills"
+                    | "/remote/project/.bitfun/skills/z-last"
+                    | "/remote/project/.bitfun/skills/a-first"
+                    | "/remote/project/.bitfun/skills/dup-one"
+                    | "/remote/project/.bitfun/skills/dup-two"
+            ))
+        }
+
+        async fn read_dir(&self, path: &str) -> anyhow::Result<Vec<WorkspaceDirEntry>> {
+            match path {
+                "/remote/project/.bitfun/skills" => Ok(vec![
+                    WorkspaceDirEntry {
+                        name: "z-last".to_string(),
+                        path: "/remote/project/.bitfun/skills/z-last".to_string(),
+                        is_dir: true,
+                        is_symlink: false,
+                    },
+                    WorkspaceDirEntry {
+                        name: "a-first".to_string(),
+                        path: "/remote/project/.bitfun/skills/a-first".to_string(),
+                        is_dir: true,
+                        is_symlink: false,
+                    },
+                    WorkspaceDirEntry {
+                        name: "dup-two".to_string(),
+                        path: "/remote/project/.bitfun/skills/dup-two".to_string(),
+                        is_dir: true,
+                        is_symlink: false,
+                    },
+                    WorkspaceDirEntry {
+                        name: "dup-one".to_string(),
+                        path: "/remote/project/.bitfun/skills/dup-one".to_string(),
+                        is_dir: true,
+                        is_symlink: false,
+                    },
+                ]),
+                _ => Ok(vec![]),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_stability_remote_skill_resolution_is_sorted_and_deterministic() {
+        let skills = SkillRegistry::global()
+            .get_resolved_skills_for_remote_workspace(&OrderingRemoteFs, "/remote/project", None)
+            .await;
+
+        assert_eq!(
+            skills
+                .iter()
+                .filter(|skill| skill.level == SkillLocation::Project)
+                .map(|skill| skill.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["A-First", "dup", "z-last"]
+        );
+        assert_eq!(
+            skills
+                .iter()
+                .find(|skill| skill.name == "dup")
+                .map(|skill| skill.description.as_str()),
+            Some("dup one")
         );
     }
 }

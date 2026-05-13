@@ -15,7 +15,9 @@ import type {
   SessionTitleGeneratedEvent,
   SessionModelAutoMigratedEvent,
   ImageAnalysisEvent,
+  ModelRoundCompletedEvent,
   UserSteeringInjectedEvent,
+  DeepReviewQueueStateChangedEvent,
 } from '@/infrastructure/api/service-api/AgentAPI';
 import { createLogger } from '@/shared/utils/logger';
 
@@ -31,8 +33,10 @@ export interface AgenticEventCallbacks {
   onImageAnalysisCompleted?: (event: ImageAnalysisEvent) => void;
   onDialogTurnStarted?: (event: AgenticEvent) => void;
   onModelRoundStarted?: (event: AgenticEvent) => void;
+  onModelRoundCompleted?: (event: ModelRoundCompletedEvent) => void;
   onTextChunk?: (event: TextChunkEvent) => void;
   onToolEvent?: (event: ToolEvent) => void;
+  onDeepReviewQueueStateChanged?: (event: DeepReviewQueueStateChangedEvent) => void;
   onDialogTurnCompleted?: (event: AgenticEvent) => void;
   onDialogTurnFailed?: (event: AgenticEvent) => void;
   onDialogTurnCancelled?: (event: AgenticEvent) => void;
@@ -114,6 +118,14 @@ export class AgenticEventListener {
         this.unlistenFunctions.push(unlisten);
       }
 
+      if (callbacks.onModelRoundCompleted) {
+        const unlisten = agentAPI.onModelRoundCompleted((event) => {
+          logger.debug('Model round completed:', event);
+          callbacks.onModelRoundCompleted?.(event);
+        });
+        this.unlistenFunctions.push(unlisten);
+      }
+
       if (callbacks.onTextChunk) {
         const unlisten = agentAPI.onTextChunk((event) => {
           callbacks.onTextChunk?.(event);
@@ -124,6 +136,14 @@ export class AgenticEventListener {
       if (callbacks.onToolEvent) {
         const unlisten = agentAPI.onToolEvent((event) => {
           callbacks.onToolEvent?.(event);
+        });
+        this.unlistenFunctions.push(unlisten);
+      }
+
+      if (callbacks.onDeepReviewQueueStateChanged) {
+        const unlisten = agentAPI.onDeepReviewQueueStateChanged((event) => {
+          logger.debug('Deep Review queue state changed:', event);
+          callbacks.onDeepReviewQueueStateChanged?.(event);
         });
         this.unlistenFunctions.push(unlisten);
       }

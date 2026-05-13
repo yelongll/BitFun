@@ -1,8 +1,8 @@
 /**
- * konglingInstaller build script.
+ * BitFun Installer build script.
  *
  * Steps:
- * 1. Build Kongling main app (optional).
+ * 1. Build BitFun main app (optional).
  * 2. Prepare installer payload from built app binaries.
  * 3. Build installer app (Tauri).
  *
@@ -59,7 +59,7 @@ function run(cmd, cwd = ROOT) {
 
 function printHelpAndExit() {
   console.log(`
-Kongling Installer build script
+BitFun Installer build script
 
 Usage:
   node scripts/build-installer.cjs [options]
@@ -67,7 +67,7 @@ Usage:
 Options:
   --mode <fast|release>  Build mode (default: release)
   --fast                 Alias for --mode fast
-  --skip-app-build       Skip building main konglingapp
+  --skip-app-build       Skip building main BitFun app
   --dev                  Run installer with tauri dev instead of tauri build
                          and allow placeholder payload fallback
   --help, -h             Show this help
@@ -154,12 +154,10 @@ function getCandidateAppExePaths(mode) {
     candidates.push(
       path.join(
         BITFUN_ROOT,
-        "src",
-        "apps",
-        "desktop",
         "target",
+        "x86_64-pc-windows-msvc",
         profile,
-        "kongling-desktop.exe"
+        "bitfun-desktop.exe"
       ),
       path.join(
         BITFUN_ROOT,
@@ -168,10 +166,9 @@ function getCandidateAppExePaths(mode) {
         "desktop",
         "target",
         profile,
-        "空灵语言.exe"
+        "bitfun-desktop.exe"
       ),
-      path.join(BITFUN_ROOT, "target", profile, "kongling-desktop.exe"),
-      path.join(BITFUN_ROOT, "target", profile, "空灵语言.exe")
+      path.join(BITFUN_ROOT, "target", profile, "bitfun-desktop.exe")
     );
   }
 
@@ -193,9 +190,9 @@ if (isDev) {
   log("Installer run mode: release (strict payload validation)");
 }
 
-// Step 1: Build main konglingapp.
+// Step 1: Build main BitFun app.
 if (!skipAppBuild) {
-  log("Step 1: Building konglingmain application...");
+  log("Step 1: Building BitFun main application...");
   run(getMainAppBuildCommand(buildMode), BITFUN_ROOT);
 } else {
   log("Step 1: Skipped (--skip-app-build)");
@@ -215,7 +212,7 @@ for (const p of possiblePaths) {
 
 if (!appExePath && STRICT_PAYLOAD_VALIDATION) {
   error(
-    "Could not find built konglingexecutable for payload. Build the desktop app first or run with --dev for local debug."
+    "Could not find built BitFun executable for payload. Build the desktop app first or run with --dev for local debug."
   );
 }
 
@@ -229,14 +226,14 @@ if (appExePath) {
     files: [],
   };
 
-  const destExe = path.join(PAYLOAD_DIR, "空灵语言.exe");
+  const destExe = path.join(PAYLOAD_DIR, "bitfun-desktop.exe");
   writeFileWithManifest(appExePath, destExe, manifest, PAYLOAD_DIR);
   log(`Copied: ${appExePath} -> ${destExe}`);
 
   const exeSize = fs.statSync(destExe).size;
   if (STRICT_PAYLOAD_VALIDATION && exeSize < MIN_APP_EXE_BYTES) {
     error(
-      `空灵语言.exe in payload is unexpectedly small (${exeSize} bytes). Refusing to continue.`
+      `bitfun-desktop.exe in payload is unexpectedly small (${exeSize} bytes). Refusing to continue.`
     );
   }
 
@@ -306,7 +303,7 @@ if (isDev) {
       "src-tauri",
       "target",
       installerTargetProfile,
-      "kongling-installer.exe"
+      "bitfun-installer.exe"
     )}`
   );
 }

@@ -10,6 +10,7 @@ import { agenticEventListener, type AgenticEventCallbacks } from '../AgenticEven
 import { 
   generateTextChunkKey, 
   generateToolEventKey,
+  normalizeParamsPartialFragment,
   parseEventKey,
   type FlowToolEvent,
   type SubagentParentInfo,
@@ -21,7 +22,9 @@ import { notificationService } from '../../../shared/notification-system/service
 import type { NotificationAction } from '../../../shared/notification-system/types';
 import { createLogger } from '@/shared/utils/logger';
 import type {
+  DeepReviewQueueStateChangedEvent,
   ImageAnalysisEvent,
+  ModelRoundCompletedEvent,
   SessionModelAutoMigratedEvent,
 } from '@/infrastructure/api/service-api/AgentAPI';
 import { i18nService } from '@/infrastructure/i18n/core/I18nService';
@@ -39,6 +42,8 @@ import {
   type AiErrorPresentation,
   type AiErrorDetail,
 } from '@/shared/ai-errors/aiErrorPresenter';
+import { useReviewActionBarStore } from '../../store/deepReviewActionBarStore';
+import { buildDeepReviewCapacityQueueStateFromEvent } from '../../utils/deepReviewQueueStateEvents';
 
 const pendingImageAnalysisTurns = new Map<string, string>();
 // `restore_session` and assistant bootstrap can race on the same historical
@@ -92,6 +97,26 @@ function isStreamingExecutionState(state: SessionExecutionState): boolean {
   return state === SessionExecutionState.PROCESSING || state === SessionExecutionState.FINISHING;
 }
 
+const RECOVERABLE_IDLE_TURN_STATUSES = new Set<DialogTurn['status']>([
+  'pending',
+  'image_analyzing',
+  'processing',
+  'finishing',
+]);
+
+export function isAppWindowFocused(): boolean {
+  if (typeof document === 'undefined') {
+    return true;
+  }
+
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
+function shouldMarkUnreadCompletion(sessionId: string): boolean {
+  const activeSessionId = FlowChatStore.getInstance().getState().activeSessionId;
+  return sessionId !== activeSessionId || !isAppWindowFocused();
+}
+
 function logDroppedDataEvent(
   eventName: string,
   sessionId: string,
@@ -103,6 +128,94 @@ function logDroppedDataEvent(
     sessionId,
     turnId,
     ...details,
+  });
+}
+
+function recoverIdleLatestTurnDataEvent(
+  eventName: string,
+  sessionId: string,
+  turnId: string | null,
+  currentState: SessionExecutionState,
+  currentDialogTurnId: string | null
+): boolean {
+  if (
+    currentState !== SessionExecutionState.IDLE ||
+    !turnId ||
+    currentDialogTurnId
+  ) {
+    return false;
+  }
+
+  const session = FlowChatStore.getInstance().getState().sessions.get(sessionId);
+  const latestTurn = session?.dialogTurns[session.dialogTurns.length - 1];
+  if (
+    !latestTurn ||
+    latestTurn.id !== turnId ||
+    !RECOVERABLE_IDLE_TURN_STATUSES.has(latestTurn.status)
+  ) {
+    return false;
+  }
+
+  const machine = stateMachineManager.get(sessionId);
+  const machineContext = machine?.getContext();
+  if (machineContext) {
+    machineContext.currentDialogTurnId = turnId;
+  }
+
+  void stateMachineManager
+    .transition(sessionId, SessionExecutionEvent.START, {
+      taskId: sessionId,
+      dialogTurnId: turnId,
+    })
+    .catch(error => {
+      log.error('State machine transition failed while recovering active data event', {
+        sessionId,
+        turnId,
+        eventName,
+        error,
+      });
+    });
+
+  log.debug('Recovered active data event after idle state', {
+    sessionId,
+    turnId,
+    eventName,
+  });
+  return true;
+}
+
+function handleDeepReviewQueueStateChanged(event: DeepReviewQueueStateChangedEvent): void {
+  const store = FlowChatStore.getInstance();
+  const session = store.getState().sessions.get(event.sessionId);
+  const queueState = buildDeepReviewCapacityQueueStateFromEvent(event, session);
+  if (!queueState) {
+    return;
+  }
+
+  const actionBar = useReviewActionBarStore.getState();
+  const existingActionState = actionBar.getSessionState(event.sessionId);
+  if (existingActionState) {
+    actionBar.applyCapacityQueueState(queueState, event.sessionId);
+    const nextActionBar = useReviewActionBarStore.getState();
+    const nextActionState = nextActionBar.getSessionState(event.sessionId);
+    if (
+      queueState.status !== 'running' &&
+      queueState.status !== 'capacity_skipped' &&
+      (nextActionState?.phase === 'idle' || nextActionState?.phase === 'review_running')
+    ) {
+      actionBar.updatePhase('review_waiting_capacity', undefined, event.sessionId);
+    }
+    return;
+  }
+
+  if (queueState.status === 'running' || queueState.status === 'capacity_skipped') {
+    return;
+  }
+
+  actionBar.showCapacityQueueBar({
+    childSessionId: event.sessionId,
+    parentSessionId: session?.parentSessionId ?? null,
+    capacityQueueState: queueState,
   });
 }
 
@@ -281,6 +394,16 @@ export function shouldProcessEvent(
   }
 
   if (!isStreamingExecutionState(currentState)) {
+    if (recoverIdleLatestTurnDataEvent(
+      eventName,
+      sessionId,
+      turnId,
+      currentState,
+      context.currentDialogTurnId,
+    )) {
+      return true;
+    }
+
     logDroppedDataEvent(eventName, sessionId, turnId, {
       reason: 'state_not_accepting_data',
       currentState,
@@ -391,8 +514,14 @@ export async function initializeEventListeners(
     onToolEvent: (event) => {
       handleToolEvent(context, event, onTodoWriteResult);
     },
+    onDeepReviewQueueStateChanged: (event) => {
+      handleDeepReviewQueueStateChanged(event);
+    },
     onModelRoundStarted: (event) => {
       handleModelRoundStart(context, event);
+    },
+    onModelRoundCompleted: (event) => {
+      handleModelRoundComplete(context, event);
     },
     onDialogTurnCompleted: (event) => {
       handleDialogTurnComplete(context, event, onTodoWriteResult);
@@ -680,9 +809,7 @@ function finalizeTurnCompletionState(
     log.warn('Failed to save dialog turn (non-critical)', { sessionId, turnId, error });
   });
 
-  // Mark unread completion for non-active sessions
-  const activeSessionId = store.getState().activeSessionId;
-  if (sessionId !== activeSessionId) {
+  if (shouldMarkUnreadCompletion(sessionId)) {
     const pending = context.pendingTurnCompletions.get(sessionId);
     const isPartialRecovery = !!pending?.partialRecoveryReason;
     // Partial recovery after retry failure is treated as an error state (red dot)
@@ -1449,8 +1576,8 @@ function handleToolEvent(
           toolEvent: {
             ...(existing.toolEvent as ParamsPartialToolEvent),
             params:
-              (existing.toolEvent as ParamsPartialToolEvent).params +
-              (incoming.toolEvent as ParamsPartialToolEvent).params
+              normalizeParamsPartialFragment((existing.toolEvent as ParamsPartialToolEvent).params) +
+              normalizeParamsPartialFragment((incoming.toolEvent as ParamsPartialToolEvent).params)
           }
         })
       );
@@ -1490,6 +1617,18 @@ function handleModelRoundStart(context: FlowChatContext, event: any): void {
       subagentParentInfo.toolCallId,
       { sessionId, turnId, roundId },
     );
+
+    const modelIdRaw = event.modelId ?? (event as any).model_id;
+    const modelId = typeof modelIdRaw === 'string' ? modelIdRaw.trim() : '';
+    if (modelId) {
+      const store = FlowChatStore.getInstance();
+      store.updateModelRoundItem(
+        subagentParentInfo.sessionId,
+        subagentParentInfo.dialogTurnId,
+        subagentParentInfo.toolCallId,
+        { subagentModelId: modelId, subagentModelAlias: modelId } as Partial<FlowToolItem>,
+      );
+    }
     return;
   }
   
@@ -1545,6 +1684,70 @@ function handleModelRoundStart(context: FlowChatContext, event: any): void {
   context.flowChatStore.addModelRound(sessionId, turnId, modelRound);
   scheduleModelResponseStatus(context, sessionId, turnId, roundId);
   
+  immediateSaveDialogTurn(context, sessionId, turnId);
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Handle model round completed event.
+ */
+function handleModelRoundComplete(context: FlowChatContext, event: ModelRoundCompletedEvent): void {
+  const sessionId = event?.sessionId ?? (event as any)?.session_id;
+  const turnId = event?.turnId ?? (event as any)?.turn_id;
+  const roundId = event?.roundId ?? (event as any)?.round_id;
+  const subagentParentInfo = normalizeSubagentParentInfo(event);
+
+  if (subagentParentInfo) {
+    attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
+    immediateSaveDialogTurn(context, subagentParentInfo.sessionId, subagentParentInfo.dialogTurnId);
+    return;
+  }
+
+  if (!sessionId || !turnId || !roundId) {
+    log.warn('ModelRoundCompleted missing identity fields', { event });
+    return;
+  }
+
+  if (!shouldProcessEvent(sessionId, turnId, 'data', 'ModelRoundCompleted')) {
+    return;
+  }
+
+  const store = FlowChatStore.getInstance();
+  const session = store.getState().sessions.get(sessionId);
+  const dialogTurn = session?.dialogTurns.find((turn: DialogTurn) => turn.id === turnId);
+  const round = dialogTurn?.modelRounds.find(modelRound => modelRound.id === roundId);
+  if (!round) {
+    log.debug('Model round not found (model round complete)', { sessionId, turnId, roundId });
+    return;
+  }
+
+  const durationMs = optionalNumber(event.durationMs ?? (event as any).duration_ms);
+  const completedAt = Date.now();
+  const endTime = round.endTime ?? (durationMs !== undefined ? round.startTime + durationMs : completedAt);
+
+  context.flowChatStore.updateModelRound(sessionId, turnId, roundId, current => ({
+    ...current,
+    isStreaming: false,
+    isComplete: true,
+    status: current.status === 'error' || current.status === 'cancelled'
+      ? current.status
+      : 'completed',
+    endTime,
+    durationMs,
+    providerId: event.providerId ?? (event as any).provider_id,
+    modelId: event.modelId ?? (event as any).model_id,
+    modelAlias: event.modelAlias ?? (event as any).model_alias,
+    firstChunkMs: optionalNumber(event.firstChunkMs ?? (event as any).first_chunk_ms),
+    firstVisibleOutputMs: optionalNumber(event.firstVisibleOutputMs ?? (event as any).first_visible_output_ms),
+    streamDurationMs: optionalNumber(event.streamDurationMs ?? (event as any).stream_duration_ms),
+    attemptCount: optionalNumber(event.attemptCount ?? (event as any).attempt_count),
+    failureCategory: event.failureCategory ?? (event as any).failure_category,
+    tokenDetails: event.tokenDetails ?? (event as any).token_details,
+  }));
+
   immediateSaveDialogTurn(context, sessionId, turnId);
 }
 
@@ -1707,7 +1910,17 @@ function handleCompressionFailed(context: FlowChatContext, event: any): void {
 /**
  * Handle dialog turn completed event
  */
-function handleDialogTurnComplete(
+function buildUnsuccessfulCompletionError(finishReason?: string): string {
+  if (finishReason === 'empty_round') {
+    return 'Model returned an empty response after retrying. finish_reason=empty_round';
+  }
+
+  return finishReason
+    ? `Dialog turn ended without a usable result. finish_reason=${finishReason}`
+    : 'Dialog turn ended without a usable result.';
+}
+
+export function handleDialogTurnComplete(
   context: FlowChatContext,
   event: any,
   _onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
@@ -1723,13 +1936,33 @@ function handleDialogTurnComplete(
   if (subagentParentInfo) {
     if (sessionId) {
       attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
-      settleSubagentItems(context, subagentParentInfo, sessionId, 'completed');
+      if (success === false) {
+        settleSubagentItems(
+          context,
+          subagentParentInfo,
+          sessionId,
+          'error',
+          buildUnsuccessfulCompletionError(finishReason),
+        );
+      } else {
+        settleSubagentItems(context, subagentParentInfo, sessionId, 'completed');
+      }
     }
     return;
   }
 
   if (!sessionId || !turnId) {
     log.warn('DialogTurnCompleted missing sessionId or turnId', { event });
+    return;
+  }
+
+  if (success === false) {
+    handleDialogTurnFailed(context, {
+      ...event,
+      sessionId,
+      turnId,
+      error: event?.error || buildUnsuccessfulCompletionError(finishReason),
+    });
     return;
   }
 
@@ -2013,9 +2246,7 @@ function handleDialogTurnFailed(context: FlowChatContext, event: any): void {
     notificationService.error(formatted.message, options);
   }
 
-  // Mark unread error completion for non-active sessions
-  const activeSessionIdForError = store.getState().activeSessionId;
-  if (sessionId !== activeSessionIdForError) {
+  if (shouldMarkUnreadCompletion(sessionId)) {
     context.flowChatStore.markSessionUnreadCompletion(sessionId, 'error');
   }
 }
@@ -2121,9 +2352,7 @@ function handleDialogTurnCancelled(
       });
   }
 
-  // Mark unread completion for non-active sessions (skip if user explicitly cancelled)
-  const activeSessionIdForCancelled = store.getState().activeSessionId;
-  if (sessionId !== activeSessionIdForCancelled && !context.userCancelledSessionIds.has(sessionId)) {
+  if (shouldMarkUnreadCompletion(sessionId) && !context.userCancelledSessionIds.has(sessionId)) {
     context.flowChatStore.markSessionUnreadCompletion(sessionId, 'completed');
   }
   context.userCancelledSessionIds.delete(sessionId);

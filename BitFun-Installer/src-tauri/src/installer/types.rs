@@ -11,15 +11,11 @@ pub struct InstallOptions {
     pub desktop_shortcut: bool,
     /// Add to Start Menu
     pub start_menu: bool,
-    /// Register right-click context menu ("Open with 空灵语言")
-    pub context_menu: bool,
-    /// Add to system PATH
-    pub add_to_path: bool,
     /// Launch after installation
     pub launch_after_install: bool,
     /// First-launch app language (zh-CN / en-US)
     pub app_language: String,
-    /// First-launch theme preference (`system` or 空灵语言 built-in theme id)
+    /// First-launch theme preference (`system` or BitFun built-in theme id)
     pub theme_preference: String,
     /// Optional first-launch model configuration.
     pub model_config: Option<ModelConfig>,
@@ -146,8 +142,6 @@ impl Default for InstallOptions {
             install_path: String::new(),
             desktop_shortcut: true,
             start_menu: true,
-            context_menu: true,
-            add_to_path: true,
             launch_after_install: true,
             app_language: "zh-CN".to_string(),
             theme_preference: "system".to_string(),

@@ -43,6 +43,10 @@
       "bitfun-slate": {
         "name": "石板灰",
         "description": "石板灰几何主题 - 极深沉浸，高对比度灰度美学"
+      },
+      "bitfun-tokyo-night": {
+        "name": "东京夜",
+        "description": "Tokyo Night 经典配色 - 靛蓝夜色，蓝紫高光"
       }
     },
     "fontSize": {
@@ -67,6 +71,20 @@
       "flowChatHint": "关闭时对话区域比界面大 1 px，并随界面档位变化。开启后在下方从列表中选择 12–20 px。",
       "flowChatCustomToggle": "自定义对话字号",
       "flowChatPxOption": "{{n}} px"
+    }
+  },
+  "autoUpdate": {
+    "sections": {
+      "title": "更新",
+      "hint": "启动后是否自动检查新版本"
+    },
+    "toggleLabel": "自动检查更新",
+    "toggleDescription": "开启后，启动片刻若发现新版本可能会提示。关闭后仍可在「关于」中手动检查更新。",
+    "messages": {
+      "loading": "加载中…",
+      "loadFailed": "无法读取更新相关设置",
+      "saveFailed": "无法保存更新相关设置",
+      "saved": "已保存更新偏好"
     }
   },
   "launchAtLogin": {
@@ -152,8 +170,26 @@
       "refreshed": "已刷新可用终端列表"
     }
   },
-  "notifications": {
-    "title": "通知",
+  "windowBehavior": {
+    "sections": {
+      "title": "窗口行为",
+      "hint": "点击关闭按钮时的操作"
+    },
+    "closeButtonLabel": "关闭按钮行为",
+    "closeButtonDescription": "点击窗口关闭按钮（×）时的默认操作。",
+    "options": {
+      "quit": "退出程序",
+      "minimizeToTray": "最小化到系统托盘",
+      "ask": "每次询问"
+    },
+    "messages": {
+      "loading": "加载中…",
+      "loadFailed": "无法读取窗口行为设置",
+      "saveFailed": "无法保存窗口行为设置",
+      "saved": "窗口行为设置已保存"
+    }
+  },
+  "notifications": {    "title": "通知",
     "hint": "Toast 弹窗通知偏好设置",
     "dialogCompletion": {
       "label": "任务完成通知",

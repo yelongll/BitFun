@@ -214,6 +214,10 @@ export interface ParamsPartialToolEvent extends BaseToolEvent<'ParamsPartial'> {
   params: string;
 }
 
+export function normalizeParamsPartialFragment(params: unknown): string {
+  return typeof params === 'string' ? params : '';
+}
+
 export interface QueuedToolEvent extends BaseToolEvent<'Queued'> {
   position: number;
 }
@@ -252,14 +256,28 @@ export interface CompletedToolEvent extends BaseToolEvent<'Completed'> {
   result: unknown;
   result_for_assistant?: string;
   duration_ms: number;
+  queue_wait_ms?: number;
+  preflight_ms?: number;
+  confirmation_wait_ms?: number;
+  execution_ms?: number;
 }
 
 export interface FailedToolEvent extends BaseToolEvent<'Failed'> {
   error: string;
+  duration_ms?: number;
+  queue_wait_ms?: number;
+  preflight_ms?: number;
+  confirmation_wait_ms?: number;
+  execution_ms?: number;
 }
 
 export interface CancelledToolEvent extends BaseToolEvent<'Cancelled'> {
   reason: string;
+  duration_ms?: number;
+  queue_wait_ms?: number;
+  preflight_ms?: number;
+  confirmation_wait_ms?: number;
+  execution_ms?: number;
 }
 
 export type FlowToolEvent =
@@ -338,9 +356,11 @@ export function generateToolEventKey(data: ToolEventData): { key: string; strate
     const { sessionId: parentSessionId, toolCallId: parentToolId } = subagentParentInfo;
 
     if (eventType === 'ParamsPartial') {
+      const toolName = (toolEvent as any).tool_name || '';
+      const isWriteLike = ['write', 'write_notebook', 'file_write', 'Write'].includes(toolName);
       return {
         key: `subagent:tool:params:${parentSessionId}:${parentToolId}:${toolUseId}`,
-        strategy: 'accumulate'
+        strategy: isWriteLike ? 'replace' : 'accumulate'
       };
     }
     if (eventType === 'Progress') {
@@ -351,9 +371,11 @@ export function generateToolEventKey(data: ToolEventData): { key: string; strate
     }
   } else {
     if (eventType === 'ParamsPartial') {
+      const toolName = (toolEvent as any).tool_name || '';
+      const isWriteLike = ['write', 'write_notebook', 'file_write', 'Write'].includes(toolName);
       return {
         key: `tool:params:${sessionId}:${toolUseId}`,
-        strategy: 'accumulate'
+        strategy: isWriteLike ? 'replace' : 'accumulate'
       };
     }
     if (eventType === 'Progress') {

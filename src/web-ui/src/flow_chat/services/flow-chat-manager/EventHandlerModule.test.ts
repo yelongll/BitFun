@@ -2,8 +2,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { normalizeSubagentParentInfo } from './subagentParentInfo';
 import {
   formatDialogErrorForNotification,
+  handleDialogTurnComplete,
   handleSessionStateChanged,
   insertSteeringItemIfAbsent,
+  isAppWindowFocused,
   shouldProcessEvent,
 } from './EventHandlerModule';
 import { stateMachineManager } from '../../state-machine';
@@ -15,12 +17,28 @@ import type { FlowChatContext } from './types';
 vi.mock('@/infrastructure/i18n/core/I18nService', () => ({
   i18nService: {
     t: (key: string) => ({
+      'errors:ai.unknown.title': 'AI request failed',
+      'errors:ai.unknown.message': 'The model stopped before returning a usable response. Try again or switch models.',
       'errors:ai.invalidRequest.title': 'Model request invalid',
       'errors:ai.invalidRequest.message': 'The provider rejected the request format, parameters, model name, or payload size. Adjust the request or choose another model.',
       'errors:ai.actions.copyDiagnostics': 'Copy diagnostics',
     }[key] ?? key),
   },
 }));
+
+vi.mock('../../../shared/notification-system/services/NotificationService', () => ({
+  notificationService: {
+    error: vi.fn(),
+    warning: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
+describe('isAppWindowFocused', () => {
+  it('returns true when no document is available', () => {
+    expect(isAppWindowFocused()).toBe(true);
+  });
+});
 
 describe('normalizeSubagentParentInfo', () => {
   it('normalizes snake_case subagent parent metadata from backend events', () => {
@@ -62,9 +80,11 @@ describe('shouldProcessEvent', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    resetFlowChatStore();
   });
 
   afterEach(() => {
+    resetFlowChatStore();
     stateMachineManager.clear();
   });
 
@@ -111,6 +131,132 @@ describe('shouldProcessEvent', () => {
     expect(
       shouldProcessEvent(mockSessionId, mockTurnId, 'data', 'TextChunk'),
     ).toBe(false);
+  });
+
+  it('recovers active latest-turn data when the state machine was reset to idle', () => {
+    FlowChatStore.getInstance().setState(() => ({
+      sessions: new Map([[
+        mockSessionId,
+        {
+          sessionId: mockSessionId,
+          title: 'Test Session',
+          dialogTurns: [{
+            id: mockTurnId,
+            sessionId: mockSessionId,
+            userMessage: {
+              id: 'user-1',
+              content: 'Continue review',
+              timestamp: 1000,
+            },
+            modelRounds: [],
+            status: 'processing',
+            startTime: 1000,
+          }],
+          status: 'idle',
+          config: { agentType: 'agentic' },
+          createdAt: 1000,
+          lastActiveAt: 1000,
+          error: null,
+          sessionKind: 'normal',
+        } as Session,
+      ]]),
+      activeSessionId: mockSessionId,
+    }));
+    stateMachineManager.getOrCreate(mockSessionId);
+
+    expect(
+      shouldProcessEvent(mockSessionId, mockTurnId, 'data', 'ToolEvent'),
+    ).toBe(true);
+    expect(stateMachineManager.getCurrentState(mockSessionId)).toBe(SessionExecutionState.PROCESSING);
+    expect(stateMachineManager.get(mockSessionId)?.getContext().currentDialogTurnId).toBe(mockTurnId);
+  });
+
+  it('does not recover idle data for an old non-latest turn', () => {
+    FlowChatStore.getInstance().setState(() => ({
+      sessions: new Map([[
+        mockSessionId,
+        {
+          sessionId: mockSessionId,
+          title: 'Test Session',
+          dialogTurns: [
+            {
+              id: mockTurnId,
+              sessionId: mockSessionId,
+              userMessage: {
+                id: 'user-1',
+                content: 'Old turn',
+                timestamp: 1000,
+              },
+              modelRounds: [],
+              status: 'processing',
+              startTime: 1000,
+            },
+            {
+              id: 'newer-turn',
+              sessionId: mockSessionId,
+              userMessage: {
+                id: 'user-2',
+                content: 'New turn',
+                timestamp: 2000,
+              },
+              modelRounds: [],
+              status: 'processing',
+              startTime: 2000,
+            },
+          ],
+          status: 'idle',
+          config: { agentType: 'agentic' },
+          createdAt: 1000,
+          lastActiveAt: 2000,
+          error: null,
+          sessionKind: 'normal',
+        } as Session,
+      ]]),
+      activeSessionId: mockSessionId,
+    }));
+    stateMachineManager.getOrCreate(mockSessionId);
+
+    expect(
+      shouldProcessEvent(mockSessionId, mockTurnId, 'data', 'ToolEvent'),
+    ).toBe(false);
+    expect(stateMachineManager.getCurrentState(mockSessionId)).toBe(SessionExecutionState.IDLE);
+  });
+
+  it('does not recover idle data for a cancelled latest turn', () => {
+    FlowChatStore.getInstance().setState(() => ({
+      sessions: new Map([[
+        mockSessionId,
+        {
+          sessionId: mockSessionId,
+          title: 'Test Session',
+          dialogTurns: [{
+            id: mockTurnId,
+            sessionId: mockSessionId,
+            userMessage: {
+              id: 'user-1',
+              content: 'Cancelled review',
+              timestamp: 1000,
+            },
+            modelRounds: [],
+            status: 'cancelled',
+            startTime: 1000,
+          }],
+          status: 'idle',
+          config: { agentType: 'agentic' },
+          createdAt: 1000,
+          lastActiveAt: 1000,
+          error: null,
+          sessionKind: 'normal',
+        } as Session,
+      ]]),
+      activeSessionId: mockSessionId,
+    }));
+    stateMachineManager.getOrCreate(mockSessionId);
+
+    expect(
+      shouldProcessEvent(mockSessionId, mockTurnId, 'data', 'ToolEvent'),
+    ).toBe(false);
+    expect(stateMachineManager.getCurrentState(mockSessionId)).toBe(SessionExecutionState.IDLE);
   });
 
   it('returns false for data event when turn ID mismatches', () => {
@@ -401,6 +547,41 @@ describe('handleSessionStateChanged', () => {
       .sessions.get('session-1')
       ?.dialogTurns[0];
     expect(turn?.status).toBe('completed');
+    expect(stateMachineManager.getCurrentState('session-1')).toBe(SessionExecutionState.IDLE);
+  });
+});
+
+describe('handleDialogTurnComplete', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetFlowChatStore();
+    stateMachineManager.clear();
+  });
+
+  afterEach(() => {
+    resetFlowChatStore();
+    stateMachineManager.clear();
+  });
+
+  it('treats unsuccessful completed events as errors instead of normal completion', async () => {
+    putFinishingSessionInStore();
+    const context = createFlowChatContext();
+    await setFinishingMachine();
+
+    handleDialogTurnComplete(context, {
+      sessionId: 'session-1',
+      turnId: 'turn-1',
+      success: false,
+      finishReason: 'empty_round',
+    }, vi.fn());
+
+    const turn = FlowChatStore.getInstance()
+      .getState()
+      .sessions.get('session-1')
+      ?.dialogTurns[0];
+
+    expect(turn?.status).toBe('error');
+    expect(turn?.error).toContain('empty response');
     expect(stateMachineManager.getCurrentState('session-1')).toBe(SessionExecutionState.IDLE);
   });
 });

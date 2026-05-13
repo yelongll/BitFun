@@ -9,9 +9,10 @@ export type ConfigTab =
   | 'basics'
   | 'appearance'
   | 'models'
-  | 'session-config'
+  | 'session-personalization'
+  | 'session-permissions'
+  | 'quick-actions'
   | 'review'
-  | 'ai-context'
   | 'mcp-tools'
   | 'acp-agents'
   // | 'lsp' // temporarily hidden from config center
@@ -116,21 +117,58 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
     nameKey: 'configCenter.categories.smartCapabilities',
     tabs: [
       {
-        id: 'session-config',
-        labelKey: 'configCenter.tabs.sessionConfig',
-        descriptionKey: 'configCenter.tabDescriptions.sessionConfig',
+        id: 'session-personalization',
+        labelKey: 'configCenter.tabs.sessionPersonalization',
+        descriptionKey: 'configCenter.tabDescriptions.sessionPersonalization',
         keywords: [
           'session',
-          'chat',
-          'streaming',
+          'title',
+          'companion',
+          'agent',
+          'pixel',
+          'pet',
+          'partner',
+          '\u4f19\u4f34',
+          '\u4e2a\u6027\u5316',
+        ],
+      },
+      {
+        id: 'session-permissions',
+        labelKey: 'configCenter.tabs.sessionPermissions',
+        descriptionKey: 'configCenter.tabDescriptions.sessionPermissions',
+        keywords: [
+          'session',
           'tool',
           'timeout',
           'confirmation',
-          'history',
-          'companion',
-          'agent',
-          'partner',
-          '\u4f19\u4f34',
+          'computer use',
+          'browser',
+          'cdp',
+          'debug',
+          'permission',
+          'accessibility',
+          'screen',
+          'workspace',
+          'search',
+          'flashgrep',
+          'index',
+          '\u6743\u9650',
+        ],
+      },
+      {
+        id: 'quick-actions',
+        labelKey: 'configCenter.tabs.quickActions',
+        descriptionKey: 'configCenter.tabDescriptions.quickActions',
+        keywords: [
+          'quick action',
+          'quick actions',
+          'commit',
+          'pr',
+          'pull request',
+          'post-coding',
+          'shortcut',
+          '快捷动作',
+          '提交',
         ],
       },
       {
@@ -148,12 +186,6 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
           '\u5ba1\u6838',
           '\u4ee3\u7801\u5ba1\u6838',
         ],
-      },
-      {
-        id: 'ai-context',
-        labelKey: 'configCenter.tabs.aiContext',
-        descriptionKey: 'configCenter.tabDescriptions.aiContext',
-        keywords: ['rules', 'memory', 'context', 'rag', 'knowledge'],
       },
       {
         id: 'mcp-tools',
@@ -230,6 +262,7 @@ export function normalizeSettingsTab(section: string): ConfigTab {
   if (section === 'theme' || section === 'font' || section === 'fonts') return 'appearance';
   if (section === 'logging' || section === 'terminal') return 'basics';
   if (section === 'lsp') return DEFAULT_SETTINGS_TAB;
+  if (section === 'session-config') return 'session-personalization';
   if (section === 'deep-review' || section === 'code-review' || section === 'review-team') return 'review';
   if (section === 'shortcuts' || section === 'keybindings' || section === 'hotkeys') return 'keyboard';
   if ((KNOWN_TABS as readonly string[]).includes(section)) return section as ConfigTab;

@@ -56,9 +56,6 @@ pub struct GlobalConfig {
     /// Web UI font size preferences (`get_config` / `set_config` path `font`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font: Option<FontPreferenceSnapshot>,
-    /// Designer configuration (alignment, grid, layout settings).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub designer: Option<serde_json::Value>,
     pub version: String,
     #[serde(with = "chrono::serde::ts_milliseconds")]
     pub last_modified: chrono::DateTime<chrono::Utc>,
@@ -80,6 +77,10 @@ impl ProjectConfig {
 }
 
 /// App configuration.
+fn default_close_button_behavior() -> String {
+    "quit".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -103,11 +104,10 @@ pub struct AppConfig {
     /// the frontend owns the versioned format (StoredKeybindingsV1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keybindings: Option<serde_json::Value>,
-    /// Run configurations for different languages (e.g., Nim).
-    /// Stored as opaque JSON so the backend remains schema-agnostic;
-    /// the frontend owns the versioned format.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run_configs: Option<serde_json::Value>,
+    /// What happens when the window close button is clicked on Windows / Linux.
+    /// Allowed values: "quit" | "minimize_to_tray" | "ask".
+    #[serde(default = "default_close_button_behavior")]
+    pub close_button_behavior: String,
 }
 
 /// App logging configuration.
@@ -128,6 +128,15 @@ pub struct AppSessionConfig {
     pub default_mode: String,
 }
 
+/// A user-defined quick action for the FlowChat post-coding actions menu.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AiExperienceQuickAction {
+    pub id: String,
+    pub label: String,
+    pub prompt: String,
+    pub enabled: bool,
+}
+
 /// AI experience configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -140,10 +149,6 @@ pub struct AIExperienceConfig {
     pub enable_visual_mode: bool,
     /// Whether to show the pixel Agent companion in the collapsed chat input.
     pub enable_agent_companion: bool,
-    /// Whether to show model thinking process in FlowChat.
-    pub show_thinking_process: bool,
-    /// Whether completed thinking blocks remain as expandable collapsed items.
-    pub show_completed_thinking_item: bool,
     /// Where to show the Agent companion: "input" or "desktop".
     pub agent_companion_display_mode: String,
     /// Optional Petdex-compatible companion package selected by the user.
@@ -151,6 +156,9 @@ pub struct AIExperienceConfig {
     pub agent_companion_pet: Option<AgentCompanionPetSelection>,
     /// Whether to enable flashgrep-backed accelerated workspace search.
     pub enable_workspace_search: bool,
+    /// User-defined quick actions (post-coding menu); persisted for the web UI.
+    #[serde(default)]
+    pub quick_actions: Vec<AiExperienceQuickAction>,
 }
 
 /// User-selected Agent companion pet package.
@@ -548,6 +556,14 @@ pub struct AIConfig {
     /// Allow Computer use (desktop automation) when the desktop host is available (all session modes).
     #[serde(default)]
     pub computer_use_enabled: bool,
+
+    /// Preferred browser for CDP browser control. Empty/default uses the system default browser.
+    #[serde(default)]
+    pub browser_control_preferred_browser: String,
+
+    /// Maximum number of rounds per dialog turn before soft-pausing.
+    #[serde(default = "default_max_rounds")]
+    pub max_rounds: usize,
 }
 
 impl AIConfig {
@@ -691,6 +707,12 @@ fn default_subagent_max_concurrency() -> usize {
     5
 }
 
+pub const DEFAULT_MAX_ROUNDS: usize = 200;
+
+fn default_max_rounds() -> usize {
+    DEFAULT_MAX_ROUNDS
+}
+
 impl Default for ModeConfig {
     fn default() -> Self {
         Self {
@@ -721,7 +743,7 @@ impl Default for ModeConfigView {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DebugModeConfig {
-    /// Custom log path (relative to the workspace; default: `.kongling/debug.log`).
+    /// Custom log path (relative to the workspace; default: `.bitfun/debug.log`).
     pub log_path: String,
 
     /// Ingest server port.
@@ -737,7 +759,7 @@ pub struct DebugModeConfig {
 impl Default for DebugModeConfig {
     fn default() -> Self {
         Self {
-            log_path: ".kongling/debug.log".to_string(),
+            log_path: ".bitfun/debug.log".to_string(),
             ingest_port: 7242,
             enabled_languages: Vec::new(),
             language_templates: Self::default_language_templates(),
@@ -762,8 +784,8 @@ impl DebugModeConfig {
             region_start: "// #region agent log".to_string(),
             region_end: "// #endregion".to_string(),
             notes: vec![
-                "通过 HTTP POST 发送日志到摄取服务器。.".to_string(),
-                "{DATA} 必须替换为 JavaScript JSON 对象表达式。".to_string(),
+                "Send logs to the ingest server via HTTP POST.".to_string(),
+                "{DATA} must be replaced with a JavaScript object expression.".to_string(),
             ],
         });
 
@@ -960,9 +982,6 @@ pub struct AIModelConfig {
     pub name: String,
     pub provider: String,
     pub model_name: String,
-    /// Custom display name shown in UI (optional, falls back to model_name if not set).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
     pub base_url: String,
 
     /// Computed actual request URL (auto-derived from base_url + provider format).
@@ -1069,7 +1088,6 @@ struct AIModelConfigCompat {
     name: String,
     provider: String,
     model_name: String,
-    display_name: Option<String>,
     base_url: String,
     request_url: Option<String>,
     api_key: String,
@@ -1114,7 +1132,6 @@ impl From<AIModelConfigCompat> for AIModelConfig {
             name: value.name,
             provider: value.provider,
             model_name: value.model_name,
-            display_name: value.display_name,
             base_url: value.base_url,
             request_url: value.request_url,
             api_key: value.api_key,
@@ -1232,7 +1249,6 @@ impl Default for GlobalConfig {
             acp_clients: None,
             themes: Some(ThemesConfig::default()),
             font: None,
-            designer: None,
             version: "1.0.0".to_string(),
             last_modified: chrono::Utc::now(),
         }
@@ -1268,7 +1284,7 @@ impl Default for AppConfig {
             session_config: AppSessionConfig::default(),
             ai_experience: AIExperienceConfig::default(),
             keybindings: None,
-            run_configs: None,
+            close_button_behavior: default_close_button_behavior(),
         }
     }
 }
@@ -1297,11 +1313,10 @@ impl Default for AIExperienceConfig {
             enable_welcome_panel_ai_analysis: false,
             enable_visual_mode: false,
             enable_agent_companion: true,
-            show_thinking_process: false,
-            show_completed_thinking_item: false,
             agent_companion_display_mode: "desktop".to_string(),
             agent_companion_pet: None,
             enable_workspace_search: false,
+            quick_actions: Vec::new(),
         }
     }
 }
@@ -1506,6 +1521,8 @@ impl Default for AIConfig {
             skip_tool_confirmation: true,
             debug_mode_config: DebugModeConfig::default(),
             computer_use_enabled: false,
+            browser_control_preferred_browser: String::new(),
+            max_rounds: default_max_rounds(),
         }
     }
 }
@@ -1517,7 +1534,6 @@ impl Default for AIModelConfig {
             name: String::new(),
             provider: String::new(),
             model_name: String::new(),
-            display_name: None,
             base_url: String::new(),
             request_url: None,
             api_key: String::new(),
@@ -1799,6 +1815,59 @@ mod tests {
         assert_eq!(
             serialized["agent_companion_pet"]["spritesheetPath"],
             "/agent-companion-pets/boxcat/spritesheet.webp"
+        );
+    }
+
+    #[test]
+    fn ai_experience_quick_actions_round_trip_through_global_config() {
+        let config: GlobalConfig = serde_json::from_value(serde_json::json!({
+            "app": {
+                "language": "en-US",
+                "auto_update": true,
+                "telemetry": true,
+                "startup_behavior": "default",
+                "confirm_on_exit": true,
+                "restore_windows": false,
+                "zoom_level": 100,
+                "sidebar": { "width": 260, "collapsed": false },
+                "right_panel": { "width": 400, "collapsed": true },
+                "notifications": {
+                    "enabled": true,
+                    "position": "top-right",
+                    "duration": 4000,
+                    "dialog_completion_notify": true,
+                    "enable_startup_tips": true
+                },
+                "session_config": { "default_mode": "code" },
+                "ai_experience": {
+                    "enable_session_title_generation": true,
+                    "enable_welcome_panel_ai_analysis": false,
+                    "enable_visual_mode": false,
+                    "enable_agent_companion": true,
+                    "agent_companion_display_mode": "desktop",
+                    "enable_workspace_search": false,
+                    "quick_actions": [
+                        {
+                            "id": "custom_1",
+                            "label": "Run tests",
+                            "prompt": "Run the test suite",
+                            "enabled": true
+                        }
+                    ]
+                }
+            }
+        }))
+        .expect("minimal app config with quick_actions should deserialize");
+
+        let actions = &config.app.ai_experience.quick_actions;
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].id, "custom_1");
+        assert_eq!(actions[0].label, "Run tests");
+
+        let serialized = serde_json::to_value(&config).expect("config should serialize");
+        assert_eq!(
+            serialized["app"]["ai_experience"]["quick_actions"][0]["id"],
+            "custom_1"
         );
     }
 

@@ -5,10 +5,12 @@ import { SubagentAPI } from '@/infrastructure/api/service-api/SubagentAPI';
 import { configAPI } from '@/infrastructure/api/service-api/ConfigAPI';
 import type { ModeConfigItem, ModeSkillInfo } from '@/infrastructure/config/types';
 import { useNotification } from '@/shared/notification-system';
+import type { DynamicToolInfo } from '@/shared/types/agent-api';
 import type { AgentWithCapabilities } from '../agentsStore';
 import { enrichCapabilities } from '../utils';
-import { isAgentInOverviewZone } from '../agentVisibility';
+import { STATIC_HIDDEN_AGENT_IDS, isAgentInOverviewZone } from '../agentVisibility';
 import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
+import { loadDefaultReviewTeamDefinition } from '@/shared/services/reviewTeamService';
 
 export type FilterLevel = 'all' | 'builtin' | 'user' | 'project';
 export type FilterType = 'all' | 'mode' | 'subagent';
@@ -17,6 +19,7 @@ export interface ToolInfo {
   name: string;
   description: string;
   is_readonly: boolean;
+  dynamic_info?: DynamicToolInfo;
 }
 
 interface UseAgentsListOptions {
@@ -39,6 +42,9 @@ export function useAgentsList({
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const [modeSkills, setModeSkills] = useState<Record<string, ModeSkillInfo[]>>({});
   const [modeConfigs, setModeConfigs] = useState<Record<string, ModeConfigItem>>({});
+  const [hiddenAgentIds, setHiddenAgentIds] = useState<ReadonlySet<string>>(
+    () => new Set(STATIC_HIDDEN_AGENT_IDS),
+  );
   const loadRequestIdRef = useRef(0);
 
   const loadAgents = useCallback(async () => {
@@ -55,11 +61,12 @@ export function useAgentsList({
     };
 
     try {
-      const [modes, subagents, tools, configs] = await Promise.all([
+      const [modes, subagents, tools, configs, reviewTeamDefinition] = await Promise.all([
         agentAPI.getAvailableModes().catch(() => []),
         SubagentAPI.listSubagents({ workspacePath: workspacePath || undefined }).catch(() => []),
         fetchTools(),
         configAPI.getModeConfigs().catch(() => ({})),
+        loadDefaultReviewTeamDefinition().catch(() => undefined),
       ]);
       const skillEntries = await Promise.all(
         modes.map(async (mode) => [
@@ -101,6 +108,10 @@ export function useAgentsList({
       setAvailableTools(tools);
       setModeSkills(Object.fromEntries(skillEntries));
       setModeConfigs(configs as Record<string, ModeConfigItem>);
+      setHiddenAgentIds(new Set([
+        ...STATIC_HIDDEN_AGENT_IDS,
+        ...(reviewTeamDefinition?.hiddenAgentIds ?? []),
+      ]));
     } finally {
       if (requestId === loadRequestIdRef.current) {
         setLoading(false);
@@ -233,8 +244,8 @@ export function useAgentsList({
   }), [allAgents, filterLevel, filterType, searchQuery]);
 
   const overviewAgents = useMemo(
-    () => allAgents.filter(isAgentInOverviewZone),
-    [allAgents],
+    () => allAgents.filter((agent) => isAgentInOverviewZone(agent, hiddenAgentIds)),
+    [allAgents, hiddenAgentIds],
   );
 
   const counts = useMemo(() => ({
@@ -253,6 +264,7 @@ export function useAgentsList({
     availableTools,
     getModeSkills,
     counts,
+    hiddenAgentIds,
     loadAgents,
     getModeConfig,
     handleSetTools,

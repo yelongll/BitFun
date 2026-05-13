@@ -10,6 +10,7 @@
 
 import React, { ReactNode } from 'react';
 import { BaseToolCard, type BaseToolCardProps } from './BaseToolCard';
+import { SmoothHeightCollapse } from '../components/modern/SmoothHeightCollapse';
 import { ToolCardIconSlot } from './ToolCardIconSlot';
 import { ToolCardStatusIcon } from './ToolCardStatusIcon';
 import type { ToolCardHeaderAffordanceKind } from './ToolCardHeaderLayoutContext';
@@ -80,11 +81,11 @@ export const CompactToolCard: React.FC<CompactToolCardProps> = ({
         {header}
       </div>
 
-      {isExpanded && expandedContent && (
+      <SmoothHeightCollapse isOpen={Boolean(isExpanded && expandedContent)} className="compact-tool-card-expanded-collapse">
         <div className="compact-tool-card-expanded">
           {expandedContent}
         </div>
-      )}
+      </SmoothHeightCollapse>
     </div>
   );
 };
@@ -104,8 +105,8 @@ export interface CompactToolCardHeaderProps {
   onAffordanceClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   /** Whether to show the left icon divider (default false for compact) */
   showDivider?: boolean;
-  /** Action text */
-  action?: string;
+  /** Action label (text or inline markup) */
+  action?: ReactNode;
   /** Main content */
   content?: ReactNode;
   /** Right extra content (e.g., statistics) */

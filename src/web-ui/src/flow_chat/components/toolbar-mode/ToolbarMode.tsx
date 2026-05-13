@@ -15,7 +15,7 @@ import {
   Square, 
   Check, 
   X, 
-  Send,
+  ArrowUp,
   Maximize2,
   MoreVertical,
   PanelTopOpen,
@@ -530,7 +530,7 @@ export const ToolbarMode: React.FC = () => {
                   onClick={handleSendMessage}
                   disabled={!inputValue.trim()}
                 >
-                  <Send size={16} />
+                  <ArrowUp size={16} />
                 </button>
               </Tooltip>
             )}
@@ -557,7 +557,7 @@ export const ToolbarMode: React.FC = () => {
                   onClick={handleSendMessage}
                   disabled={!inputValue.trim()}
                 >
-                  <Send size={16} />
+                  <ArrowUp size={16} />
                 </button>
               </Tooltip>
               <Tooltip content={t('planner.cancel')}>

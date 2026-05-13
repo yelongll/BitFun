@@ -2,75 +2,76 @@
 //!
 //! Provide unified error types and handling for the whole application
 
-use bitfun_events::agentic::{AiErrorDetail, ErrorCategory};
+use bitfun_core_types::errors::{
+    ai_error_detail_from_message, classify_ai_error_message, AiErrorDetail, ErrorCategory,
+};
 use serde::Serialize;
 use thiserror::Error;
 
 /// Unified error type for the BitFun application
 #[derive(Debug, Error, Serialize)]
 pub enum BitFunError {
-    #[error("服务错误: {0}")]
+    #[error("Service error: {0}")]
     Service(String),
 
-    #[error("智能体错误: {0}")]
+    #[error("Agent error: {0}")]
     Agent(String),
 
-    #[error("工具错误: {0}")]
+    #[error("Tool error: {0}")]
     Tool(String),
 
-    #[error("AI客户端错误: {0}")]
+    #[error("AI client error: {0}")]
     AIClient(String),
 
-    #[error("会话错误: {0}")]
+    #[error("Session error: {0}")]
     Session(String),
 
-    #[error("工作空间错误: {0}")]
+    #[error("Workspace error: {0}")]
     Workspace(String),
 
-    #[error("验证错误: {0}")]
+    #[error("Validation error: {0}")]
     Validation(String),
 
-    #[error("IO错误: {0}")]
+    #[error("IO error: {0}")]
     #[serde(serialize_with = "serialize_io_error")]
     Io(#[from] std::io::Error),
 
-    #[error("序列错误: {0}")]
+    #[error("Serialization error: {0}")]
     #[serde(serialize_with = "serialize_serde_error")]
     Serialization(#[from] serde_json::Error),
 
-    #[error("HTTP错误: {0}")]
-    #[serde(serialize_with = "serialize_reqwest_error")]
-    Http(#[from] reqwest::Error),
+    #[error("HTTP error: {0}")]
+    Http(String),
 
-    #[error("其他错误: {0}")]
+    #[error("Other error: {0}")]
     #[serde(serialize_with = "serialize_anyhow_error")]
     Other(#[from] anyhow::Error),
 
-    #[error("信号量获取错误: {0}")]
+    #[error("Semaphore acquire error: {0}")]
     Semaphore(String),
 
-    #[error("MCP错误: {0}")]
+    #[error("MCP error: {0}")]
     MCPError(String),
 
-    #[error("进程错误: {0}")]
+    #[error("Process error: {0}")]
     ProcessError(String),
 
-    #[error("未找到: {0}")]
+    #[error("Not found: {0}")]
     NotFound(String),
 
-    #[error("未实现: {0}")]
+    #[error("Not implemented: {0}")]
     NotImplemented(String),
 
-    #[error("超时错误: {0}")]
+    #[error("Timeout: {0}")]
     Timeout(String),
 
-    #[error("配置错误: {0}")]
+    #[error("Configuration error: {0}")]
     Configuration(String),
 
-    #[error("序列化错误: {0}")]
+    #[error("Deserialization error: {0}")]
     Deserialization(String),
 
-    #[error("已取消: {0}")]
+    #[error("Cancelled: {0}")]
     Cancelled(String),
 }
 
@@ -85,13 +86,6 @@ where
 }
 
 fn serialize_serde_error<S>(err: &serde_json::Error, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_str(&err.to_string())
-}
-
-fn serialize_reqwest_error<S>(err: &reqwest::Error, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
@@ -130,6 +124,10 @@ impl BitFunError {
         Self::AIClient(msg.into())
     }
 
+    pub fn http<T: Into<String>>(msg: T) -> Self {
+        Self::Http(msg.into())
+    }
+
     pub fn parse<T: Into<String>>(msg: T) -> Self {
         Self::Deserialization(msg.into())
     }
@@ -157,7 +155,7 @@ impl BitFunError {
     /// Infer an error category from this error for frontend-friendly classification.
     pub fn error_category(&self) -> ErrorCategory {
         match self {
-            BitFunError::AIClient(msg) => classify_ai_error(msg),
+            BitFunError::AIClient(msg) => classify_ai_error_message(msg),
             BitFunError::Timeout(_) => ErrorCategory::Timeout,
             BitFunError::Cancelled(_) => ErrorCategory::Unknown,
             _ => ErrorCategory::Unknown,
@@ -168,249 +166,17 @@ impl BitFunError {
     pub fn error_detail(&self) -> AiErrorDetail {
         let category = self.error_category();
         let message = self.to_string();
-        AiErrorDetail {
-            category: category.clone(),
-            provider: extract_error_field(&message, "provider"),
-            provider_code: extract_error_field(&message, "code"),
-            provider_message: extract_error_field(&message, "message"),
-            request_id: extract_error_field(&message, "request_id"),
-            http_status: extract_http_status(&message),
-            retryable: Some(is_retryable_category(&category)),
-            action_hints: action_hints_for_category(&category),
-        }
+        ai_error_detail_from_message(&message, category)
     }
 }
 
-/// Classify an AI client error message into a structured category.
-fn classify_ai_error(msg: &str) -> ErrorCategory {
-    let m = msg.to_lowercase();
-    if contains_any(
-        &m,
-        &[
-            "code=1113",
-            "\"code\":\"1113\"",
-            "insufficient_quota",
-            "insufficient quota",
-            "insufficient balance",
-            "not_enough_balance",
-            "not enough balance",
-            "exceeded_current_quota_error",
-            "exceeded current quota",
-            "you exceeded your current quota",
-            "no available resource package",
-            "无可用资源包",
-            "余额不足",
-            "账户已欠费",
-            "account has exceeded",
-            "http 402",
-            "error 402",
-            "402 - insufficient balance",
-        ],
-    ) {
-        ErrorCategory::ProviderQuota
-    } else if contains_any(
-        &m,
-        &[
-            "billing",
-            "membership expired",
-            "subscription expired",
-            "plan expired",
-            "套餐已到期",
-            "1309",
-        ],
-    ) {
-        ErrorCategory::ProviderBilling
-    } else if contains_any(
-        &m,
-        &[
-            "overloaded_error",
-            "server overloaded",
-            "temporarily overloaded",
-            "provider unavailable",
-            "service unavailable",
-            "http 503",
-            "error 503",
-            "http 529",
-            "error 529",
-            "1305",
-        ],
-    ) {
-        ErrorCategory::ProviderUnavailable
-    } else if contains_any(
-        &m,
-        &[
-            "content policy",
-            "policy blocked",
-            "safety",
-            "sensitive",
-            "content_filter",
-            "1301",
-            "api 调用被策略阻止",
-        ],
-    ) {
-        ErrorCategory::ContentPolicy
-    } else if m.contains("rate limit")
-        || m.contains("429")
-        || m.contains("too many requests")
-        || m.contains("1302")
-        || m.contains("concurrency")
-        || m.contains("请求并发超额")
-    {
-        ErrorCategory::RateLimit
-    } else if m.contains("authentication")
-        || m.contains("401")
-        || m.contains("invalid api key")
-        || m.contains("incorrect api key")
-        || m.contains("unauthorized")
-        || m.contains("1000")
-        || m.contains("1002")
-    {
-        ErrorCategory::Auth
-    } else if contains_any(
-        &m,
-        &[
-            "permission_error",
-            "permission denied",
-            "forbidden",
-            "not authorized",
-            "no permission",
-            "无权访问",
-            "1220",
-        ],
-    ) {
-        ErrorCategory::Permission
-    } else if m.contains("context window")
-        || m.contains("token limit")
-        || m.contains("max_tokens")
-        || m.contains("context length")
-    {
-        ErrorCategory::ContextOverflow
-    } else if contains_any(
-        &m,
-        &[
-            "invalid_request_error",
-            "invalid request",
-            "bad request",
-            "invalid format",
-            "invalid parameter",
-            "model not found",
-            "unsupported model",
-            "request too large",
-            "http 400",
-            "error 400",
-            "http 413",
-            "error 413",
-            "http 422",
-            "error 422",
-            "1210",
-            "1211",
-            "435",
-        ],
-    ) {
-        ErrorCategory::InvalidRequest
-    } else if m.contains("循环检测") || m.contains("连续使用相同工具错误") {
-        ErrorCategory::LoopDetected
-    } else if m.contains("timeout") || m.contains("timed out") {
-        ErrorCategory::Timeout
-    } else if m.contains("流已关闭")
-        || m.contains("sse 错误")
-        || m.contains("连接重置错误")
-        || m.contains("管道错误")
-    {
-        ErrorCategory::Network
-    } else {
-        ErrorCategory::ModelError
-    }
-}
-
-fn contains_any(value: &str, needles: &[&str]) -> bool {
-    needles.iter().any(|needle| value.contains(needle))
-}
-
-fn is_retryable_category(category: &ErrorCategory) -> bool {
-    matches!(
-        category,
-        ErrorCategory::Network
-            | ErrorCategory::RateLimit
-            | ErrorCategory::Timeout
-            | ErrorCategory::ProviderUnavailable
-    )
-}
-
-fn action_hints_for_category(category: &ErrorCategory) -> Vec<String> {
-    let hints: &[&str] = match category {
-        ErrorCategory::ProviderQuota | ErrorCategory::ProviderBilling => {
-            &["open_model_settings", "switch_model", "copy_diagnostics"]
-        }
-        ErrorCategory::Auth | ErrorCategory::Permission => {
-            &["open_model_settings", "copy_diagnostics"]
-        }
-        ErrorCategory::RateLimit | ErrorCategory::ProviderUnavailable => {
-            &["wait_and_retry", "switch_model", "copy_diagnostics"]
-        }
-        ErrorCategory::ContextOverflow => &["compress_context", "start_new_chat"],
-        ErrorCategory::Network | ErrorCategory::Timeout => {
-            &["retry", "switch_model", "copy_diagnostics"]
-        }
-        ErrorCategory::ContentPolicy | ErrorCategory::InvalidRequest | ErrorCategory::LoopDetected => &["copy_diagnostics"],
-        ErrorCategory::ModelError | ErrorCategory::Unknown => {
-            &["retry", "switch_model", "copy_diagnostics"]
-        }
-    };
-
-    hints.iter().map(|hint| (*hint).to_string()).collect()
-}
-
-fn extract_error_field(message: &str, field: &str) -> Option<String> {
-    let key = format!("{field}=");
-    if let Some(start) = message.find(&key) {
-        let value_start = start + key.len();
-        let value = message[value_start..]
-            .split([',', ';'])
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .trim_matches('"');
-        if !value.is_empty() {
-            return Some(value.to_string());
+impl From<bitfun_agent_stream::StreamProcessorError> for BitFunError {
+    fn from(error: bitfun_agent_stream::StreamProcessorError) -> Self {
+        match error {
+            bitfun_agent_stream::StreamProcessorError::AiClient(msg) => Self::AIClient(msg),
+            bitfun_agent_stream::StreamProcessorError::Cancelled(msg) => Self::Cancelled(msg),
         }
     }
-
-    let json_key = format!("\"{field}\"");
-    if let Some(start) = message.find(&json_key) {
-        let after_key = &message[start + json_key.len()..];
-        if let Some(colon_pos) = after_key.find(':') {
-            let after_colon = after_key[colon_pos + 1..].trim_start();
-            let value = after_colon
-                .trim_start_matches('"')
-                .split(['"', ',', '}'])
-                .next()
-                .unwrap_or_default()
-                .trim();
-            if !value.is_empty() {
-                return Some(value.to_string());
-            }
-        }
-    }
-
-    None
-}
-
-fn extract_http_status(message: &str) -> Option<u16> {
-    let m = message.to_lowercase();
-    for marker in ["http ", "error ", "status "] {
-        if let Some(start) = m.find(marker) {
-            let digits = m[start + marker.len()..]
-                .chars()
-                .take_while(|ch| ch.is_ascii_digit())
-                .collect::<String>();
-            if let Ok(status) = digits.parse::<u16>() {
-                return Some(status);
-            }
-        }
-    }
-
-    None
 }
 
 impl From<BitFunError> for String {
@@ -428,46 +194,5 @@ impl From<String> for BitFunError {
 impl From<&str> for BitFunError {
     fn from(error: &str) -> Self {
         BitFunError::Service(error.to_string())
-    }
-}
-
-impl From<tokio::sync::AcquireError> for BitFunError {
-    fn from(error: tokio::sync::AcquireError) -> Self {
-        BitFunError::Semaphore(error.to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::BitFunError;
-    use bitfun_events::agentic::ErrorCategory;
-
-    #[test]
-    fn classifies_glm_quota_error_as_provider_quota() {
-        let err = BitFunError::AIClient(
-            r#"供应商错误，provider=glm, code=1113, message=余额不足或无可用资源包,请充值。, request_id=20260425142416"#.to_string(),
-        );
-
-        assert_eq!(err.error_category(), ErrorCategory::ProviderQuota);
-    }
-
-    #[test]
-    fn classifies_deepseek_insufficient_balance_as_provider_quota() {
-        let err = BitFunError::AIClient(
-            "DeepSeek API 错误 402 - 余额不足或无可用资源包"
-                .to_string(),
-        );
-
-        assert_eq!(err.error_category(), ErrorCategory::ProviderQuota);
-    }
-
-    #[test]
-    fn classifies_anthropic_overload_as_provider_unavailable() {
-        let err = BitFunError::AIClient(
-            "Anthropic API 错误 529: 超载错误，Anthropic API 临时超载。"
-                .to_string(),
-        );
-
-        assert_eq!(err.error_category(), ErrorCategory::ProviderUnavailable);
     }
 }

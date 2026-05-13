@@ -4,12 +4,13 @@
 
 use super::{scheduler::DialogSubmissionPolicy, turn_outcome::TurnOutcome};
 use crate::agentic::agents::get_agent_registry;
+use crate::agentic::context_profile::ContextProfilePolicy;
 use crate::agentic::core::{
     has_prompt_markup, Message, MessageContent, ProcessingPhase, PromptEnvelope, Session,
     SessionConfig, SessionKind, SessionState, SessionSummary, TurnStats,
 };
 use crate::agentic::events::{
-    AgenticEvent, EventPriority, EventQueue, EventRouter, EventSubscriber,
+    AgenticEvent, DeepReviewQueueState, EventPriority, EventQueue, EventRouter, EventSubscriber,
 };
 use crate::agentic::execution::{ContextCompactionOutcome, ExecutionContext, ExecutionEngine};
 use crate::agentic::fork_agent::{
@@ -51,6 +52,48 @@ const SUBAGENT_TIMEOUT_GRACE_PERIOD: Duration = Duration::from_secs(10);
 pub struct SubagentResult {
     /// AI text response
     pub text: String,
+    pub status: SubagentResultStatus,
+    pub reason: Option<String>,
+    pub ledger_event_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubagentResultStatus {
+    Completed,
+    PartialTimeout,
+}
+
+impl SubagentResult {
+    fn completed(text: String) -> Self {
+        Self {
+            text,
+            status: SubagentResultStatus::Completed,
+            reason: None,
+            ledger_event_id: None,
+        }
+    }
+
+    fn partial_timeout(text: String, reason: String) -> Self {
+        Self {
+            text,
+            status: SubagentResultStatus::PartialTimeout,
+            reason: Some(reason),
+            ledger_event_id: None,
+        }
+    }
+
+    fn with_ledger_event_id(mut self, event_id: String) -> Self {
+        self.ledger_event_id = Some(event_id);
+        self
+    }
+
+    pub fn is_partial_timeout(&self) -> bool {
+        self.status == SubagentResultStatus::PartialTimeout
+    }
+
+    pub fn ledger_event_id(&self) -> Option<&str> {
+        self.ledger_event_id.as_deref()
+    }
 }
 
 struct HiddenSubagentExecutionRequest {
@@ -132,20 +175,17 @@ struct SubagentConcurrencyLimiter {
 }
 
 struct SubagentConcurrencyPermitGuard {
-    permit: Option<OwnedSemaphorePermit>,
-    limiter: SubagentConcurrencyLimiter,
+    permits: Vec<(OwnedSemaphorePermit, SubagentConcurrencyLimiter)>,
     agent_type: String,
 }
 
 impl SubagentConcurrencyPermitGuard {
     fn new(
-        permit: OwnedSemaphorePermit,
-        limiter: SubagentConcurrencyLimiter,
+        permits: Vec<(OwnedSemaphorePermit, SubagentConcurrencyLimiter)>,
         agent_type: String,
     ) -> Self {
         Self {
-            permit: Some(permit),
-            limiter,
+            permits,
             agent_type,
         }
     }
@@ -153,20 +193,17 @@ impl SubagentConcurrencyPermitGuard {
 
 impl Drop for SubagentConcurrencyPermitGuard {
     fn drop(&mut self) {
-        let Some(permit) = self.permit.take() else {
-            return;
-        };
+        for (permit, limiter) in std::mem::take(&mut self.permits) {
+            drop(permit);
 
-        drop(permit);
-
-        let active_subagents = self
-            .limiter
-            .max_concurrency
-            .saturating_sub(self.limiter.semaphore.available_permits());
-        debug!(
-            "Released subagent concurrency permit: agent_type={}, active_subagents={}, max_concurrency={}",
-            self.agent_type, active_subagents, self.limiter.max_concurrency
-        );
+            let active_subagents = limiter
+                .max_concurrency
+                .saturating_sub(limiter.semaphore.available_permits());
+            debug!(
+                "Released subagent concurrency permit: agent_type={}, active_subagents={}, max_concurrency={}",
+                self.agent_type, active_subagents, limiter.max_concurrency
+            );
+        }
     }
 }
 
@@ -256,6 +293,7 @@ pub struct ConversationCoordinator {
     event_queue: Arc<EventQueue>,
     event_router: Arc<EventRouter>,
     subagent_concurrency_limiter: Arc<RwLock<Option<SubagentConcurrencyLimiter>>>,
+    subagent_profile_concurrency_limiters: Arc<RwLock<HashMap<usize, SubagentConcurrencyLimiter>>>,
     /// Registry for dynamically adjusting subagent timeouts.
     subagent_timeout_registry: Arc<RwLock<HashMap<String, Arc<SubagentTimeoutHandle>>>>,
     /// Notifies DialogScheduler of turn outcomes; injected after construction
@@ -518,12 +556,28 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 is_subagent_item: None,
                 parent_task_tool_id: None,
                 subagent_session_id: None,
+                subagent_model_id: None,
+                subagent_model_alias: None,
                 status: Some("completed".to_string()),
                 interruption_reason: None,
+                queue_wait_ms: None,
+                preflight_ms: None,
+                confirmation_wait_ms: None,
+                execution_ms: Some(outcome.duration_ms),
             }],
             thinking_items: Vec::new(),
             start_time: started_at,
             end_time: Some(completed_at),
+            duration_ms: Some(outcome.duration_ms),
+            provider_id: None,
+            model_id: None,
+            model_alias: None,
+            first_chunk_ms: None,
+            first_visible_output_ms: None,
+            stream_duration_ms: None,
+            attempt_count: None,
+            failure_category: None,
+            token_details: None,
             status: "completed".to_string(),
         }
     }
@@ -575,12 +629,28 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 is_subagent_item: None,
                 parent_task_tool_id: None,
                 subagent_session_id: None,
+                subagent_model_id: None,
+                subagent_model_alias: None,
                 status: Some("error".to_string()),
                 interruption_reason: None,
+                queue_wait_ms: None,
+                preflight_ms: None,
+                confirmation_wait_ms: None,
+                execution_ms: None,
             }],
             thinking_items: Vec::new(),
             start_time: timestamp,
             end_time: Some(timestamp),
+            duration_ms: Some(0),
+            provider_id: None,
+            model_id: None,
+            model_alias: None,
+            first_chunk_ms: None,
+            first_visible_output_ms: None,
+            stream_duration_ms: None,
+            attempt_count: None,
+            failure_category: Some("context_compression".to_string()),
+            token_details: None,
             status: "error".to_string(),
         }
     }
@@ -599,6 +669,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             event_queue,
             event_router,
             subagent_concurrency_limiter: Arc::new(RwLock::new(None)),
+            subagent_profile_concurrency_limiters: Arc::new(RwLock::new(HashMap::new())),
             subagent_timeout_registry: Arc::new(RwLock::new(HashMap::new())),
             scheduler_notify_tx: OnceLock::new(),
             round_preempt_source: OnceLock::new(),
@@ -855,6 +926,8 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 tags: Vec::new(),
                 custom_metadata: None,
                 todos: None,
+                deep_review_run_manifest: None,
+                deep_review_cache: None,
                 workspace_path: Some(workspace_path.to_string()),
                 workspace_hostname: None,
                 unread_completion: None,
@@ -1119,6 +1192,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         agent_type: String,
         workspace_path: Option<String>,
         submission_policy: DialogSubmissionPolicy,
+        user_message_metadata: Option<serde_json::Value>,
     ) -> BitFunResult<()> {
         self.start_dialog_turn_internal(
             session_id,
@@ -1129,7 +1203,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             agent_type,
             workspace_path,
             submission_policy,
-            None,
+            user_message_metadata,
             false,
         )
         .await
@@ -1146,6 +1220,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         agent_type: String,
         workspace_path: Option<String>,
         submission_policy: DialogSubmissionPolicy,
+        user_message_metadata: Option<serde_json::Value>,
     ) -> BitFunResult<()> {
         self.start_dialog_turn_internal(
             session_id,
@@ -1156,7 +1231,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             agent_type,
             workspace_path,
             submission_policy,
-            None,
+            user_message_metadata,
             false,
         )
         .await
@@ -1642,6 +1717,39 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             )
             .await?;
 
+        // Register this turn as in-flight immediately after it becomes visible
+        // as Processing. Later await points must not leave a cancel/start
+        // window where wait_session_drained observes zero active work.
+        let active_counter = self
+            .active_turns_per_session
+            .entry(session_id.clone())
+            .or_insert_with(|| Arc::new(AtomicUsize::new(0)))
+            .clone();
+        active_counter.fetch_add(1, Ordering::SeqCst);
+        struct ActiveTurnRegistration {
+            counter: Arc<AtomicUsize>,
+            armed: bool,
+        }
+        impl ActiveTurnRegistration {
+            fn disarm(&mut self) {
+                self.armed = false;
+            }
+        }
+        impl Drop for ActiveTurnRegistration {
+            fn drop(&mut self) {
+                if self.armed {
+                    self.counter.fetch_sub(1, Ordering::SeqCst);
+                }
+            }
+        }
+        let mut active_registration = ActiveTurnRegistration {
+            counter: active_counter.clone(),
+            armed: true,
+        };
+        let cancellation_token = CancellationToken::new();
+        self.execution_engine
+            .register_cancel_token(&turn_id, cancellation_token);
+
         // Send dialog turn started event with original input and image metadata
         // so all frontends (desktop, mobile, bot) can display correctly.
         self.emit_event(AgenticEvent::DialogTurnStarted {
@@ -1660,10 +1768,13 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         .await;
 
         // Get context messages (re-fetch as history may have been restored)
-        let messages = self
-            .session_manager
-            .get_context_messages(&session_id)
-            .await?;
+        let messages = match self.session_manager.get_context_messages(&session_id).await {
+            Ok(messages) => messages,
+            Err(error) => {
+                self.execution_engine.cleanup_cancel_token(&turn_id).await;
+                return Err(error);
+            }
+        };
 
         // Create execution context (pass full config and resource IDs)
         let mut context_vars = std::collections::HashMap::new();
@@ -1692,6 +1803,16 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
 
         // Pass turn_index (for operation history/rollback)
         context_vars.insert("turn_index".to_string(), turn_index.to_string());
+        if let Some(run_manifest) = user_message_metadata.as_ref().and_then(|metadata| {
+            metadata
+                .get("deepReviewRunManifest")
+                .or_else(|| metadata.get("deep_review_run_manifest"))
+        }) {
+            context_vars.insert(
+                "deep_review_run_manifest".to_string(),
+                run_manifest.to_string(),
+            );
+        }
         let session_workspace_path = session_workspace
             .as_ref()
             .map(|workspace| workspace.root_path_string());
@@ -1715,6 +1836,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             workspace_services,
             round_preempt: self.round_preempt_source.get().cloned(),
             round_steering: self.round_steering_source.get().cloned(),
+            recover_partial_on_cancel: false,
         };
 
         // Auto-generate session title on first message
@@ -1770,44 +1892,82 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         let user_message_metadata_clone = user_message_metadata;
         let scheduler_notify_tx = self.scheduler_notify_tx.get().cloned();
 
-        // P0-8: register this turn as in-flight so a subsequent cancel→start
-        // sequence can wait for the spawn task to actually drain before the
-        // new turn touches the in-memory message cache.
-        let active_counter = self
-            .active_turns_per_session
-            .entry(session_id.clone())
-            .or_insert_with(|| Arc::new(AtomicUsize::new(0)))
-            .clone();
-        active_counter.fetch_add(1, Ordering::SeqCst);
-        let active_counter_for_spawn = active_counter.clone();
-
         tokio::spawn(async move {
-            // RAII-style decrement on every exit path of the spawn body.
-            struct DropGuard {
-                counter: Arc<AtomicUsize>,
+            // RAII guard: on drop (ANY exit path, including panic), decrements
+            // the in-flight counter and resets Processing → Idle only if this
+            // task still owns the current turn.
+            //
+            // This is the single source of truth for "is this spawn active?".
+            // Because `Drop` is synchronous we use an in-memory-only state
+            // update here; the async persistence of the state change is done
+            // explicitly in the spawn body below.
+            struct SessionExecutionGuard {
+                session_manager: Arc<SessionManager>,
+                session_id: String,
+                turn_id: String,
+                active_counter: Arc<AtomicUsize>,
             }
-            impl Drop for DropGuard {
-                fn drop(&mut self) {
-                    self.counter.fetch_sub(1, Ordering::SeqCst);
+            impl SessionExecutionGuard {
+                fn new(
+                    session_manager: Arc<SessionManager>,
+                    session_id: String,
+                    turn_id: String,
+                    active_counter: Arc<AtomicUsize>,
+                ) -> Self {
+                    Self {
+                        session_manager,
+                        session_id,
+                        turn_id,
+                        active_counter,
+                    }
                 }
             }
-            let _drop_guard = DropGuard {
-                counter: active_counter_for_spawn,
-            };
+            impl Drop for SessionExecutionGuard {
+                fn drop(&mut self) {
+                    self.active_counter.fetch_sub(1, Ordering::SeqCst);
+                    // If the session is still in Processing (abnormal exit),
+                    // synchronously reset to Idle so the user is never stuck.
+                    self.session_manager
+                        .reset_session_state_if_processing(&self.session_id, &self.turn_id);
+                }
+            }
+
+            let _guard = SessionExecutionGuard::new(
+                session_manager.clone(),
+                session_id_clone.clone(),
+                turn_id_clone.clone(),
+                active_counter,
+            );
 
             // Note: Don't check cancellation here as cancel token hasn't been created yet
             // Cancel token is created in execute_dialog_turn -> execute_round
             // execute_dialog_turn has proper cancellation checks internally
 
-            let _ = session_manager
-                .update_session_state(
+            match session_manager
+                .update_session_state_for_turn_if_processing(
                     &session_id_clone,
+                    &turn_id_clone,
                     SessionState::Processing {
                         current_turn_id: turn_id_clone.clone(),
                         phase: ProcessingPhase::Thinking,
                     },
                 )
-                .await;
+                .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    debug!(
+                        "Skipped refreshing Processing state for stale or cancelled turn: session_id={}, turn_id={}",
+                        session_id_clone, turn_id_clone
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to set session state to Processing: session_id={}, turn_id={}, error={}",
+                        session_id_clone, turn_id_clone, e
+                    );
+                }
+            }
 
             let workspace_turn_status = match execution_engine
                 .execute_dialog_turn(effective_agent_type_clone, messages, execution_context)
@@ -1824,7 +1984,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                         session_id_clone, turn_id_clone, execution_result.total_rounds
                     );
 
-                    let _ = session_manager
+                    if let Err(e) = session_manager
                         .complete_dialog_turn(
                             &session_id_clone,
                             &turn_id_clone,
@@ -1836,20 +1996,44 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                                 duration_ms: 0,
                             },
                         )
-                        .await;
+                        .await
+                    {
+                        error!(
+                            "Failed to complete dialog turn: session_id={}, turn_id={}, error={}",
+                            session_id_clone, turn_id_clone, e
+                        );
+                    }
 
-                    let _ = session_manager
-                        .update_session_state(&session_id_clone, SessionState::Idle)
-                        .await;
+                    match session_manager
+                        .update_session_state_for_turn_if_processing(
+                            &session_id_clone,
+                            &turn_id_clone,
+                            SessionState::Idle,
+                        )
+                        .await
+                    {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            debug!(
+                                "Skipped setting session Idle after completion for stale turn: session_id={}, turn_id={}",
+                                session_id_clone, turn_id_clone
+                            );
+                        }
+                        Err(e) => {
+                            error!("Failed to set session state to Idle after completion: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                        }
+                    }
 
                     if let Some(tx) = &scheduler_notify_tx {
-                        let _ = tx.try_send((
+                        if let Err(e) = tx.try_send((
                             session_id_clone.clone(),
                             TurnOutcome::Completed {
                                 turn_id: turn_id_clone.clone(),
                                 final_response,
                             },
-                        ));
+                        )) {
+                            error!("Failed to notify scheduler of turn completion: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                        }
                     }
 
                     Some(crate::service::session::TurnStatus::Completed)
@@ -1867,7 +2051,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                         // cancellation is detected between rounds.  If cancellation
                         // interrupted streaming mid-round, no event was emitted.
                         // Emit it here unconditionally (duplicates are harmless).
-                        let _ = event_queue
+                        if let Err(e) = event_queue
                             .enqueue(
                                 AgenticEvent::DialogTurnCancelled {
                                     session_id: session_id_clone.clone(),
@@ -1876,27 +2060,51 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                                 },
                                 Some(EventPriority::Critical),
                             )
-                            .await;
+                            .await
+                        {
+                            error!("Failed to emit DialogTurnCancelled event: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                        }
 
                         // Mark the turn as cancelled in persistence so its partial
                         // content appears in historical messages (turns_to_chat_messages
                         // skips InProgress turns) and the frontend can distinguish a
                         // cancellation from a normal completion.
-                        let _ = session_manager
+                        if let Err(e) = session_manager
                             .cancel_dialog_turn(&session_id_clone, &turn_id_clone)
-                            .await;
+                            .await
+                        {
+                            error!("Failed to cancel dialog turn in persistence: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                        }
 
-                        let _ = session_manager
-                            .update_session_state(&session_id_clone, SessionState::Idle)
-                            .await;
+                        match session_manager
+                            .update_session_state_for_turn_if_processing(
+                                &session_id_clone,
+                                &turn_id_clone,
+                                SessionState::Idle,
+                            )
+                            .await
+                        {
+                            Ok(true) => {}
+                            Ok(false) => {
+                                debug!(
+                                    "Skipped setting session Idle after cancellation for stale turn: session_id={}, turn_id={}",
+                                    session_id_clone, turn_id_clone
+                                );
+                            }
+                            Err(e) => {
+                                error!("Failed to set session state to Idle after cancellation: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                            }
+                        }
 
                         if let Some(tx) = &scheduler_notify_tx {
-                            let _ = tx.try_send((
+                            if let Err(e) = tx.try_send((
                                 session_id_clone.clone(),
                                 TurnOutcome::Cancelled {
                                     turn_id: turn_id_clone.clone(),
                                 },
-                            ));
+                            )) {
+                                error!("Failed to notify scheduler of turn cancellation: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                            }
                         }
 
                         Some(crate::service::session::TurnStatus::Cancelled)
@@ -1907,7 +2115,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                         let recoverable =
                             !matches!(&e, BitFunError::AIClient(_) | BitFunError::Timeout(_));
 
-                        let _ = event_queue
+                        if let Err(eq_err) = event_queue
                             .enqueue(
                                 AgenticEvent::DialogTurnFailed {
                                     session_id: session_id_clone.clone(),
@@ -1919,30 +2127,54 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                                 },
                                 Some(EventPriority::Critical),
                             )
-                            .await;
+                            .await
+                        {
+                            error!("Failed to emit DialogTurnFailed event: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, eq_err);
+                        }
 
-                        let _ = session_manager
+                        if let Err(e) = session_manager
                             .fail_dialog_turn(&session_id_clone, &turn_id_clone, error_text.clone())
-                            .await;
+                            .await
+                        {
+                            error!("Failed to mark dialog turn as failed: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                        }
 
-                        let _ = session_manager
-                            .update_session_state(
+                        match session_manager
+                            .update_session_state_for_turn_if_processing(
                                 &session_id_clone,
+                                &turn_id_clone,
                                 SessionState::Error {
                                     error: error_text.clone(),
                                     recoverable,
                                 },
                             )
-                            .await;
+                            .await
+                        {
+                            Ok(true) => {}
+                            Ok(false) => {
+                                debug!(
+                                    "Skipped setting session Error after failure for stale turn: session_id={}, turn_id={}",
+                                    session_id_clone, turn_id_clone
+                                );
+                            }
+                            Err(e) => {
+                                error!(
+                                    "Failed to set session state to Error: session_id={}, turn_id={}, error={}",
+                                    session_id_clone, turn_id_clone, e
+                                );
+                            }
+                        }
 
                         if let Some(tx) = &scheduler_notify_tx {
-                            let _ = tx.try_send((
+                            if let Err(e) = tx.try_send((
                                 session_id_clone.clone(),
                                 TurnOutcome::Failed {
                                     turn_id: turn_id_clone.clone(),
                                     error: error_text,
                                 },
-                            ));
+                            )) {
+                                error!("Failed to notify scheduler of turn failure: session_id={}, turn_id={}, error={}", session_id_clone, turn_id_clone, e);
+                            }
                         }
 
                         Some(crate::service::session::TurnStatus::Error)
@@ -1971,6 +2203,7 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 }
             }
         });
+        active_registration.disarm();
 
         Ok(())
     }
@@ -2018,10 +2251,17 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .unwrap_or_else(|| "Unknown".to_string());
         debug!("Current state: {}", old_state);
 
-        // Step 1: Immediately update session state to Idle (non-blocking, allows immediate new dialog)
-        debug!("Updating session state to Idle");
-        self.session_manager
-            .update_session_state(session_id, SessionState::Idle)
+        // Step 1: Immediately update session state to Idle only if this
+        // cancellation still targets the currently processing turn. A delayed
+        // cancel request for an older turn must not clear a newer turn.
+        debug!("Conditionally updating session state to Idle for cancelled turn");
+        let state_updated = self
+            .session_manager
+            .update_session_state_for_turn_if_processing(
+                session_id,
+                dialog_turn_id,
+                SessionState::Idle,
+            )
             .await?;
 
         let new_state = self
@@ -2031,13 +2271,21 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .unwrap_or_else(|| "Unknown".to_string());
         debug!("State updated: {} -> {}", old_state, new_state);
 
-        // Step 2: Immediately send state change event (notify frontend can start new dialog)
-        self.emit_event(AgenticEvent::SessionStateChanged {
-            session_id: session_id.to_string(),
-            new_state: "idle".to_string(),
-        })
-        .await;
-        debug!("Session state change event sent");
+        // Step 2: Immediately send state change event only when this cancel
+        // actually changed the active turn state.
+        if state_updated {
+            self.emit_event(AgenticEvent::SessionStateChanged {
+                session_id: session_id.to_string(),
+                new_state: "idle".to_string(),
+            })
+            .await;
+            debug!("Session state change event sent");
+        } else {
+            debug!(
+                "Skipped idle event for stale cancellation: session_id={}, dialog_turn_id={}",
+                session_id, dialog_turn_id
+            );
+        }
 
         // Step 3: Trigger cancellation tokens so the running turn unwinds. We
         // do this synchronously (not spawn) because the calls themselves are
@@ -2261,20 +2509,46 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         limiter
     }
 
-    async fn acquire_subagent_concurrency_permit(
+    async fn get_subagent_profile_concurrency_limiter(
         &self,
+        max_concurrency: usize,
+    ) -> SubagentConcurrencyLimiter {
+        let max_concurrency = normalize_subagent_max_concurrency(max_concurrency);
+
+        {
+            let limiter_guard = self.subagent_profile_concurrency_limiters.read().await;
+            if let Some(limiter) = limiter_guard.get(&max_concurrency) {
+                return limiter.clone();
+            }
+        }
+
+        let mut limiter_guard = self.subagent_profile_concurrency_limiters.write().await;
+        if let Some(limiter) = limiter_guard.get(&max_concurrency) {
+            return limiter.clone();
+        }
+
+        let limiter = SubagentConcurrencyLimiter {
+            semaphore: Arc::new(Semaphore::new(max_concurrency)),
+            max_concurrency,
+        };
+        limiter_guard.insert(max_concurrency, limiter.clone());
+        limiter
+    }
+
+    async fn acquire_permit_from_limiter(
+        &self,
+        limiter: &SubagentConcurrencyLimiter,
         agent_type: &str,
         cancel_token: Option<&CancellationToken>,
         deadline: Option<Instant>,
-    ) -> BitFunResult<(OwnedSemaphorePermit, SubagentConcurrencyLimiter, u128)> {
-        let limiter = self.get_subagent_concurrency_limiter().await;
-        let started_waiting = Instant::now();
+        label: &str,
+    ) -> BitFunResult<OwnedSemaphorePermit> {
         let semaphore = limiter.semaphore.clone();
-
         let permit = match (cancel_token, deadline) {
             (Some(token), Some(deadline)) => {
                 tokio::select! {
-                    result = semaphore.acquire_owned() => result?,
+                    result = semaphore.acquire_owned() => result
+                        .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
                     _ = token.cancelled() => {
                         return Err(BitFunError::Cancelled(
                             "Subagent task was cancelled while waiting for a concurrency slot".to_string(),
@@ -2282,15 +2556,16 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     }
                     _ = tokio::time::sleep_until(deadline) => {
                         return Err(BitFunError::Timeout(format!(
-                            "Timed out while waiting for a concurrency slot for subagent '{}'",
-                            agent_type
+                            "Timed out while waiting for a {} concurrency slot for subagent '{}'",
+                            label, agent_type
                         )));
                     }
                 }
             }
             (Some(token), None) => {
                 tokio::select! {
-                    result = semaphore.acquire_owned() => result?,
+                    result = semaphore.acquire_owned() => result
+                        .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
                     _ = token.cancelled() => {
                         return Err(BitFunError::Cancelled(
                             "Subagent task was cancelled while waiting for a concurrency slot".to_string(),
@@ -2300,28 +2575,120 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             }
             (None, Some(deadline)) => {
                 tokio::select! {
-                    result = semaphore.acquire_owned() => result?,
+                    result = semaphore.acquire_owned() => result
+                        .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
                     _ = tokio::time::sleep_until(deadline) => {
                         return Err(BitFunError::Timeout(format!(
-                            "Timed out while waiting for a concurrency slot for subagent '{}'",
-                            agent_type
+                            "Timed out while waiting for a {} concurrency slot for subagent '{}'",
+                            label, agent_type
                         )));
                     }
                 }
             }
-            (None, None) => semaphore.acquire_owned().await?,
+            (None, None) => semaphore
+                .acquire_owned()
+                .await
+                .map_err(|error| BitFunError::Semaphore(error.to_string()))?,
         };
 
-        let wait_ms = started_waiting.elapsed().as_millis();
         let active_subagents = limiter
             .max_concurrency
             .saturating_sub(limiter.semaphore.available_permits());
         debug!(
-            "Acquired subagent concurrency permit: agent_type={}, wait_ms={}, active_subagents={}, max_concurrency={}",
-            agent_type, wait_ms, active_subagents, limiter.max_concurrency
+            "Acquired subagent {} concurrency permit: agent_type={}, active_subagents={}, max_concurrency={}",
+            label, agent_type, active_subagents, limiter.max_concurrency
         );
 
-        Ok((permit, limiter, wait_ms))
+        Ok(permit)
+    }
+
+    async fn acquire_subagent_concurrency_permit(
+        &self,
+        agent_type: &str,
+        profile_concurrency_cap: usize,
+        cancel_token: Option<&CancellationToken>,
+        deadline: Option<Instant>,
+    ) -> BitFunResult<(
+        Vec<(OwnedSemaphorePermit, SubagentConcurrencyLimiter)>,
+        u128,
+    )> {
+        let started_waiting = Instant::now();
+
+        let profile_limiter = self
+            .get_subagent_profile_concurrency_limiter(profile_concurrency_cap)
+            .await;
+        let profile_permit = self
+            .acquire_permit_from_limiter(
+                &profile_limiter,
+                agent_type,
+                cancel_token,
+                deadline,
+                "profile",
+            )
+            .await?;
+
+        let global_limiter = self.get_subagent_concurrency_limiter().await;
+        let global_permit = self
+            .acquire_permit_from_limiter(
+                &global_limiter,
+                agent_type,
+                cancel_token,
+                deadline,
+                "global",
+            )
+            .await?;
+
+        let wait_ms = started_waiting.elapsed().as_millis();
+        debug!(
+            "Acquired subagent concurrency permits: agent_type={}, wait_ms={}, profile_max_concurrency={}, global_max_concurrency={}",
+            agent_type, wait_ms, profile_limiter.max_concurrency, global_limiter.max_concurrency
+        );
+
+        Ok((
+            vec![
+                (profile_permit, profile_limiter),
+                (global_permit, global_limiter),
+            ],
+            wait_ms,
+        ))
+    }
+
+    fn context_profile_policy_for_subagent(
+        &self,
+        agent_type: &str,
+        session_config: &SessionConfig,
+        subagent_parent_info: Option<&SubagentParentInfo>,
+    ) -> ContextProfilePolicy {
+        if let Some(parent_info) = subagent_parent_info {
+            if let Some(parent_session) = self.session_manager.get_session(&parent_info.session_id)
+            {
+                let parent_is_review_subagent = get_agent_registry()
+                    .get_subagent_is_review(&parent_session.agent_type)
+                    .unwrap_or(false);
+                let is_review_subagent = get_agent_registry()
+                    .get_subagent_is_review(agent_type)
+                    .unwrap_or(false);
+                return ContextProfilePolicy::for_subagent_context_and_models(
+                    agent_type,
+                    is_review_subagent,
+                    session_config.model_id.as_deref(),
+                    Some(&parent_session.agent_type),
+                    parent_is_review_subagent,
+                    parent_session.config.model_id.as_deref(),
+                );
+            }
+        }
+
+        let is_review_subagent = get_agent_registry()
+            .get_subagent_is_review(agent_type)
+            .unwrap_or(false);
+        let model_id = session_config.model_id.as_deref().unwrap_or_default();
+        ContextProfilePolicy::for_agent_context_and_model(
+            agent_type,
+            is_review_subagent,
+            model_id,
+            model_id,
+        )
     }
 
     async fn execute_hidden_subagent_internal(
@@ -2354,6 +2721,31 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         let initial_deadline =
             timeout_seconds.map(|seconds| Instant::now() + Duration::from_secs(seconds));
         let (deadline_tx, mut deadline_rx) = watch::channel(initial_deadline);
+        let subagent_started_at = Instant::now();
+        let parent_session_id = subagent_parent_info
+            .as_ref()
+            .map(|info| info.session_id.as_str())
+            .unwrap_or("-");
+        let parent_dialog_turn_id = subagent_parent_info
+            .as_ref()
+            .map(|info| info.dialog_turn_id.as_str())
+            .unwrap_or("-");
+        let parent_tool_call_id = subagent_parent_info
+            .as_ref()
+            .map(|info| info.tool_call_id.as_str())
+            .unwrap_or("-");
+
+        let context_profile_policy = self.context_profile_policy_for_subagent(
+            &agent_type,
+            &session_config,
+            subagent_parent_info.as_ref(),
+        );
+        debug!(
+            "Subagent context profile policy selected: agent_type={}, profile={:?}, profile_concurrency_cap={}",
+            agent_type,
+            context_profile_policy.profile,
+            context_profile_policy.subagent_concurrency_cap
+        );
 
         // Check cancel token (before creating session)
         if let Some(token) = cancel_token {
@@ -2369,11 +2761,15 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         // Use create_subagent_session (not create_session) so that no SessionCreated
         // event is emitted to the transport layer — subagent sessions are internal
         // implementation details and must not appear in the UI session list.
-        let (permit, limiter, wait_ms) = self
-            .acquire_subagent_concurrency_permit(&agent_type, cancel_token, initial_deadline)
+        let (permits, wait_ms) = self
+            .acquire_subagent_concurrency_permit(
+                &agent_type,
+                context_profile_policy.subagent_concurrency_cap,
+                cancel_token,
+                initial_deadline,
+            )
             .await?;
-        let _permit_guard =
-            SubagentConcurrencyPermitGuard::new(permit, limiter, agent_type.clone());
+        let _permit_guard = SubagentConcurrencyPermitGuard::new(permits, agent_type.clone());
 
         if let Some(token) = cancel_token {
             if token.is_cancelled() {
@@ -2465,6 +2861,19 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             dialog_turn_id: dialog_turn_id.clone(),
         };
 
+        // Subagent sessions do not go through `start_dialog_turn_internal`, so
+        // they must mark their active turn here. The desktop stop action uses
+        // this state to find the running turn and signal the right cancel token.
+        self.session_manager
+            .update_session_state(
+                &session_id,
+                SessionState::Processing {
+                    current_turn_id: dialog_turn_id.clone(),
+                    phase: ProcessingPhase::Thinking,
+                },
+            )
+            .await?;
+
         // Emit DialogTurnStarted with subagent_parent_info so the frontend can
         // associate the subagent session ID with the parent tool (enabling the
         // "ignore timeout" feature for deep-review subagents).
@@ -2507,11 +2916,23 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             // dialog turns only. Leave None so we don't intercept buffer entries
             // that belong to a different (parent) session/turn.
             round_steering: None,
+            recover_partial_on_cancel: true,
         };
 
         let execution_engine = self.execution_engine.clone();
         let tool_pipeline = self.tool_pipeline.clone();
         let agent_type_for_execution = agent_type.clone();
+        debug!(
+            "Subagent execution task starting: agent_type={}, session_id={}, dialog_turn_id={}, parent_session_id={}, parent_dialog_turn_id={}, parent_tool_call_id={}, timeout_seconds={:?}, wait_ms={}",
+            agent_type,
+            session_id,
+            dialog_turn_id,
+            parent_session_id,
+            parent_dialog_turn_id,
+            parent_tool_call_id,
+            timeout_seconds,
+            wait_ms
+        );
         let mut execution_task = tokio::spawn(async move {
             execution_engine
                 .execute_dialog_turn(
@@ -2576,6 +2997,23 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                 }
             }
         };
+
+        let execution_outcome_label = match &execution_outcome {
+            SubagentExecutionOutcome::Completed(_) => "completed",
+            SubagentExecutionOutcome::Cancelled => "cancelled",
+            SubagentExecutionOutcome::TimedOut => "timed_out",
+        };
+        debug!(
+            "Subagent execution outcome resolved: agent_type={}, session_id={}, dialog_turn_id={}, parent_session_id={}, parent_dialog_turn_id={}, parent_tool_call_id={}, outcome={}, duration_ms={}",
+            agent_type,
+            session_id,
+            dialog_turn_id,
+            parent_session_id,
+            parent_dialog_turn_id,
+            parent_tool_call_id,
+            execution_outcome_label,
+            subagent_started_at.elapsed().as_millis()
+        );
 
         let result = match execution_outcome {
             SubagentExecutionOutcome::Completed(join_result) => match join_result {
@@ -2689,15 +3127,41 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     );
                 }
 
-                match tokio::time::timeout(SUBAGENT_TIMEOUT_GRACE_PERIOD, &mut execution_task).await
+                let partial_timeout_result = match tokio::time::timeout(
+                    SUBAGENT_TIMEOUT_GRACE_PERIOD,
+                    &mut execution_task,
+                )
+                .await
                 {
-                    Ok(Ok(Ok(_))) | Ok(Ok(Err(_))) => {}
+                    Ok(Ok(Ok(exec_result))) => {
+                        let response_text = match exec_result.final_message.content {
+                            MessageContent::Mixed { text, .. } => text,
+                            MessageContent::Text(text) => text,
+                            _ => String::new(),
+                        };
+                        if response_text.trim().is_empty() {
+                            None
+                        } else {
+                            Some(SubagentResult::partial_timeout(
+                                response_text,
+                                timeout_error_message.clone(),
+                            ))
+                        }
+                    }
+                    Ok(Ok(Err(error))) => {
+                        debug!(
+                            "Subagent returned error during timeout grace period: agent_type={}, session={}, error={}",
+                            agent_type, session_id, error
+                        );
+                        None
+                    }
                     Ok(Err(error)) => {
                         warn!(
                             "Subagent join failed during timeout grace period: agent_type={}, session={}, error={}",
                             agent_type, session_id, error
                         );
                         execution_task.abort();
+                        None
                     }
                     Err(_) => {
                         warn!(
@@ -2705,7 +3169,37 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                             agent_type, session_id
                         );
                         execution_task.abort();
+                        None
                     }
+                };
+
+                if let Some(mut partial_result) = partial_timeout_result {
+                    warn!(
+                        "Subagent timed out with partial output: agent_type={}, session={}, text_len={}",
+                        agent_type,
+                        session_id,
+                        partial_result.text.len()
+                    );
+                    if let Some(parent_info) = subagent_parent_info.as_ref() {
+                        let event = self.session_manager.record_subagent_partial_timeout(
+                            &parent_info.session_id,
+                            &parent_info.dialog_turn_id,
+                            &agent_type,
+                            &partial_result.text,
+                            Some("timeout"),
+                        );
+                        partial_result = partial_result.with_ledger_event_id(event.event_id);
+                    }
+                    if let Err(cleanup_err) = self.cleanup_subagent_resources(&session_id).await {
+                        warn!(
+                            "Failed to cleanup subagent resources after partial timeout: session={}, error={}",
+                            session_id, cleanup_err
+                        );
+                    }
+                    let mut registry = self.subagent_timeout_registry.write().await;
+                    registry.remove(&session_id);
+
+                    return Ok(partial_result);
                 }
 
                 if let Err(cleanup_err) = self.cleanup_subagent_resources(&session_id).await {
@@ -2750,7 +3244,27 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         };
 
         // Clean up subagent session resources after successful execution
-        debug!("Starting subagent resource cleanup: session={}", session_id);
+        debug!(
+            "Subagent successful execution produced final text: agent_type={}, session_id={}, dialog_turn_id={}, parent_session_id={}, parent_dialog_turn_id={}, parent_tool_call_id={}, text_len={}, duration_ms={}",
+            agent_type,
+            session_id,
+            dialog_turn_id,
+            parent_session_id,
+            parent_dialog_turn_id,
+            parent_tool_call_id,
+            response_text.len(),
+            subagent_started_at.elapsed().as_millis()
+        );
+        let cleanup_started_at = Instant::now();
+        debug!(
+            "Subagent cleanup starting after successful execution: agent_type={}, session_id={}, dialog_turn_id={}, parent_session_id={}, parent_dialog_turn_id={}, parent_tool_call_id={}",
+            agent_type,
+            session_id,
+            dialog_turn_id,
+            parent_session_id,
+            parent_dialog_turn_id,
+            parent_tool_call_id
+        );
         if let Err(e) = self.cleanup_subagent_resources(&session_id).await {
             warn!(
                 "Failed to cleanup subagent resources: session={}, error={}",
@@ -2758,16 +3272,42 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             );
         } else {
             debug!(
-                "Subagent resource cleanup completed: session={}",
-                session_id
+                "Subagent cleanup completed after successful execution: agent_type={}, session_id={}, dialog_turn_id={}, parent_session_id={}, parent_dialog_turn_id={}, parent_tool_call_id={}, cleanup_duration_ms={}",
+                agent_type,
+                session_id,
+                dialog_turn_id,
+                parent_session_id,
+                parent_dialog_turn_id,
+                parent_tool_call_id,
+                cleanup_started_at.elapsed().as_millis()
             );
         }
+        debug!(
+            "Subagent timeout registry removal starting: agent_type={}, session_id={}, dialog_turn_id={}",
+            agent_type, session_id, dialog_turn_id
+        );
         let mut registry = self.subagent_timeout_registry.write().await;
         registry.remove(&session_id);
+        debug!(
+            "Subagent timeout registry removal completed: agent_type={}, session_id={}, dialog_turn_id={}, total_duration_ms={}",
+            agent_type,
+            session_id,
+            dialog_turn_id,
+            subagent_started_at.elapsed().as_millis()
+        );
 
-        Ok(SubagentResult {
-            text: response_text,
-        })
+        debug!(
+            "Subagent result returning to caller: agent_type={}, session_id={}, dialog_turn_id={}, parent_session_id={}, parent_dialog_turn_id={}, parent_tool_call_id={}, status=completed, text_len={}, total_duration_ms={}",
+            agent_type,
+            session_id,
+            dialog_turn_id,
+            parent_session_id,
+            parent_dialog_turn_id,
+            parent_tool_call_id,
+            response_text.len(),
+            subagent_started_at.elapsed().as_millis()
+        );
+        Ok(SubagentResult::completed(response_text))
     }
 
     pub async fn capture_fork_agent_context_snapshot(
@@ -2991,10 +3531,8 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     ///
     /// Release resources occupied by subagent session (sandbox, etc.) and delete session
     async fn cleanup_subagent_resources(&self, session_id: &str) -> BitFunResult<()> {
-        debug!(
-            "Starting subagent resource cleanup: session_id={}",
-            session_id
-        );
+        let cleanup_started_at = Instant::now();
+        debug!("Starting subagent resource cleanup: session_id={}", session_id);
 
         // Clean up snapshot system resources
         if let Some(workspace_path) = self
@@ -3002,6 +3540,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .get_session(session_id)
             .and_then(|session| session.config.workspace_path.map(std::path::PathBuf::from))
         {
+            debug!(
+                "Subagent cleanup stage starting: session_id={}, stage=snapshot_cleanup, workspace_path={}",
+                session_id,
+                workspace_path.display()
+            );
+            let stage_started_at = Instant::now();
             if let Ok(snapshot_manager) =
                 crate::service::snapshot::ensure_snapshot_manager_for_workspace(&workspace_path)
             {
@@ -3019,6 +3563,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
                     );
                 }
             }
+            debug!(
+                "Subagent cleanup stage completed: session_id={}, stage=snapshot_cleanup, duration_ms={}",
+                session_id,
+                stage_started_at.elapsed().as_millis()
+            );
         }
 
         // Delete the subagent session itself, including runtime context and persisted turn data.
@@ -3028,6 +3577,12 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .and_then(|session| session.config.workspace_path.map(std::path::PathBuf::from));
 
         if let Some(workspace_path) = workspace_path {
+            debug!(
+                "Subagent cleanup stage starting: session_id={}, stage=session_delete, workspace_path={}",
+                session_id,
+                workspace_path.display()
+            );
+            let stage_started_at = Instant::now();
             if let Err(e) = self
                 .session_manager
                 .delete_session(&workspace_path, session_id)
@@ -3040,6 +3595,11 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             } else {
                 debug!("Subagent session deleted: session={}", session_id);
             }
+            debug!(
+                "Subagent cleanup stage completed: session_id={}, stage=session_delete, duration_ms={}",
+                session_id,
+                stage_started_at.elapsed().as_millis()
+            );
         } else {
             warn!(
                 "Failed to delete subagent session because workspace_path is missing: session={}",
@@ -3048,8 +3608,9 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         }
 
         debug!(
-            "Subagent resource cleanup completed: session_id={}",
-            session_id
+            "Subagent resource cleanup completed: session_id={}, duration_ms={}",
+            session_id,
+            cleanup_started_at.elapsed().as_millis()
         );
         Ok(())
     }
@@ -3154,6 +3715,24 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
             .await;
     }
 
+    pub async fn emit_deep_review_queue_state_changed(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        queue_state: DeepReviewQueueState,
+    ) {
+        let event = AgenticEvent::DeepReviewQueueStateChanged {
+            session_id: session_id.to_string(),
+            turn_id: turn_id.to_string(),
+            queue_state,
+            subagent_parent_info: None,
+        };
+        let _ = self
+            .event_queue
+            .enqueue(event, Some(EventPriority::High))
+            .await;
+    }
+
     /// Get SessionManager reference (for advanced features like mode management)
     pub fn get_session_manager(&self) -> &Arc<SessionManager> {
         &self.session_manager
@@ -3201,6 +3780,195 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
     }
 }
 
+fn resolve_agent_submission_turn_id(
+    request: &bitfun_runtime_ports::AgentSubmissionRequest,
+) -> String {
+    request
+        .turn_id
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            request
+                .metadata
+                .get("turnId")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+}
+
+#[async_trait::async_trait]
+impl bitfun_runtime_ports::AgentSubmissionPort for ConversationCoordinator {
+    async fn create_session(
+        &self,
+        request: bitfun_runtime_ports::AgentSessionCreateRequest,
+    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSessionCreateResult> {
+        let workspace_path = request.workspace_path.clone().ok_or_else(|| {
+            bitfun_runtime_ports::PortError::new(
+                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+                "workspace_path is required to create an agent session",
+            )
+        })?;
+
+        let session = self
+            .create_session_with_workspace(
+                None,
+                request.session_name,
+                request.agent_type,
+                SessionConfig {
+                    workspace_path: Some(workspace_path.clone()),
+                    ..Default::default()
+                },
+                workspace_path,
+            )
+            .await
+            .map_err(|error| {
+                bitfun_runtime_ports::PortError::new(
+                    bitfun_runtime_ports::PortErrorKind::Backend,
+                    error.to_string(),
+                )
+            })?;
+
+        Ok(bitfun_runtime_ports::AgentSessionCreateResult {
+            session_id: session.session_id,
+            agent_type: session.agent_type,
+        })
+    }
+
+    async fn submit_message(
+        &self,
+        request: bitfun_runtime_ports::AgentSubmissionRequest,
+    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::AgentSubmissionResult> {
+        if !request.attachments.is_empty() {
+            return Err(bitfun_runtime_ports::PortError::new(
+                bitfun_runtime_ports::PortErrorKind::InvalidRequest,
+                "agent submission port does not yet accept generic attachments",
+            ));
+        }
+
+        let session = self
+            .get_session_manager()
+            .get_session(&request.session_id)
+            .ok_or_else(|| {
+                bitfun_runtime_ports::PortError::new(
+                    bitfun_runtime_ports::PortErrorKind::NotFound,
+                    format!("session not found: {}", request.session_id),
+                )
+            })?;
+
+        let turn_id = resolve_agent_submission_turn_id(&request);
+
+        let trigger_source = match request
+            .source
+            .unwrap_or(bitfun_runtime_ports::AgentSubmissionSource::Bot)
+        {
+            bitfun_runtime_ports::AgentSubmissionSource::DesktopUi => {
+                DialogTriggerSource::DesktopUi
+            }
+            bitfun_runtime_ports::AgentSubmissionSource::DesktopApi => {
+                DialogTriggerSource::DesktopApi
+            }
+            bitfun_runtime_ports::AgentSubmissionSource::AgentSession => {
+                DialogTriggerSource::AgentSession
+            }
+            bitfun_runtime_ports::AgentSubmissionSource::ScheduledJob => {
+                DialogTriggerSource::ScheduledJob
+            }
+            bitfun_runtime_ports::AgentSubmissionSource::RemoteRelay => {
+                DialogTriggerSource::RemoteRelay
+            }
+            bitfun_runtime_ports::AgentSubmissionSource::Bot => DialogTriggerSource::Bot,
+            bitfun_runtime_ports::AgentSubmissionSource::Cli => DialogTriggerSource::Cli,
+        };
+        let user_message_metadata = if request.metadata.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(request.metadata.clone()))
+        };
+
+        self.start_dialog_turn(
+            request.session_id,
+            request.message.clone(),
+            Some(request.message),
+            Some(turn_id.clone()),
+            session.agent_type.clone(),
+            session.config.workspace_path.clone(),
+            DialogSubmissionPolicy::for_source(trigger_source),
+            user_message_metadata,
+        )
+        .await
+        .map_err(|error| {
+            bitfun_runtime_ports::PortError::new(
+                bitfun_runtime_ports::PortErrorKind::Backend,
+                error.to_string(),
+            )
+        })?;
+
+        Ok(bitfun_runtime_ports::AgentSubmissionResult {
+            turn_id,
+            accepted: true,
+        })
+    }
+
+    async fn resolve_session_agent_type(
+        &self,
+        session_id: &str,
+    ) -> bitfun_runtime_ports::PortResult<Option<String>> {
+        Ok(self
+            .get_session_manager()
+            .get_session(session_id)
+            .map(|session| session.agent_type.clone()))
+    }
+}
+
+#[async_trait::async_trait]
+impl bitfun_runtime_ports::SessionTranscriptReader for ConversationCoordinator {
+    async fn read_session_transcript(
+        &self,
+        request: bitfun_runtime_ports::SessionTranscriptRequest,
+    ) -> bitfun_runtime_ports::PortResult<bitfun_runtime_ports::SessionTranscript> {
+        let messages = self
+            .get_messages(&request.session_id)
+            .await
+            .map_err(|error| {
+                bitfun_runtime_ports::PortError::new(
+                    bitfun_runtime_ports::PortErrorKind::Backend,
+                    error.to_string(),
+                )
+            })?;
+
+        let messages = messages
+            .into_iter()
+            .filter(|message| match request.turn_id.as_ref() {
+                Some(turn_id) => message.metadata.turn_id.as_ref() == Some(turn_id),
+                None => true,
+            })
+            .map(|message| {
+                let role = match message.role {
+                    crate::agentic::core::MessageRole::User => "user",
+                    crate::agentic::core::MessageRole::Assistant => "assistant",
+                    crate::agentic::core::MessageRole::Tool => "tool",
+                    crate::agentic::core::MessageRole::System => "system",
+                }
+                .to_string();
+
+                bitfun_runtime_ports::TranscriptMessage {
+                    role,
+                    turn_id: message.metadata.turn_id,
+                    content: serde_json::to_value(message.content).unwrap_or_default(),
+                }
+            })
+            .collect();
+
+        Ok(bitfun_runtime_ports::SessionTranscript {
+            session_id: request.session_id,
+            messages,
+        })
+    }
+}
+
 async fn is_ai_session_title_generation_enabled() -> bool {
     match crate::service::config::get_global_config_service().await {
         Ok(service) => service
@@ -3223,14 +3991,59 @@ pub fn get_global_coordinator() -> Option<Arc<ConversationCoordinator>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_subagent_max_concurrency, ConversationCoordinator};
+    use super::{
+        normalize_subagent_max_concurrency, resolve_agent_submission_turn_id,
+        ConversationCoordinator,
+    };
     use crate::service::remote_ssh::workspace_state::init_remote_workspace_manager;
+    use bitfun_runtime_ports::{AgentSubmissionRequest, AgentSubmissionSource};
 
     #[test]
     fn clamps_subagent_max_concurrency_into_safe_range() {
         assert_eq!(normalize_subagent_max_concurrency(0), 1);
         assert_eq!(normalize_subagent_max_concurrency(5), 5);
         assert_eq!(normalize_subagent_max_concurrency(usize::MAX), 64);
+    }
+
+    #[test]
+    fn agent_submission_turn_id_prefers_explicit_field_over_metadata() {
+        let mut metadata = serde_json::Map::new();
+        metadata.insert(
+            "turnId".to_string(),
+            serde_json::Value::String("legacy_metadata_turn".to_string()),
+        );
+        let request = AgentSubmissionRequest {
+            session_id: "session_1".to_string(),
+            message: "hello".to_string(),
+            turn_id: Some("explicit_turn".to_string()),
+            source: Some(AgentSubmissionSource::RemoteRelay),
+            attachments: Vec::new(),
+            metadata,
+        };
+
+        assert_eq!(resolve_agent_submission_turn_id(&request), "explicit_turn");
+    }
+
+    #[test]
+    fn agent_submission_turn_id_keeps_metadata_fallback() {
+        let mut metadata = serde_json::Map::new();
+        metadata.insert(
+            "turnId".to_string(),
+            serde_json::Value::String("legacy_metadata_turn".to_string()),
+        );
+        let request = AgentSubmissionRequest {
+            session_id: "session_1".to_string(),
+            message: "hello".to_string(),
+            turn_id: None,
+            source: Some(AgentSubmissionSource::RemoteRelay),
+            attachments: Vec::new(),
+            metadata,
+        };
+
+        assert_eq!(
+            resolve_agent_submission_turn_id(&request),
+            "legacy_metadata_turn"
+        );
     }
 
     #[tokio::test]

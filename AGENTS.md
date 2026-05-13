@@ -17,6 +17,8 @@ Repository rule: **keep product logic platform-agnostic, then expose it through 
 | Module | Path | Agent doc |
 |---|---|---|
 | Core (product logic) | `src/crates/core` | [AGENTS.md](src/crates/core/AGENTS.md) |
+| Extracted core support | `src/crates/{core-types,agent-stream,runtime-ports,terminal,tool-runtime}` | (use core guide) |
+| Core owner crates | `src/crates/{services-core,services-integrations,agent-tools,tool-packs,product-domains}` | (use core guide + decomposition guardrails) |
 | Transport adapters | `src/crates/transport` | (use core guide) |
 | API layer | `src/crates/api-layer` | (use core guide) |
 | AI adapters | `src/crates/ai-adapters` | [AGENTS.md](src/crates/ai-adapters/AGENTS.md) |
@@ -94,7 +96,32 @@ await api.invoke('your_command', { request: { ... } });
 - Desktop-only integrations belong in `src/apps/desktop`, then flow back through transport/API layers.
 - In shared core, avoid host-specific APIs such as `tauri::AppHandle`; use shared abstractions such as `bitfun_events::EventEmitter`.
 
+### Remote compatibility
+
+- When adding features, consider remote workspace and remote control synchronization support from the start. Local-only behavior can silently leave remote scenarios incomplete.
+- If a feature cannot reasonably support remote workspaces, gate it or show a clear unsupported-state message instead of letting it fail with a generic error.
+
+### Agent loop behavior
+
+- Do not add hard-coded limits or pattern checks to the agent loop as a first response to looping behavior, such as blocking repeated tool calls by string or count alone.
+- Excessive hard-coding turns the agent loop into a brittle workflow engine. Investigate the root cause first: tool behavior, model interaction, session context packaging, prompt/tool schema design, or state synchronization issues.
+
 ## Architecture
+
+### Core decomposition guardrails
+
+For any `bitfun-core` decomposition, feature-boundary, dependency-boundary, or
+Rust build-speed refactor, read
+[`docs/architecture/core-decomposition.md`](docs/architecture/core-decomposition.md)
+before editing. The guardrail document defines product-behavior invariants,
+crate ownership targets, forbidden dependency directions, feature safety rules,
+and milestone verification gates.
+
+### DeepReview guardrails
+
+Deep Review / Code Review Team work spans the core runtime and web UI. Keep
+target resolution and manifest construction on the frontend; keep policy
+validation, queue/retry state, and report enrichment in shared core.
 
 ### Backend flow
 
@@ -133,7 +160,7 @@ Session data is stored under `.bitfun/sessions/{session_id}/`.
 | Shared Rust logic in `core`, `transport`, `api-layer`, or services | `cargo check --workspace && cargo test --workspace` |
 | Desktop integration, Tauri APIs, browser/computer-use, or desktop-only behavior | `cargo check -p bitfun-desktop && cargo test -p bitfun-desktop` |
 | Behavior covered by desktop smoke/functional flows | `cargo build -p bitfun-desktop` then the nearest E2E spec or `pnpm run e2e:test:l0` |
-| `src/crates/ai-adapters` | Relevant Rust checks above **and** stream integration tests in `src/crates/core/tests` |
+| `src/crates/ai-adapters` | Relevant Rust checks above **and** `cargo test -p bitfun-agent-stream` for stream contracts |
 | Installer app | `pnpm run installer:build` |
 
 ## Where to look first
@@ -141,7 +168,8 @@ Session data is stored under `.bitfun/sessions/{session_id}/`.
 | Feature | Key paths |
 |---|---|
 | Agent modes | `src/crates/core/src/agentic/agents/`, `src/crates/core/src/agentic/agents/prompts/`, `src/web-ui/src/locales/*/scenes/agents.json` |
-| Deep Review / Code Review Team | `src/crates/core/src/agentic/deep_review_policy.rs`, `src/crates/core/src/agentic/agents/deep_review_agent.rs`, `src/crates/core/src/agentic/tools/implementations/{task_tool.rs,code_review_tool.rs}`, `src/web-ui/src/shared/services/reviewTeamService.ts`, `src/web-ui/src/flow_chat/services/DeepReviewService.ts`, `src/web-ui/src/app/scenes/agents/components/ReviewTeamPage.tsx` |
+| Deep Review / Code Review Team | `src/crates/core/src/agentic/deep_review/`, `src/crates/core/src/agentic/deep_review_policy.rs`, `src/crates/core/src/agentic/agents/deep_review_agent.rs`, `src/crates/core/src/agentic/tools/implementations/{task_tool.rs,code_review_tool.rs}`, `src/web-ui/src/shared/services/review-team/`, `src/web-ui/src/flow_chat/deep-review/`, `src/web-ui/src/app/scenes/agents/components/ReviewTeamPage.tsx` |
+| Session usage report (`/usage`) | `src/crates/core/src/service/session_usage/`, `src/web-ui/src/flow_chat/components/usage/`, `src/web-ui/src/locales/*/flow-chat.json` |
 | Tools | `src/crates/core/src/agentic/tools/implementations/`, `src/crates/core/src/agentic/tools/registry.rs` |
 | MCP / LSP / remote | `src/crates/core/src/service/mcp/`, `src/crates/core/src/service/lsp/`, `src/crates/core/src/service/remote_connect/`, `src/crates/core/src/service/remote_ssh/` |
 | Desktop APIs | `src/apps/desktop/src/api/`, `src/crates/api-layer/src/`, `src/crates/transport/src/adapters/tauri.rs` |

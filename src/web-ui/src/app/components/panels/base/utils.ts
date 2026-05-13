@@ -17,7 +17,7 @@ import {
   Network,
   MessageSquareQuote,
   Globe,
-  Layout,
+  Activity,
 } from 'lucide-react';
 import { PanelContentType, PanelContentConfig } from './types';
 
@@ -67,14 +67,6 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     type: 'markdown-editor',
     displayName: 'Markdown Editor',
     icon: FileText,
-    supportsCopy: true,
-    supportsDownload: true,
-    showHeader: false
-  },
-  'mermaid-editor': {
-    type: 'mermaid-editor',
-    displayName: 'Mermaid Editor',
-    icon: Edit3,
     supportsCopy: true,
     supportsDownload: true,
     showHeader: false
@@ -183,30 +175,6 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
-  'design-tokens-studio': {
-    type: 'design-tokens-studio',
-    displayName: 'Design Tokens Studio',
-    icon: Settings,
-    supportsCopy: false,
-    supportsDownload: false,
-    showHeader: false
-  },
-  'design-artifact': {
-    type: 'design-artifact',
-    displayName: 'Design Artifact',
-    icon: Layout,
-    supportsCopy: false,
-    supportsDownload: false,
-    showHeader: false
-  },
-  'design-artifacts-browser': {
-    type: 'design-artifacts-browser',
-    displayName: 'Design Artifacts Browser',
-    icon: Layout,
-    supportsCopy: false,
-    supportsDownload: false,
-    showHeader: false
-  },
   'task-detail': {
     type: 'task-detail',
     displayName: 'Task Detail',
@@ -231,6 +199,14 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
+  'session-usage': {
+    type: 'session-usage',
+    displayName: 'Session Usage',
+    icon: Activity,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
   'terminal': {
     type: 'terminal',
     displayName: 'Terminal',
@@ -251,14 +227,6 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     type: 'browser',
     displayName: 'Browser',
     icon: Globe,
-    supportsCopy: false,
-    supportsDownload: false,
-    showHeader: false
-  },
-  'designer': {
-    type: 'designer',
-    displayName: 'Designer',
-    icon: Layout,
     supportsCopy: false,
     supportsDownload: false,
     showHeader: false
@@ -358,8 +326,6 @@ export const generateFileName = (type: PanelContentType, title: string): string 
       return `${baseName}.md`;
     case 'code-preview':
       return `${baseName}.txt`;
-    case 'mermaid-editor':
-      return `${baseName}.mmd`;
     default:
       return `${baseName}.txt`;
   }

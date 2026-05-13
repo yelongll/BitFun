@@ -1,4 +1,4 @@
-import React, { useCallback, memo, useMemo } from 'react';
+import React, { useCallback, memo } from 'react';
 import { Download, Copy, X, AlertCircle } from 'lucide-react';
 import { MarkdownRenderer, IconButton } from '@/component-library';
 import { CodeEditor, MarkdownEditor, ImageViewer, DiffEditor } from '@/tools/editor';
@@ -38,19 +38,7 @@ function updateGenerativeWidgetResultCode(result: unknown, widgetCode: string): 
 }
 
 // Stable lazy components at module level to avoid re-creation on each render
-const MermaidPanel = React.lazy(() => 
-  import('@/tools/mermaid-editor/components').then(module => ({ default: module.MermaidPanel }))
-);
-
-const MermaidEditor = React.lazy(() => 
-  import('@/tools/mermaid-editor/components').then(module => ({ default: module.MermaidEditor }))
-);
-
-const MermaidErrorBoundary = React.lazy(() => 
-  import('@/tools/mermaid-editor/components').then(module => ({ default: module.MermaidErrorBoundary }))
-);
-
-const GitDiffView = React.lazy(() => 
+const GitDiffView = React.lazy(() =>
   import('@/tools/git/components/GitDiffView/GitDiffView')
 );
 
@@ -107,22 +95,10 @@ const BtwSessionPanel = React.lazy(() =>
   }))
 );
 
-const DesignerPanel = React.lazy(() =>
-  import('@/app/scenes/designer/DesignerScene').then(module => ({
-    default: module.default
+const SessionUsagePanel = React.lazy(() =>
+  import('@/flow_chat/components/usage/SessionUsagePanel').then(module => ({
+    default: module.SessionUsagePanel
   }))
-);
-
-const DesignCanvasPanel = React.lazy(() =>
-  import('@/tools/design-canvas/DesignCanvasPanel')
-);
-
-const DesignArtifactBrowser = React.lazy(() =>
-  import('@/tools/design-canvas/DesignArtifactBrowser')
-);
-
-const DesignTokensStudio = React.lazy(() =>
-  import('@/tools/design-canvas/DesignTokensStudio')
 );
 
 // CodePreview, ChartRenderer and CodeNode removed - visualization features disabled
@@ -236,46 +212,6 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
     URL.revokeObjectURL(url);
   }, [content]);
 
-  const mermaidEditorProps = useMemo(() => {
-    if (content?.type !== 'mermaid-editor') return null;
-    
-    const mermaidData = content.data || {};
-    return {
-      initialSourceCode: mermaidData.sourceCode || t('flexiblePanel.fallback.mermaidDefaultCode'),
-      onSave: async (sourceCode: string) => {
-        if (onContentChange) {
-          onContentChange({
-            ...content,
-            data: {
-              ...mermaidData,
-              sourceCode
-            }
-          });
-        }
-        
-        if (onDirtyStateChange) {
-          onDirtyStateChange(false);
-        }
-        
-        if (onInteraction) {
-          await onInteraction('save', JSON.stringify({
-            sourceCode,
-            filePath: mermaidData.filePath
-          }));
-        }
-      },
-      onExport: async (format: string, data: string) => {
-        if (onInteraction) {
-          await onInteraction('export', JSON.stringify({
-            format,
-            data,
-            fileName: content.title
-          }));
-        }
-      }
-    };
-  }, [content, onContentChange, onDirtyStateChange, onInteraction, t]);
-
   const renderContent = () => {
     if (!content || content.type === 'empty') {
       return (
@@ -351,98 +287,6 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
         );
       }
 
-
-      case 'mermaid-editor': {
-        const mermaidData = content.data || {};
-        
-        if (mermaidData.mode || mermaidData.interactive_config || mermaidData.mermaid_code) {
-          return (
-            <div className="bitfun-flexible-panel__mermaid-container">
-            <React.Suspense fallback={<div>{t('flexiblePanel.loading.mermaidPanel')}</div>}>
-              <MermaidErrorBoundary>
-                <MermaidPanel
-                  data={{
-                    mermaid_code: mermaidData.mermaid_code || mermaidData.sourceCode || t('flexiblePanel.fallback.mermaidDefaultCode'),
-                    title: content.title || t('flexiblePanel.fallback.mermaidChartTitle'),
-                    session_id: mermaidData.session_id,
-                    mode: mermaidData.mode || 'editor',
-                    allow_mode_switch: mermaidData.allow_mode_switch !== false,
-                    editor_config: mermaidData.editor_config,
-                    interactive_config: mermaidData.interactive_config
-                  }}
-                  onDataChange={(newData) => {
-                    if (onContentChange) {
-                      onContentChange({
-                        ...content,
-                        data: {
-                          ...mermaidData,
-                          ...newData
-                        }
-                      });
-                    }
-                    // Write back updated mermaid code to flowChatStore and persist to disk.
-                    const source = mermaidData._source;
-                    if (source?.type === 'tool-call' && source.toolCallId && newData.mermaid_code) {
-                      import('@/flow_chat/store/FlowChatStore').then(({ flowChatStore }) => {
-                        import('@/flow_chat/services/FlowChatManager').then(({ flowChatManager }) => {
-                          const state = flowChatStore.getState();
-                          const activeSessionId = state.activeSessionId;
-                          if (!activeSessionId) return;
-
-                          const session = state.sessions.get(activeSessionId);
-                          if (!session) return;
-
-                          for (const turn of session.dialogTurns) {
-                            for (const round of turn.modelRounds) {
-                              const item = round.items.find(
-                                (it: any) =>
-                                  it.type === 'tool' &&
-                                  (it.toolCall?.id === source.toolCallId || it.id === source.toolItemId)
-                              );
-                              if (item) {
-                                const toolItem = item as any;
-                                flowChatStore.updateModelRoundItem(activeSessionId, turn.id, toolItem.id, {
-                                  toolCall: {
-                                    ...toolItem.toolCall,
-                                    input: {
-                                      ...toolItem.toolCall.input,
-                                      mermaid_code: newData.mermaid_code,
-                                    }
-                                  }
-                                } as any);
-                                flowChatManager.saveDialogTurn(activeSessionId, turn.id).catch(() => {});
-                                return;
-                              }
-                            }
-                          }
-                        });
-                      });
-                    }
-                  }}
-                  onInteraction={onInteraction}
-                />
-              </MermaidErrorBoundary>
-            </React.Suspense>
-            </div>
-          );
-        } else {
-          if (!mermaidEditorProps) return null;
-
-          return (
-            <div className="bitfun-flexible-panel__mermaid-container">
-            <React.Suspense fallback={<div>{t('flexiblePanel.loading.mermaidEditor')}</div>}>
-              <MermaidErrorBoundary>
-                <MermaidEditor
-                  initialSourceCode={mermaidEditorProps.initialSourceCode}
-                  onSave={mermaidEditorProps.onSave}
-                  onExport={mermaidEditorProps.onExport}
-                />
-              </MermaidErrorBoundary>
-            </React.Suspense>
-            </div>
-          );
-        }
-      }
 
       case 'text-viewer':
         return (
@@ -886,6 +730,19 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
           </React.Suspense>
         );
 
+      case 'session-usage':
+        return (
+          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.taskDetail')}</div>}>
+            <SessionUsagePanel
+              report={content.data?.report}
+              markdown={content.data?.markdown}
+              sessionId={content.data?.sessionId}
+              workspacePath={content.data?.workspacePath || workspacePath}
+              initialTab={content.data?.initialTab}
+            />
+          </React.Suspense>
+        );
+
       case 'browser':
         return (
           <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">{t('flexiblePanel.loading.terminal')}</div>}>
@@ -974,50 +831,6 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
                 }
               }}
             />
-          </React.Suspense>
-        );
-
-      case 'design-artifact': {
-        const designData = content.data || {};
-        return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading design canvas...</div>}>
-            <DesignCanvasPanel
-              artifactId={designData.artifactId}
-              initialManifest={designData.manifest}
-              workspacePath={designData.workspace_path || workspacePath}
-            />
-          </React.Suspense>
-        );
-      }
-
-      case 'design-artifacts-browser': {
-        const browserData = content.data || {};
-        return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading design artifacts...</div>}>
-            <DesignArtifactBrowser
-              workspacePath={browserData.workspace_path || workspacePath}
-            />
-          </React.Suspense>
-        );
-      }
-
-      case 'design-tokens':
-      case 'design-tokens-studio': {
-        const studioData = content.data || {};
-        return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading design tokens...</div>}>
-            <DesignTokensStudio
-              artifactId={studioData.artifactId}
-              scopePath={studioData.scope}
-            />
-          </React.Suspense>
-        );
-      }
-
-      case 'designer':
-        return (
-          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading designer...</div>}>
-            <DesignerPanel filePath={content.data?.filePath} />
           </React.Suspense>
         );
 

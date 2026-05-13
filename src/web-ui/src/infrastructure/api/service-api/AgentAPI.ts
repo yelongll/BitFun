@@ -62,6 +62,7 @@ export interface StartDialogTurnRequest {
   workspacePath?: string;
   /** Optional multimodal image contexts (snake_case fields, aligned with backend ImageContextData). */
   imageContexts?: ImageInputContextData[];
+  userMessageMetadata?: Record<string, unknown>;
 }
 
 export interface CompactSessionRequest {
@@ -155,6 +156,52 @@ export interface ToolEvent extends AgenticEvent {
   subagentParentInfo?: SubagentParentInfo;
 }
 
+export type DeepReviewQueueStatus =
+  | 'queued_for_capacity'
+  | 'paused_by_user'
+  | 'running'
+  | 'capacity_skipped';
+
+export type DeepReviewQueueReason =
+  | 'provider_rate_limit'
+  | 'provider_concurrency_limit'
+  | 'retry_after'
+  | 'local_concurrency_cap'
+  | 'launch_batch_blocked'
+  | 'temporary_overload';
+
+export interface DeepReviewQueueStateEventData {
+  toolId: string;
+  subagentType: string;
+  status: DeepReviewQueueStatus;
+  reason?: DeepReviewQueueReason;
+  queuedReviewerCount: number;
+  activeReviewerCount?: number;
+  effectiveParallelInstances?: number;
+  optionalReviewerCount?: number;
+  queueElapsedMs?: number;
+  runElapsedMs?: number;
+  maxQueueWaitSeconds?: number;
+  sessionConcurrencyHigh?: boolean;
+}
+
+export interface DeepReviewQueueStateChangedEvent extends AgenticEvent {
+  queueState: DeepReviewQueueStateEventData;
+}
+
+export type DeepReviewQueueControlAction =
+  | 'pause'
+  | 'continue'
+  | 'cancel'
+  | 'skip_optional';
+
+export interface DeepReviewQueueControlRequest {
+  sessionId: string;
+  dialogTurnId: string;
+  toolId: string;
+  action: DeepReviewQueueControlAction;
+}
+
  
 export interface ImageAnalysisEvent extends AgenticEvent {
   imageCount?: number;
@@ -169,6 +216,22 @@ export interface UserSteeringInjectedEvent extends AgenticEvent {
   steeringId: string;
   content: string;
   displayContent: string;
+}
+
+export interface ModelRoundCompletedEvent extends AgenticEvent {
+  turnId: string;
+  roundId: string;
+  hasToolCalls?: boolean;
+  durationMs?: number;
+  providerId?: string;
+  modelId?: string;
+  modelAlias?: string;
+  firstChunkMs?: number;
+  firstVisibleOutputMs?: number;
+  streamDurationMs?: number;
+  attemptCount?: number;
+  failureCategory?: string;
+  tokenDetails?: unknown;
 }
 
 export interface CompressionEvent extends AgenticEvent {
@@ -264,6 +327,14 @@ export class AgentAPI {
       );
     } catch (error) {
       throw createTauriCommandError('steer_dialog_turn', error, request);
+    }
+  }
+
+  async controlDeepReviewQueue(request: DeepReviewQueueControlRequest): Promise<void> {
+    try {
+      await api.invoke<void>('control_deep_review_queue', { request });
+    } catch (error) {
+      throw createTauriCommandError('control_deep_review_queue', error, request);
     }
   }
 
@@ -409,6 +480,10 @@ export class AgentAPI {
     return api.listen<AgenticEvent>('agentic://model-round-started', callback);
   }
 
+  onModelRoundCompleted(callback: (event: ModelRoundCompletedEvent) => void): () => void {
+    return api.listen<ModelRoundCompletedEvent>('agentic://model-round-completed', callback);
+  }
+
    
   onTextChunk(callback: (event: TextChunkEvent) => void): () => void {
     return api.listen<TextChunkEvent>('agentic://text-chunk', callback);
@@ -417,6 +492,15 @@ export class AgentAPI {
    
   onToolEvent(callback: (event: ToolEvent) => void): () => void {
     return api.listen<ToolEvent>('agentic://tool-event', callback);
+  }
+
+  onDeepReviewQueueStateChanged(
+    callback: (event: DeepReviewQueueStateChangedEvent) => void
+  ): () => void {
+    return api.listen<DeepReviewQueueStateChangedEvent>(
+      'agentic://deep-review-queue-state-changed',
+      callback
+    );
   }
 
    
@@ -477,7 +561,14 @@ export class AgentAPI {
     }
   }
 
-   
+  async getDefaultReviewTeamDefinition(): Promise<unknown> {
+    try {
+      return await api.invoke<unknown>('get_default_review_team_definition');
+    } catch (error) {
+      throw createTauriCommandError('get_default_review_team_definition', error);
+    }
+  }
+
   async generateSessionTitle(
     sessionId: string,
     userMessage: string,
@@ -522,13 +613,13 @@ export class AgentAPI {
     action: { type: 'disable' } | { type: 'restore' } | { type: 'extend'; seconds: number },
   ): Promise<void> {
     const actionPayload = action.type === 'disable'
-      ? 'Disable'
+      ? { type: 'Disable' }
       : action.type === 'restore'
-        ? 'Restore'
-        : { Extend: { seconds: action.seconds } };
+        ? { type: 'Restore' }
+        : { type: 'Extend', payload: { seconds: action.seconds } };
     try {
       await api.invoke<void>('set_subagent_timeout', {
-        request: { session_id: sessionId, action: actionPayload },
+        request: { sessionId, action: actionPayload },
       });
     } catch (error) {
       throw createTauriCommandError('set_subagent_timeout', error, { sessionId, action: action.type });

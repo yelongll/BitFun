@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use log::{debug, error, info};
 use serde_json::{json, Value};
+use std::path::Path;
 use std::time::{Duration, Instant};
 use terminal_core::session::SessionSource;
 use terminal_core::shell::{ShellDetector, ShellType};
@@ -29,22 +30,22 @@ const INTERRUPT_OUTPUT_DRAIN_MS: u64 = 500;
 
 const BANNED_COMMANDS: &[&str] = &[
     "alias",
-    "curl",
-    "curlie",
-    "wget",
-    "axel",
-    "aria2c",
-    "nc",
-    "telnet",
-    "lynx",
-    "w3m",
-    "links",
-    "httpie",
-    "xh",
-    "http-prompt",
-    "chrome",
-    "firefox",
-    "safari",
+    // "curl",
+    // "curlie",
+    // "wget",
+    // "axel",
+    // "aria2c",
+    // "nc",
+    // "telnet",
+    // "lynx",
+    // "w3m",
+    // "links",
+    // "httpie",
+    // "xh",
+    // "http-prompt",
+    // "chrome",
+    // "firefox",
+    // "safari",
 ];
 
 /// Detect a known-broken pattern: `osascript ... keystroke "<text containing
@@ -160,6 +161,51 @@ impl BashTool {
         Self
     }
 
+    fn sh_quote(s: &str) -> String {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+
+    fn command_for_working_directory(command: &str, working_directory: Option<&str>) -> String {
+        working_directory
+            .map(str::trim)
+            .filter(|dir| !dir.is_empty())
+            .map(|dir| format!("cd {} && {}", Self::sh_quote(dir), command))
+            .unwrap_or_else(|| command.to_string())
+    }
+
+    fn resolve_working_directory(
+        input: &Value,
+        context: &ToolUseContext,
+    ) -> BitFunResult<Option<String>> {
+        let Some(raw_dir) = input.get("working_directory").and_then(|v| v.as_str()) else {
+            return Ok(None);
+        };
+        let trimmed = raw_dir.trim();
+        if trimmed.is_empty() {
+            return Ok(context.workspace.as_ref().map(|w| w.root_path_string()));
+        }
+        context.resolve_workspace_tool_path(trimmed).map(Some)
+    }
+
+    async fn is_existing_workspace_directory(
+        context: &ToolUseContext,
+        resolved_dir: &str,
+    ) -> BitFunResult<bool> {
+        if context.is_remote() {
+            let fs = context.ws_fs().ok_or_else(|| {
+                BitFunError::tool(
+                    "Remote workspace filesystem is unavailable; cannot validate working_directory"
+                        .to_string(),
+                )
+            })?;
+            fs.is_dir(resolved_dir).await.map_err(|e| {
+                BitFunError::tool(format!("Failed to validate working_directory: {e}"))
+            })
+        } else {
+            Ok(Path::new(resolved_dir).is_dir())
+        }
+    }
+
     /// Build environment variables that suppress interactive behaviors
     /// (pagers, editors, prompts) so agent-driven commands never block.
     pub fn noninteractive_env() -> std::collections::HashMap<String, String> {
@@ -221,15 +267,23 @@ impl BashTool {
     fn render_result(
         &self,
         terminal_session_id: &str,
+        working_directory: &str,
         output_text: &str,
         interrupted: bool,
         timed_out: bool,
         exit_code: i32,
+        shell_state: Option<&str>,
     ) -> String {
         let mut result_string = String::new();
 
         // Exit code
         result_string.push_str(&format!("<exit_code>{}</exit_code>", exit_code));
+        if !working_directory.is_empty() {
+            result_string.push_str(&format!(
+                "<working_directory>{}</working_directory>",
+                working_directory
+            ));
+        }
 
         // Main output content
         if !output_text.is_empty() {
@@ -244,6 +298,14 @@ impl BashTool {
             } else {
                 result_string.push_str(&format!("<output>{}</output>", cleaned_output));
             }
+        }
+
+        // Post-command terminal state: shows what the shell displayed after the
+        // command finished (e.g., prompt, continuation prompt, or other state).
+        // This gives AI the full picture of the terminal context.
+        if let Some(state) = shell_state {
+            let cleaned_state = strip_ansi(state);
+            result_string.push_str(&format!("<shell_state>{}</shell_state>", cleaned_state));
         }
 
         // Interruption notice
@@ -396,6 +458,10 @@ Usage notes:
                     "type": "boolean",
                     "description": "If true, runs the command in a new dedicated background terminal session and returns the session ID immediately without waiting for completion. Useful for long-running processes like dev servers or file watchers. timeout_ms is ignored when this is true."
                 },
+                "working_directory": {
+                    "type": "string",
+                    "description": "Optional directory to run the command in. Use a workspace-relative path or an absolute path inside the current workspace. Omit to reuse the persistent terminal's current directory."
+                },
                 "description": {
                     "type": "string",
                     "description": "Clear, concise description of what this command does in 5-10 words, in active voice. Examples:\nInput: ls\nOutput: List files in current directory\n\nInput: git status\nOutput: Show working tree status\n\nInput: npm install\nOutput: Install package dependencies\n\nInput: mkdir foo\nOutput: Create directory 'foo'"
@@ -534,6 +600,42 @@ Usage notes:
             };
         }
 
+        match Self::resolve_working_directory(input, context) {
+            Ok(Some(resolved_dir)) => {
+                match Self::is_existing_workspace_directory(context, &resolved_dir).await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        return ValidationResult {
+                            result: false,
+                            message: Some(format!(
+                                "working_directory must be an existing directory inside the current workspace: {}",
+                                resolved_dir
+                            )),
+                            error_code: Some(400),
+                            meta: None,
+                        };
+                    }
+                    Err(err) => {
+                        return ValidationResult {
+                            result: false,
+                            message: Some(err.to_string()),
+                            error_code: Some(400),
+                            meta: None,
+                        };
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                return ValidationResult {
+                    result: false,
+                    message: Some(err.to_string()),
+                    error_code: Some(400),
+                    meta: None,
+                };
+            }
+        }
+
         // Warn if timeout_ms is set alongside run_in_background
         if run_in_background && input.get("timeout_ms").is_some() {
             return ValidationResult {
@@ -592,6 +694,13 @@ Usage notes:
             .get("command")
             .and_then(|v| v.as_str())
             .ok_or_else(|| BitFunError::tool("command is required".to_string()))?;
+        let requested_working_directory = Self::resolve_working_directory(input, context)?;
+
+        if command_needs_light_checkpoint(command_str) {
+            context
+                .record_light_checkpoint("Bash", command_str, Vec::new())
+                .await;
+        }
 
         // Remote workspace: execute via injected workspace shell
         if context.is_remote() {
@@ -605,6 +714,10 @@ Usage notes:
                 "Executing command on remote workspace via SSH: {}",
                 command_str
             );
+            let remote_command = Self::command_for_working_directory(
+                command_str,
+                requested_working_directory.as_deref(),
+            );
 
             let timeout_ms = input
                 .get("timeout_ms")
@@ -613,7 +726,7 @@ Usage notes:
 
             let exec_result = ws_shell
                 .exec_with_options(
-                    command_str,
+                    &remote_command,
                     WorkspaceCommandOptions {
                         timeout_ms: Some(timeout_ms),
                         cancellation_token: context.cancellation_token.clone(),
@@ -631,6 +744,7 @@ Usage notes:
                 .workspace_root()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
+            let working_directory = requested_working_directory.unwrap_or(working_directory);
 
             let result = ToolResult::Result {
                 data: json!({
@@ -649,18 +763,18 @@ Usage notes:
                 }),
                 result_for_assistant: Some(if exec_result.timed_out {
                     format!(
-                        "[Remote SSH] Command timed out on remote server:\n{}\n\nExit code: {}",
-                        output, exec_result.exit_code
+                        "[Remote SSH] Command timed out on remote server in {}:\n{}\n\nExit code: {}",
+                        working_directory, output, exec_result.exit_code
                     )
                 } else if exec_result.interrupted {
                     format!(
-                        "[Remote SSH] Command was cancelled on remote server:\n{}\n\nExit code: {}",
-                        output, exec_result.exit_code
+                        "[Remote SSH] Command was cancelled on remote server in {}:\n{}\n\nExit code: {}",
+                        working_directory, output, exec_result.exit_code
                     )
                 } else {
                     format!(
-                        "[Remote SSH] Command executed on remote server:\n{}\n\nExit code: {}",
-                        output, exec_result.exit_code
+                        "[Remote SSH] Command executed on remote server in {}:\n{}\n\nExit code: {}",
+                        working_directory, output, exec_result.exit_code
                     )
                 }),
                 image_attachments: None,
@@ -711,7 +825,9 @@ Usage notes:
             // For background commands, inherit CWD from an already-running primary session
             // if one exists; otherwise fall back to workspace path.  This avoids forcing a
             // primary session to be created just to read its working directory.
-            let initial_cwd = if let Some(existing_id) = binding.get(chat_session_id) {
+            let initial_cwd = if let Some(requested_dir) = requested_working_directory.as_ref() {
+                requested_dir.clone()
+            } else if let Some(existing_id) = binding.get(chat_session_id) {
                 terminal_api
                     .get_session(&existing_id)
                     .await
@@ -765,6 +881,14 @@ Usage notes:
             .await
             .map(|s| s.cwd)
             .unwrap_or_else(|_| workspace_path.clone());
+        let execution_working_directory = requested_working_directory
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| primary_cwd.clone());
+        let command_to_execute = Self::command_for_working_directory(
+            command_str,
+            requested_working_directory.as_deref(),
+        );
 
         // --- Foreground execution ---
 
@@ -782,13 +906,13 @@ Usage notes:
 
         debug!(
             "Bash tool executing command: {}, session_id: {}, tool_id: {}",
-            command_str, chat_session_id, tool_use_id
+            command_to_execute, chat_session_id, tool_use_id
         );
 
         // 4. Create streaming execution request
         let request = ExecuteCommandRequest {
             session_id: primary_session_id.clone(),
-            command: command_str.to_string(),
+            command: command_to_execute,
             timeout_ms,
             prevent_history: Some(true),
         };
@@ -799,6 +923,7 @@ Usage notes:
         let mut final_exit_code: Option<i32> = None;
         let mut was_interrupted = false;
         let mut timed_out = false;
+        let mut final_shell_state: Option<String> = None;
         let mut command_started_after_ms: Option<u64> = None;
         let mut completion_reason_label = "stream_end".to_string();
         let mut interrupt_drain_deadline: Option<tokio::time::Instant> = None;
@@ -882,6 +1007,7 @@ Usage notes:
                     exit_code,
                     total_output,
                     completion_reason,
+                    shell_state,
                 } => {
                     debug!(
                         "Bash command completed, exit_code: {:?}, tool_id: {}",
@@ -897,6 +1023,11 @@ Usage notes:
 
                     if !total_output.is_empty() {
                         accumulated_output = total_output;
+                    }
+
+                    // Capture post-command terminal state for the AI agent
+                    if shell_state.is_some() {
+                        final_shell_state = shell_state;
                     }
                     break;
                 }
@@ -938,17 +1069,19 @@ Usage notes:
             "exit_code": final_exit_code,
             "interrupted": was_interrupted,
             "timed_out": timed_out,
-            "working_directory": primary_cwd,
+            "working_directory": execution_working_directory,
             "execution_time_ms": execution_time_ms,
             "terminal_session_id": primary_session_id,
         });
 
         let result_for_assistant = self.render_result(
             &primary_session_id,
+            &execution_working_directory,
             &accumulated_output,
             was_interrupted,
             timed_out,
             final_exit_code.unwrap_or(-1),
+            final_shell_state.as_deref(),
         );
 
         Ok(vec![ToolResult::Result {
@@ -957,6 +1090,39 @@ Usage notes:
             image_attachments: None,
         }])
     }
+}
+
+fn command_needs_light_checkpoint(command: &str) -> bool {
+    let command = command.trim().to_ascii_lowercase();
+    let mutating_prefixes = [
+        "rm ",
+        "rmdir ",
+        "del ",
+        "erase ",
+        "move ",
+        "mv ",
+        "cp ",
+        "git reset",
+        "git clean",
+        "git checkout",
+        "git switch",
+        "git merge",
+        "git rebase",
+        "git pull",
+        "git stash",
+        "git commit",
+        "cargo fmt",
+        "cargo fix",
+        "rustfmt",
+        "prettier --write",
+    ];
+
+    mutating_prefixes
+        .iter()
+        .any(|prefix| command.starts_with(prefix))
+        || command.contains(" --fix")
+        || command.contains(" > ")
+        || command.contains(" >> ")
 }
 
 impl BashTool {
@@ -1147,8 +1313,8 @@ impl BashTool {
         });
 
         let result_for_assistant = format!(
-            "Command started in background terminal session (id: {}).{}",
-            bg_session_id, output_file_note
+            "Command started in background terminal session (id: {}). Working directory: {}.{}",
+            bg_session_id, initial_cwd, output_file_note
         );
 
         Ok(vec![ToolResult::Result {
@@ -1162,6 +1328,15 @@ impl BashTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkpoint_detection_flags_mutating_bash_commands() {
+        assert!(command_needs_light_checkpoint("cargo fmt"));
+        assert!(command_needs_light_checkpoint("pnpm lint --fix"));
+        assert!(command_needs_light_checkpoint("rm -rf target/tmp"));
+        assert!(!command_needs_light_checkpoint("cargo test"));
+        assert!(!command_needs_light_checkpoint("git status"));
+    }
 
     #[test]
     fn truncate_output_preserving_tail_keeps_end_of_output() {
@@ -1224,11 +1399,56 @@ mod tests {
         let long_output =
             "prefix\n".to_string() + &"y".repeat(MAX_OUTPUT_LENGTH + 100) + "\nfinal-error";
 
-        let rendered = tool.render_result("session-1", &long_output, false, false, 1);
+        let rendered =
+            tool.render_result("session-1", "/repo", &long_output, false, false, 1, None);
 
         assert!(rendered.contains("<output truncated=\"true\">"));
         assert!(rendered.contains("tail preserved"));
         assert!(rendered.contains("final-error"));
         assert!(rendered.contains("<exit_code>1</exit_code>"));
+    }
+
+    #[test]
+    fn input_schema_accepts_working_directory() {
+        let tool = BashTool::new();
+        let schema = tool.input_schema();
+
+        assert!(schema["properties"].get("working_directory").is_some());
+        assert_eq!(schema["additionalProperties"], false);
+    }
+
+    #[test]
+    fn command_is_prefixed_with_quoted_working_directory_when_requested() {
+        let command = BashTool::command_for_working_directory(
+            "pnpm install",
+            Some("/Users/example/My Project"),
+        );
+
+        assert_eq!(command, "cd '/Users/example/My Project' && pnpm install");
+    }
+
+    #[test]
+    fn command_prefix_escapes_single_quotes_in_working_directory() {
+        let command = BashTool::command_for_working_directory("pwd", Some("/tmp/it's fine"));
+
+        assert_eq!(command, "cd '/tmp/it'\\''s fine' && pwd");
+    }
+
+    #[test]
+    fn command_result_includes_working_directory_for_model() {
+        let tool = BashTool::new();
+        let rendered = tool.render_result(
+            "session-1",
+            "/private/tmp",
+            "ERR_PNPM_NO_PKG_MANIFEST No package.json found in /private/tmp",
+            false,
+            false,
+            1,
+            None,
+        );
+
+        assert!(rendered.contains("<exit_code>1</exit_code>"));
+        assert!(rendered.contains("<working_directory>/private/tmp</working_directory>"));
+        assert!(rendered.contains("ERR_PNPM_NO_PKG_MANIFEST"));
     }
 }

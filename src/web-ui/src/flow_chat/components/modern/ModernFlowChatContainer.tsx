@@ -4,6 +4,7 @@
  */
 
 import React, { useMemo, useCallback, useRef, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { FlowChatManager } from '@/flow_chat/services/FlowChatManager';
 import { useSessionModeStore } from '@/app/stores/sessionModeStore';
@@ -44,6 +45,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
   onOpenVisualization,
   onSwitchToChatPanel,
 }) => {
+  const { t } = useTranslation('flow-chat');
   const virtualItems = useVirtualItems();
   const activeSession = useActiveSession();
   const visibleTurnInfo = useVisibleTurnInfo();
@@ -86,6 +88,7 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     activeSessionId: activeSession?.sessionId,
     virtualItems,
     virtualListRef,
+    onExpandExploreGroup: handleExpandGroup,
   });
 
   const contextValue: FlowChatContextValue = useMemo(() => ({
@@ -141,9 +144,11 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
       .map((turn, index) => ({
         turnId: turn.id,
         turnIndex: index + 1,
-        title: turn.userMessage?.content ?? '',
+        title: turn.userMessage?.metadata?.localCommandKind === 'usage_report'
+          ? t('usage.title')
+          : turn.userMessage?.content ?? '',
       }));
-  }, [activeSession?.dialogTurns]);
+  }, [activeSession?.dialogTurns, t]);
 
   const effectiveVisibleTurnInfo = useMemo<VisibleTurnInfo | null>(() => {
     if (!pendingHeaderTurnId) {
@@ -162,6 +167,18 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
       userMessage: targetTurn.title,
     };
   }, [pendingHeaderTurnId, turnSummaries, visibleTurnInfo]);
+
+  const currentHeaderMessage = useMemo(() => {
+    const turnId = effectiveVisibleTurnInfo?.turnId;
+    if (!turnId) {
+      return effectiveVisibleTurnInfo?.userMessage ?? '';
+    }
+    const turn = activeSession?.dialogTurns.find(item => item.id === turnId);
+    if (turn?.userMessage?.metadata?.localCommandKind === 'usage_report') {
+      return t('usage.title');
+    }
+    return effectiveVisibleTurnInfo?.userMessage ?? '';
+  }, [activeSession?.dialogTurns, effectiveVisibleTurnInfo?.turnId, effectiveVisibleTurnInfo?.userMessage, t]);
 
   useEffect(() => {
     if (!pendingHeaderTurnId) return;
@@ -304,10 +321,9 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
         <FlowChatHeader
           currentTurn={effectiveVisibleTurnInfo?.turnIndex ?? 0}
           totalTurns={effectiveVisibleTurnInfo?.totalTurns ?? 0}
-          currentUserMessage={effectiveVisibleTurnInfo?.userMessage ?? ''}
+          currentUserMessage={currentHeaderMessage}
           visible={virtualItems.length > 0}
           sessionId={activeSession?.sessionId}
-          workspacePath={workspacePath}
           turns={turnSummaries}
           onJumpToTurn={handleJumpToTurn}
           onJumpToCurrentTurn={() => {

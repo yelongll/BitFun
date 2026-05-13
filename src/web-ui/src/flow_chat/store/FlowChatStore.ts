@@ -9,6 +9,7 @@ import {
   DialogTurn,
   ModelRound,
   FlowItem,
+  FlowToolItem,
   FlowImageAnalysisItem,
   ImageAnalysisResult,
   AnyFlowItem,
@@ -16,7 +17,7 @@ import {
 } from '../types/flow-chat';
 import { createLogger } from '@/shared/utils/logger';
 import { i18nService } from '@/infrastructure/i18n/core/I18nService';
-import type { SessionKind } from '@/shared/types/session-history';
+import type { LocalCommandMetadata, SessionKind } from '@/shared/types/session-history';
 import {
   deriveLastFinishedAtFromMetadata,
   deriveSessionRelationshipFromMetadata,
@@ -286,6 +287,7 @@ export class FlowChatStore {
       sessionKind?: SessionKind;
       btwOrigin?: Session['btwOrigin'];
       isTransient?: boolean;
+      deepReviewRunManifest?: Session['deepReviewRunManifest'];
     },
     remoteConnectionId?: string,
     remoteSshHost?: string
@@ -324,6 +326,7 @@ export class FlowChatStore {
         sessionKind: relationship.sessionKind,
         btwThreads: [],
         btwOrigin: relationship.btwOrigin,
+        deepReviewRunManifest: meta?.deepReviewRunManifest,
         isTransient: meta?.isTransient ?? false,
       };
 
@@ -800,6 +803,70 @@ export class FlowChatStore {
     });
   }
 
+  public addLocalUsageReportTurn(params: {
+    sessionId: string;
+    markdown: string;
+    reportId: string;
+    schemaVersion: number;
+    generatedAt: number;
+    report?: Record<string, any>;
+    status?: 'loading' | 'completed';
+  }): DialogTurn | null {
+    const session = this.state.sessions.get(params.sessionId);
+    if (!session) {
+      log.warn('Session not found, cannot add local usage report', { sessionId: params.sessionId });
+      return null;
+    }
+
+    const metadata: LocalCommandMetadata = {
+      localCommandKind: 'usage_report',
+      reportId: params.reportId,
+      schemaVersion: params.schemaVersion,
+      generatedAt: params.generatedAt,
+      modelVisible: false,
+      usageReport: params.report,
+      usageReportStatus: params.status ?? 'completed',
+    };
+    const turnIndex = session.dialogTurns.length;
+    const dialogTurn: DialogTurn = {
+      id: `local-usage-${params.reportId}`,
+      sessionId: params.sessionId,
+      kind: 'local_command',
+      userMessage: {
+        id: `local-usage-user-${params.reportId}`,
+        content: params.markdown,
+        timestamp: params.generatedAt,
+        metadata,
+      },
+      modelRounds: [],
+      status: params.status === 'loading' ? 'processing' : 'completed',
+      startTime: params.generatedAt,
+      endTime: params.generatedAt,
+      backendTurnIndex: turnIndex,
+    };
+
+    this.setState(prev => {
+      const currentSession = prev.sessions.get(params.sessionId);
+      if (!currentSession) return prev;
+
+      if (currentSession.dialogTurns.some(turn => turn.id === dialogTurn.id)) {
+        return prev;
+      }
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(params.sessionId, {
+        ...currentSession,
+        dialogTurns: [...currentSession.dialogTurns, dialogTurn],
+      });
+
+      return {
+        ...prev,
+        sessions: newSessions,
+      };
+    });
+    return dialogTurn;
+  }
+
   public deleteDialogTurn(sessionId: string, dialogTurnId: string): void {
     this.setState(prev => {
       const session = prev.sessions.get(sessionId);
@@ -850,7 +917,12 @@ export class FlowChatStore {
     });
   }
 
-  public updateDialogTurn(sessionId: string, dialogTurnId: string, updater: (turn: DialogTurn) => DialogTurn): void {
+  public updateDialogTurn(
+    sessionId: string,
+    dialogTurnId: string,
+    updater: (turn: DialogTurn) => DialogTurn,
+    options?: { touchActivity?: boolean }
+  ): void {
     this.setState(prev => {
       const session = prev.sessions.get(sessionId);
       if (!session) return prev;
@@ -862,7 +934,9 @@ export class FlowChatStore {
       const updatedSession = {
         ...session,
         dialogTurns: updatedDialogTurns,
-        lastActiveAt: Date.now()
+        lastActiveAt: options?.touchActivity === false
+          ? session.lastActiveAt
+          : Date.now()
       };
 
       const newSessions = new Map(prev.sessions);
@@ -1140,14 +1214,20 @@ export class FlowChatStore {
         if (updated) return modelRound;
         
         const updatedItems = modelRound.items.map((item: any) => {
-          if (item.id === itemId) {
+          const toolCallId =
+            item.type === 'tool' ? ((item as FlowToolItem).toolCall?.id as string | undefined) : undefined;
+          const idMatches = item.id === itemId || (toolCallId !== undefined && toolCallId === itemId);
+          if (idMatches) {
             const updatedItem = { ...item, ...updates };
             return updatedItem;
           }
           return item;
         });
         
-        if (updatedItems.some((item: any) => item.id === itemId)) {
+        if (updatedItems.some((item: any) => {
+          const tc = item.type === 'tool' ? (item as FlowToolItem).toolCall?.id : undefined;
+          return item.id === itemId || tc === itemId;
+        })) {
           updated = true;
           return { ...modelRound, items: updatedItems };
         }
@@ -1192,7 +1272,14 @@ export class FlowChatStore {
     if (!dialogTurn) return null;
 
     for (const modelRound of dialogTurn.modelRounds) {
-      const item = modelRound.items.find((item: any) => item.id === toolUseId);
+      const item = modelRound.items.find((item: any) => {
+        if (item.id === toolUseId) return true;
+        if (item.type === 'tool') {
+          const ti = item as FlowToolItem;
+          return ti.toolCall?.id === toolUseId;
+        }
+        return false;
+      });
       if (item) {
         return item;
       }
@@ -1533,9 +1620,13 @@ export class FlowChatStore {
               startTime: (item as any).startTime || item.timestamp,
               endTime: (item as any).endTime,
               status: item.status,
-              durationMs: (item as any).endTime 
-                ? (item as any).endTime - (item as any).startTime 
-                : undefined
+              durationMs: (item as any).durationMs ?? ((item as any).endTime
+                ? (item as any).endTime - (item as any).startTime
+                : undefined),
+              queueWaitMs: (item as any).queueWaitMs,
+              preflightMs: (item as any).preflightMs,
+              confirmationWaitMs: (item as any).confirmationWaitMs,
+              executionMs: (item as any).executionMs,
             }));
           
           const thinkingItems = round.items
@@ -1560,6 +1651,16 @@ export class FlowChatStore {
             thinkingItems,
             startTime: round.startTime,
             endTime: round.endTime || Date.now(),
+            durationMs: round.durationMs,
+            providerId: round.providerId,
+            modelId: round.modelId,
+            modelAlias: round.modelAlias,
+            firstChunkMs: round.firstChunkMs,
+            firstVisibleOutputMs: round.firstVisibleOutputMs,
+            streamDurationMs: round.streamDurationMs,
+            attemptCount: round.attemptCount,
+            failureCategory: round.failureCategory,
+            tokenDetails: round.tokenDetails,
             status: round.status
           };
         }),
@@ -1683,6 +1784,7 @@ export class FlowChatStore {
             btwOrigin: relationship.btwOrigin,
             hasUnreadCompletion: metadata.unreadCompletion,
             needsUserAttention: metadata.needsUserAttention,
+            deepReviewRunManifest: metadata.deepReviewRunManifest,
             isTransient: false,
           };
           
@@ -1801,7 +1903,9 @@ export class FlowChatStore {
         : undefined;
 
       const displayContent =
-        metadata?.original_text || this.cleanRemoteUserInput(turn.userMessage.content);
+        metadata?.localCommandKind === 'usage_report'
+          ? turn.userMessage.content
+          : metadata?.original_text || this.cleanRemoteUserInput(turn.userMessage.content);
       const normalizedTurnStatus = normalizeRecoveredTurnStatus(turn.status, { error: undefined });
 
       return {
@@ -1852,8 +1956,16 @@ export class FlowChatStore {
               toolCall: tool.toolCall,
               toolResult: tool.toolResult,
               aiIntent: tool.aiIntent,
+              requiresConfirmation: tool.requiresConfirmation,
+              userConfirmed: tool.userConfirmed,
+              acpPermission: tool.acpPermission,
               startTime: tool.startTime,
               endTime: tool.endTime,
+              durationMs: tool.durationMs,
+              queueWaitMs: tool.queueWaitMs,
+              preflightMs: tool.preflightMs,
+              confirmationWaitMs: tool.confirmationWaitMs,
+              executionMs: tool.executionMs,
               timestamp: tool.startTime,
               status: normalizeRecoveredToolStatus(
                 tool.status,
@@ -1865,6 +1977,8 @@ export class FlowChatStore {
               isSubagentItem: tool.isSubagentItem,
               parentTaskToolId: tool.parentTaskToolId,
               subagentSessionId: tool.subagentSessionId,
+              subagentModelId: tool.subagentModelId,
+              subagentModelAlias: tool.subagentModelAlias,
             })),
             ...(round.thinkingItems || []).map((thinking: any) => ({
               id: thinking.id,
@@ -1890,6 +2004,16 @@ export class FlowChatStore {
           status: normalizedRoundStatus,
           startTime: round.startTime ?? round.timestamp,
           endTime: round.endTime,
+          durationMs: round.durationMs,
+          providerId: round.providerId,
+          modelId: round.modelId,
+          modelAlias: round.modelAlias,
+          firstChunkMs: round.firstChunkMs,
+          firstVisibleOutputMs: round.firstVisibleOutputMs,
+          streamDurationMs: round.streamDurationMs,
+          attemptCount: round.attemptCount,
+          failureCategory: round.failureCategory,
+          tokenDetails: round.tokenDetails,
           timestamp: round.timestamp,
         };
       }),

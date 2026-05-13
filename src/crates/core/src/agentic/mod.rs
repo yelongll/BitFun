@@ -1,6 +1,7 @@
-//! Agentic Module
+//! Agentic facade and product runtime assembly.
 //!
-//! Core AI Agent service system
+//! Portable contracts move to owner crates first; concrete orchestration stays
+//! here until it can be split without changing tool, session, or review flows.
 
 // Core module
 pub mod core;
@@ -17,8 +18,11 @@ pub mod execution;
 pub mod tools;
 
 // Coordination module
+pub mod context_profile;
 pub mod coordination;
+pub mod deep_review;
 pub mod deep_review_policy;
+pub(crate) mod subagent_runtime;
 
 // Shared-context fork-agent execution module
 pub mod fork_agent;
@@ -43,6 +47,7 @@ mod util;
 pub mod insights;
 
 pub use agents::*;
+pub use context_profile::*;
 pub use coordination::*;
 pub use core::*;
 pub use events::{queue, router, types as event_types};

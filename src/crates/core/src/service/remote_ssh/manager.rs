@@ -20,6 +20,7 @@ use ssh_config::SSHConfig;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::Once;
 use tokio::net::TcpStream;
 use tokio::time::{Duration, Instant};
 
@@ -1338,6 +1339,18 @@ impl SSHConnectionManager {
         command: &str,
         options: SSHCommandOptions,
     ) -> std::result::Result<SSHCommandResult, anyhow::Error> {
+        let execution_started_at = Instant::now();
+        let command_preview = if command.len() > 160 {
+            format!("{}...", &command[..160])
+        } else {
+            command.to_string()
+        };
+        log::debug!(
+            "Remote exec started: timeout_ms={:?}, has_cancellation={}, command_preview={}",
+            options.timeout_ms,
+            options.cancellation_token.is_some(),
+            command_preview
+        );
         let mut session = handle.channel_open_session().await?;
         session.exec(true, command).await?;
 
@@ -1346,6 +1359,10 @@ impl SSHConnectionManager {
         let mut exit_status: Option<i32> = None;
         let mut interrupted = false;
         let mut timed_out = false;
+        let stdout_first_chunk_once = Once::new();
+        let stderr_first_chunk_once = Once::new();
+        let mut eof_logged = false;
+        let mut close_logged = false;
         let timeout_deadline = options
             .timeout_ms
             .map(|ms| Instant::now() + Duration::from_millis(ms));
@@ -1362,6 +1379,14 @@ impl SSHConnectionManager {
             {
                 interrupted = true;
                 interrupt_drain_deadline = Some(now + SSH_COMMAND_INTERRUPT_DRAIN_GRACE);
+                log::warn!(
+                    "Remote exec cancellation requested: timeout_ms={:?}, stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                    options.timeout_ms,
+                    stdout.len(),
+                    stderr.len(),
+                    execution_started_at.elapsed().as_millis(),
+                    command_preview
+                );
                 if let Err(e) = Self::interrupt_exec_channel(&session, Sig::INT).await {
                     log::debug!("Failed to interrupt remote exec channel via SIGINT: {}", e);
                 }
@@ -1370,6 +1395,14 @@ impl SSHConnectionManager {
             if !timed_out && timeout_deadline.is_some_and(|deadline| now >= deadline) {
                 timed_out = true;
                 interrupt_drain_deadline = Some(now + SSH_COMMAND_INTERRUPT_DRAIN_GRACE);
+                log::warn!(
+                    "Remote exec timeout reached: timeout_ms={:?}, stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                    options.timeout_ms,
+                    stdout.len(),
+                    stderr.len(),
+                    execution_started_at.elapsed().as_millis(),
+                    command_preview
+                );
                 if let Err(e) = Self::interrupt_exec_channel(&session, Sig::INT).await {
                     log::debug!("Failed to interrupt timed out remote exec channel: {}", e);
                 }
@@ -1398,31 +1431,92 @@ impl SSHConnectionManager {
 
             match next_msg {
                 Some(russh::ChannelMsg::Data { ref data }) => {
+                    stdout_first_chunk_once.call_once(|| {
+                        log::debug!(
+                            "Remote exec first stdout chunk received: timeout_ms={:?}, chunk_len={}, duration_ms={}, command_preview={}",
+                            options.timeout_ms,
+                            data.len(),
+                            execution_started_at.elapsed().as_millis(),
+                            command_preview
+                        );
+                    });
                     stdout.push_str(&String::from_utf8_lossy(data));
                 }
                 Some(russh::ChannelMsg::ExtendedData { ref data, .. }) => {
+                    stderr_first_chunk_once.call_once(|| {
+                        log::debug!(
+                            "Remote exec first stderr chunk received: timeout_ms={:?}, chunk_len={}, duration_ms={}, command_preview={}",
+                            options.timeout_ms,
+                            data.len(),
+                            execution_started_at.elapsed().as_millis(),
+                            command_preview
+                        );
+                    });
                     stderr.push_str(&String::from_utf8_lossy(data));
                 }
                 Some(russh::ChannelMsg::ExitStatus {
                     exit_status: status,
                 }) => {
                     exit_status = Some(status as i32);
+                    log::debug!(
+                        "Remote exec exit status received: exit_code={}, stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                        status,
+                        stdout.len(),
+                        stderr.len(),
+                        execution_started_at.elapsed().as_millis(),
+                        command_preview
+                    );
                 }
                 Some(russh::ChannelMsg::ExitSignal { signal_name, .. }) => {
                     interrupted = interrupted || matches!(signal_name, Sig::INT | Sig::TERM);
+                    log::debug!(
+                        "Remote exec exit signal received: signal={:?}, stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                        signal_name,
+                        stdout.len(),
+                        stderr.len(),
+                        execution_started_at.elapsed().as_millis(),
+                        command_preview
+                    );
                 }
                 Some(russh::ChannelMsg::Eof) => {
+                    if !eof_logged {
+                        eof_logged = true;
+                        log::debug!(
+                            "Remote exec EOF received: stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                            stdout.len(),
+                            stderr.len(),
+                            execution_started_at.elapsed().as_millis(),
+                            command_preview
+                        );
+                    }
                 }
                 Some(russh::ChannelMsg::Close) => {
+                    if !close_logged {
+                        close_logged = true;
+                        log::debug!(
+                            "Remote exec channel close received: stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                            stdout.len(),
+                            stderr.len(),
+                            execution_started_at.elapsed().as_millis(),
+                            command_preview
+                        );
+                    }
                 }
                 None => {
+                    log::debug!(
+                        "Remote exec stream ended: stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+                        stdout.len(),
+                        stderr.len(),
+                        execution_started_at.elapsed().as_millis(),
+                        command_preview
+                    );
                     break;
                 }
                 Some(_) => {}
             }
         }
 
-        Ok(SSHCommandResult {
+        let result = SSHCommandResult {
             stdout,
             stderr,
             exit_code: exit_status.unwrap_or_else(|| {
@@ -1436,7 +1530,19 @@ impl SSHConnectionManager {
             }),
             interrupted,
             timed_out,
-        })
+        };
+        log::debug!(
+            "Remote exec completed: exit_code={}, interrupted={}, timed_out={}, stdout_len={}, stderr_len={}, duration_ms={}, command_preview={}",
+            result.exit_code,
+            result.interrupted,
+            result.timed_out,
+            result.stdout.len(),
+            result.stderr.len(),
+            execution_started_at.elapsed().as_millis(),
+            command_preview
+        );
+
+        Ok(result)
     }
 
     /// Disconnect from a server
@@ -1467,6 +1573,49 @@ impl SSHConnectionManager {
             .unwrap_or(false)
     }
 
+    async fn load_connection_config_from_saved(
+        &self,
+        connection_id: &str,
+    ) -> anyhow::Result<Option<SSHConnectionConfig>> {
+        let saved = {
+            let guard = self.saved_connections.read().await;
+            guard.iter().find(|conn| conn.id == connection_id).cloned()
+        };
+
+        let Some(saved) = saved else {
+            return Ok(None);
+        };
+
+        let auth = match saved.auth_type {
+            crate::service::remote_ssh::types::SavedAuthType::Password => {
+                let password =
+                    self.password_vault.load(connection_id).await?.ok_or_else(|| {
+                        anyhow!(
+                            "Saved SSH connection {} requires a password, but no stored vault entry is available",
+                            connection_id
+                        )
+                    })?;
+                SSHAuthMethod::Password { password }
+            }
+            crate::service::remote_ssh::types::SavedAuthType::PrivateKey { key_path } => {
+                SSHAuthMethod::PrivateKey {
+                    key_path,
+                    passphrase: None,
+                }
+            }
+        };
+
+        Ok(Some(SSHConnectionConfig {
+            id: saved.id,
+            name: saved.name,
+            host: saved.host,
+            port: saved.port,
+            username: saved.username,
+            auth,
+            default_workspace: saved.default_workspace,
+        }))
+    }
+
     /// Ensure the connection is alive; if it was torn down (network blip,
     /// server-side timeout), transparently reconnect using the saved config
     /// and (for password auth) the encrypted password vault.
@@ -1475,16 +1624,31 @@ impl SSHConnectionManager {
     /// concurrent SFTP/exec calls hit a dead session at the same time.
     /// Idempotent: returns Ok(()) immediately when the session is already alive.
     async fn ensure_alive_or_reconnect(&self, connection_id: &str) -> anyhow::Result<()> {
+        let missing_config = self
+            .load_connection_config_from_saved(connection_id)
+            .await?;
+
         let (alive_flag, reconnect_lock, mut config) = {
             let guard = self.connections.read().await;
-            let conn = guard
-                .get(connection_id)
-                .ok_or_else(|| anyhow!("Connection {} not found", connection_id))?;
-            (
-                conn.alive.clone(),
-                conn.reconnect_lock.clone(),
-                conn.config.clone(),
-            )
+            if let Some(conn) = guard.get(connection_id) {
+                (
+                    conn.alive.clone(),
+                    conn.reconnect_lock.clone(),
+                    conn.config.clone(),
+                )
+            } else {
+                let config = missing_config.ok_or_else(|| {
+                    anyhow!(
+                        "Connection {} not found and no saved SSH profile is available",
+                        connection_id
+                    )
+                })?;
+                (
+                    Arc::new(AtomicBool::new(false)),
+                    Arc::new(tokio::sync::Mutex::new(())),
+                    config,
+                )
+            }
         };
 
         if alive_flag.load(Ordering::SeqCst) {
@@ -1498,10 +1662,21 @@ impl SSHConnectionManager {
             return Ok(());
         }
 
-        log::warn!(
-            "SSH session {} is dead; attempting transparent reconnect",
-            connection_id
-        );
+        let is_existing_connection = {
+            let guard = self.connections.read().await;
+            guard.contains_key(connection_id)
+        };
+        if is_existing_connection {
+            log::warn!(
+                "SSH session {} is dead; attempting transparent reconnect",
+                connection_id
+            );
+        } else {
+            log::info!(
+                "SSH session {} is not active; attempting to connect using saved SSH profile",
+                connection_id
+            );
+        }
 
         // Refresh the password from the encrypted vault if password auth was
         // configured but the in-memory copy is empty (defensive — covers cases
@@ -1534,18 +1709,24 @@ impl SSHConnectionManager {
             if let Some(conn) = guard.get_mut(connection_id) {
                 conn.handle = Arc::new(handle);
                 conn.alive = alive;
-                if let Some(si) = server_info {
-                    conn.server_info = Some(si);
+                if let Some(si) = server_info.as_ref() {
+                    conn.server_info = Some(si.clone());
                 }
                 let mut sftp_guard = conn.sftp_session.write().await;
                 *sftp_guard = None;
             } else {
-                // Entry was removed concurrently (e.g. user-triggered disconnect);
-                // nothing to restore.
-                return Err(anyhow!(
-                    "Connection {} was removed during reconnect",
-                    connection_id
-                ));
+                guard.insert(
+                    connection_id.to_string(),
+                    ActiveConnection {
+                        handle: Arc::new(handle),
+                        config,
+                        server_info,
+                        sftp_session: Arc::new(tokio::sync::RwLock::new(None)),
+                        server_key: None,
+                        alive,
+                        reconnect_lock: Arc::new(tokio::sync::Mutex::new(())),
+                    },
+                );
             }
         }
 
@@ -1593,6 +1774,33 @@ impl SSHConnectionManager {
         Self::execute_command_internal(&handle, command, options)
             .await
             .map_err(|e| anyhow!("Command execution failed: {}", e))
+    }
+
+    /// Open a long-lived non-PTY exec channel for streaming stdin/stdout protocols.
+    pub async fn open_exec_channel(
+        &self,
+        connection_id: &str,
+        command: &str,
+    ) -> anyhow::Result<russh::Channel<Msg>> {
+        self.ensure_alive_or_reconnect(connection_id).await?;
+        let handle = {
+            let guard = self.connections.read().await;
+            guard
+                .get(connection_id)
+                .ok_or_else(|| anyhow!("Connection {} not found", connection_id))?
+                .handle
+                .clone()
+        };
+
+        let channel = handle
+            .channel_open_session()
+            .await
+            .map_err(|e| anyhow!("Failed to open SSH exec channel: {}", e))?;
+        channel
+            .exec(true, command)
+            .await
+            .map_err(|e| anyhow!("Failed to start remote command: {}", e))?;
+        Ok(channel)
     }
 
     /// Get server info for a connection
@@ -1862,11 +2070,22 @@ impl SSHConnectionManager {
             Err(_) => {}
         }
 
-        // Try to create
-        sftp.as_ref()
-            .create_dir(&path)
-            .await
-            .map_err(|e| anyhow!("Failed to create directory '{}': {}", path, e))?;
+        for dir in sftp_mkdir_all_prefixes(&path) {
+            match sftp.as_ref().try_exists(&dir).await {
+                Ok(true) => continue,
+                Ok(false) | Err(_) => {}
+            }
+
+            if let Err(error) = sftp.as_ref().create_dir(&dir).await {
+                match sftp.as_ref().try_exists(&dir).await {
+                    Ok(true) => continue,
+                    Ok(false) | Err(_) => {
+                        return Err(anyhow!("Failed to create directory '{}': {}", dir, error));
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -2249,6 +2468,27 @@ impl Default for PortForwardManager {
     }
 }
 
+fn sftp_mkdir_all_prefixes(path: &str) -> Vec<String> {
+    let is_absolute = path.starts_with('/');
+    let mut current = String::new();
+    let mut prefixes = Vec::new();
+
+    for component in path.split('/').filter(|component| !component.is_empty()) {
+        if current.is_empty() {
+            if is_absolute {
+                current.push('/');
+            }
+            current.push_str(component);
+        } else {
+            current.push('/');
+            current.push_str(component);
+        }
+        prefixes.push(current.clone());
+    }
+
+    prefixes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2323,6 +2563,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn restores_connection_config_from_saved_password_profile() {
+        let dir = test_data_dir("restore-password-config");
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let manager = SSHConnectionManager::new(dir.clone());
+
+        manager
+            .save_connection(&SSHConnectionConfig {
+                id: "ssh-root@example.com:22".to_string(),
+                name: "root@example.com".to_string(),
+                host: "example.com".to_string(),
+                port: 22,
+                username: "root".to_string(),
+                auth: SSHAuthMethod::Password {
+                    password: "secret".to_string(),
+                },
+                default_workspace: Some("/root/project".to_string()),
+            })
+            .await
+            .unwrap();
+
+        let restored = manager
+            .load_connection_config_from_saved("ssh-root@example.com:22")
+            .await
+            .unwrap()
+            .expect("expected saved config");
+
+        assert_eq!(restored.host, "example.com");
+        assert_eq!(restored.username, "root");
+        assert_eq!(restored.default_workspace.as_deref(), Some("/root/project"));
+        match restored.auth {
+            SSHAuthMethod::Password { password } => assert_eq!(password, "secret"),
+            other => panic!("expected password auth, got {:?}", other),
+        }
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
     async fn prunes_remote_workspaces_without_saved_connection() {
         let dir = test_data_dir("missing-saved");
         tokio::fs::create_dir_all(&dir).await.unwrap();
@@ -2350,5 +2628,32 @@ mod tests {
         assert_eq!(removed.len(), 1);
         assert!(manager.get_remote_workspaces().await.is_empty());
         let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[test]
+    fn mkdir_all_prefixes_expand_absolute_posix_path() {
+        assert_eq!(
+            sftp_mkdir_all_prefixes("/home/wgq/workspace/bot_detection/.bitfun/bin"),
+            vec![
+                "/home".to_string(),
+                "/home/wgq".to_string(),
+                "/home/wgq/workspace".to_string(),
+                "/home/wgq/workspace/bot_detection".to_string(),
+                "/home/wgq/workspace/bot_detection/.bitfun".to_string(),
+                "/home/wgq/workspace/bot_detection/.bitfun/bin".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn mkdir_all_prefixes_collapse_redundant_separators() {
+        assert_eq!(
+            sftp_mkdir_all_prefixes("/home//wgq///project/"),
+            vec![
+                "/home".to_string(),
+                "/home/wgq".to_string(),
+                "/home/wgq/project".to_string(),
+            ]
+        );
     }
 }

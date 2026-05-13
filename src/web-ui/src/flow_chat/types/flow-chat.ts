@@ -8,6 +8,7 @@ import type {
   SessionKind,
   SessionTitleSource,
 } from '@/shared/types/session-history';
+import type { ReviewTeamRunManifest } from '@/shared/services/reviewTeamService';
 
 // Base type for streaming items.
 export interface FlowItem {
@@ -84,6 +85,15 @@ export interface FlowToolItem extends FlowItem {
   aiIntent?: string; // AI rationale for calling the tool.
   startTime?: number;  // Tool start time.
   endTime?: number;    // Tool end time.
+  durationMs?: number;
+  queueWaitMs?: number;
+  preflightMs?: number;
+  confirmationWaitMs?: number;
+  executionMs?: number;
+
+  /** Resolved when a subagent model round completes (parent Task tool only). */
+  subagentModelId?: string;
+  subagentModelAlias?: string;
   
   // Streaming parameter buffering.
   isParamsStreaming?: boolean;  // Params are streaming in.
@@ -145,6 +155,16 @@ export interface ModelRound {
   status: 'pending' | 'streaming' | 'completed' | 'cancelled' | 'error' | 'pending_confirmation';
   startTime: number;
   endTime?: number;
+  durationMs?: number;
+  providerId?: string;
+  modelId?: string;
+  modelAlias?: string;
+  firstChunkMs?: number;
+  firstVisibleOutputMs?: number;
+  streamDurationMs?: number;
+  attemptCount?: number;
+  failureCategory?: string;
+  tokenDetails?: unknown;
   error?: string;
   renderHints?: ModelRoundRenderHints;
 }
@@ -317,6 +337,9 @@ export interface Session {
    */
   needsUserAttention?: 'ask_user' | 'tool_confirm';
 
+  /** Per-run reviewer manifest for Deep Review child sessions. */
+  deepReviewRunManifest?: ReviewTeamRunManifest;
+
   /**
    * Runtime-only session that should stay in memory but never be persisted or
    * shown in the main session navigation.
@@ -400,8 +423,8 @@ export interface ToolCardProps {
   toolItem: FlowToolItem;
   config: ToolCardConfig;
   interruptionNote?: string | null;
-  onConfirm?: (updatedInput?: any) => void;  // toolId is known within the card.
-  onReject?: () => void;
+  onConfirm?: (updatedInput?: any, permissionOptionId?: string, approve?: boolean) => void;  // toolId is known within the card.
+  onReject?: (permissionOptionId?: string) => void;
   onOpenInEditor?: (filePath: string) => void;
   onOpenInPanel?: (panelType: string, data: any) => void;
   onExpand?: () => void;

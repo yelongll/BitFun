@@ -20,11 +20,8 @@ import { notificationService } from '@/shared/notification-system';
 import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
 import { openMainSession } from '@/flow_chat/services/openBtwSession';
 import { findReusableEmptySessionId } from '@/app/utils/projectSessionWorkspace';
-import {
-  ACPClientAPI,
-  type AcpClientInfo,
-  type AcpClientRequirementProbe,
-} from '@/infrastructure/api/service-api/ACPClientAPI';
+import type { AcpClientInfo } from '@/infrastructure/api/service-api/ACPClientAPI';
+import { loadWorkspaceAcpMenuClients } from './workspaceAcpMenuClients';
 import { BranchSelectModal, type BranchSelectResult } from '../../../panels/BranchSelectModal';
 import SessionsSection from '../sessions/SessionsSection';
 import {
@@ -109,8 +106,10 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   const canShowSearchIndex =
     isActive
     && workspaceSearchEnabled
-    && workspace.workspaceKind === WorkspaceKind.Normal
-    && !isRemoteWorkspace(workspace);
+    && (
+      workspace.workspaceKind === WorkspaceKind.Normal
+      || workspace.workspaceKind === WorkspaceKind.Remote
+    );
   const workspaceSearchIndex = useWorkspaceSearchIndex({
     workspacePath: canShowSearchIndex ? workspace.rootPath : undefined,
     enabled: canShowSearchIndex,
@@ -313,18 +312,16 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
 
   useEffect(() => {
     let cancelled = false;
+    const remoteWorkspace = isRemoteWorkspace(workspace);
 
     const loadAcpClients = async () => {
       try {
-        const [clients, requirementProbes] = await Promise.all([
-          ACPClientAPI.getClients(),
-          ACPClientAPI.probeClientRequirements(),
-        ]);
-        const probesById = new Map<string, AcpClientRequirementProbe>(
-          requirementProbes.map(probe => [probe.id, probe])
-        );
+        const clients = await loadWorkspaceAcpMenuClients({
+          remoteWorkspace,
+          remoteConnectionId: remoteWorkspace ? workspace.connectionId : undefined,
+        });
         if (!cancelled) {
-          setAcpClients(clients.filter(client => client.enabled && probesById.get(client.id)?.runnable === true));
+          setAcpClients(clients);
         }
       } catch (_error) {
         setAcpClients([]);
@@ -339,7 +336,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       window.removeEventListener('bitfun:acp-clients-changed', loadAcpClients);
       window.removeEventListener('bitfun:acp-requirements-changed', loadAcpClients);
     };
-  }, []);
+  }, [workspace]);
 
   const handleActivate = useCallback(async () => {
     if (!isActive) {

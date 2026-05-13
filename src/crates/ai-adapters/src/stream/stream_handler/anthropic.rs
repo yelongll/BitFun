@@ -32,11 +32,25 @@ pub async fn handle_anthropic_stream(
     let mut usage = Usage::default();
     let mut stats = StreamStats::new("Anthropic");
     let mut inline_think_parser = InlineThinkParser::new(inline_think_in_text);
+    let mut received_finish_reason = false;
 
     loop {
         let sse = match next_stream_item(&mut stream, idle_timeout).await {
             TimedStreamItem::Item(Ok(sse)) => sse,
             TimedStreamItem::End => {
+                if received_finish_reason {
+                    for unified_response in inline_think_parser.flush() {
+                        trace!(
+                            target: AI_STREAM_RESPONSE_TARGET,
+                            "Anthropic unified response: {:?}",
+                            unified_response
+                        );
+                        stats.record_unified_response(&unified_response);
+                        let _ = tx_event.send(Ok(unified_response));
+                    }
+                    stats.log_summary("stream_closed_after_finish_reason");
+                    return;
+                }
                 let error_msg = "SSE Error: stream closed before response completed";
                 stats.log_summary("stream_closed_before_completion");
                 error!("{}", error_msg);
@@ -101,8 +115,10 @@ pub async fn handle_anthropic_stream(
                     Err(e) => {
                         stats.increment("error:sse_parsing");
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
+                        stats.log_summary("sse_parsing_error");
                         error!("{}", err_str);
-                        continue;
+                        let _ = tx_event.send(Err(anyhow!(err_str)));
+                        return;
                     }
                 };
                 // Emit for Thinking and ToolUse content_block_start events.
@@ -128,8 +144,10 @@ pub async fn handle_anthropic_stream(
                     Err(e) => {
                         stats.increment("error:sse_parsing");
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
+                        stats.log_summary("sse_parsing_error");
                         error!("{}", err_str);
-                        continue;
+                        let _ = tx_event.send(Err(anyhow!(err_str)));
+                        return;
                     }
                 };
                 match UnifiedResponse::try_from(content_block_delta) {
@@ -163,11 +181,15 @@ pub async fn handle_anthropic_stream(
                 } else {
                     Some(usage.clone())
                 };
+                let unified_response = UnifiedResponse::from(message_delta);
+                if unified_response.finish_reason.is_some() {
+                    received_finish_reason = true;
+                }
                 emit_normalized_response(
                     &mut inline_think_parser,
                     &tx_event,
                     &mut stats,
-                    UnifiedResponse::from(message_delta),
+                    unified_response,
                 );
             }
             "error" => {

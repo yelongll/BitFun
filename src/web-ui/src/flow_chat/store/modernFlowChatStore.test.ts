@@ -11,10 +11,10 @@ vi.mock('./FlowChatStore', () => ({
 }));
 
 vi.mock('../tool-cards', () => ({
-  isCollapsibleTool: (toolName: string) => ['Read', 'LS', 'Grep', 'Glob', 'WebSearch', 'Bash'].includes(toolName),
+  isCollapsibleTool: (toolName: string) => ['Read', 'LS', 'Grep', 'Glob', 'WebSearch', 'Bash', 'Git'].includes(toolName),
   READ_TOOL_NAMES: new Set(['Read']),
   SEARCH_TOOL_NAMES: new Set(['Grep', 'Glob', 'WebSearch']),
-  COMMAND_TOOL_NAMES: new Set(['Bash']),
+  COMMAND_TOOL_NAMES: new Set(['Bash', 'Git']),
 }));
 
 import { sessionToVirtualItems } from './modernFlowChatStore';
@@ -32,10 +32,14 @@ function makeTextItem(id: string, content: string): FlowTextItem {
 }
 
 function makeReadTool(id: string): FlowToolItem {
+  return makeTool(id, 'Read');
+}
+
+function makeTool(id: string, toolName: string): FlowToolItem {
   return {
     id,
     type: 'tool',
-    toolName: 'Read',
+    toolName,
     timestamp: 1001,
     status: 'completed',
     toolCall: {
@@ -169,6 +173,90 @@ describe('sessionToVirtualItems explore grouping', () => {
     expect(items.map(item => item.type)).toEqual(['user-message', 'explore-group']);
   });
 
+  it('keeps trailing explore groups expanded while the turn is still processing', () => {
+    const session = makeSession({
+      dialogTurns: [{
+        id: 'turn-1',
+        sessionId: 'session-1',
+        userMessage: {
+          id: 'user-1',
+          content: 'Help',
+          timestamp: 900,
+        },
+        modelRounds: [makeRound({ id: 'round-1', isStreaming: false, isComplete: true })],
+        status: 'processing',
+        startTime: 900,
+      }],
+    });
+
+    const items = sessionToVirtualItems(session);
+
+    expect(items.map(item => item.type)).toEqual(['user-message', 'explore-group']);
+    expect(items[1]).toMatchObject({
+      type: 'explore-group',
+      data: {
+        wasCutByCritical: false,
+      },
+    });
+  });
+
+  it('auto-collapses completed trailing explore groups', () => {
+    const session = makeSession();
+
+    const items = sessionToVirtualItems(session);
+
+    expect(items[1]).toMatchObject({
+      type: 'explore-group',
+      data: {
+        wasCutByCritical: true,
+      },
+    });
+  });
+
+  it('auto-collapses non-trailing explore groups during an active turn', () => {
+    const session = makeSession({
+      dialogTurns: [{
+        id: 'turn-1',
+        sessionId: 'session-1',
+        userMessage: {
+          id: 'user-1',
+          content: 'Help',
+          timestamp: 900,
+        },
+        modelRounds: [
+          makeRound({ id: 'round-1' }),
+          makeRound({
+            id: 'round-2',
+            items: [makeTool('tool-2', 'TodoWrite')],
+          }),
+          makeRound({
+            id: 'round-3',
+            isStreaming: true,
+            isComplete: false,
+            status: 'streaming',
+          }),
+        ],
+        status: 'processing',
+        startTime: 900,
+      }],
+    });
+
+    const items = sessionToVirtualItems(session);
+    const exploreGroups = items.filter(item => item.type === 'explore-group');
+
+    expect(exploreGroups).toHaveLength(2);
+    expect(exploreGroups[0]).toMatchObject({
+      data: {
+        wasCutByCritical: true,
+      },
+    });
+    expect(exploreGroups[1]).toMatchObject({
+      data: {
+        wasCutByCritical: false,
+      },
+    });
+  });
+
   it('renders user steering as a top-level user message item', () => {
     const steeringItem = makeSteeringItem('steer-1', 'Handle this queued request now');
     const session = makeSession({
@@ -211,6 +299,7 @@ describe('sessionToVirtualItems explore grouping', () => {
       },
       turnId: 'turn-1',
       steeringId: 'steer-1',
+      steeringStatus: 'pending',
     });
   });
 });

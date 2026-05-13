@@ -2,7 +2,7 @@
  * Pending queue panel
  *
  * Renders the per-session list of "queued" user messages above the chat input.
- * Each card supports inline edit, "send now" (mid-turn steering), and delete.
+ * Each card supports inline edit, optional "send now" (mid-turn steering), and delete.
  *
  * UX notes:
  * - Click anywhere on the preview text to start editing.
@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Pencil,
-  Send,
+  ArrowUp,
   Trash2,
   Check,
   X as XIcon,
@@ -26,12 +26,14 @@ import {
 import { Tooltip, IconButton } from '@/component-library';
 import { agentAPI } from '@/infrastructure/api/service-api/AgentAPI';
 import { stateMachineManager } from '../state-machine';
+import { FlowChatStore } from '../store/FlowChatStore';
 import { pendingQueueManager } from '../services/flow-chat-manager/PendingQueueModule';
 import { FlowChatManager } from '../services/FlowChatManager';
 import { insertSteeringItemIfAbsent } from '../services/flow-chat-manager/EventHandlerModule';
 import { notificationService } from '../../shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
 import type { QueuedMessage } from '../types/flow-chat';
+import { isAcpFlowSession } from '../utils/acpSession';
 import './PendingQueuePanel.scss';
 
 const log = createLogger('PendingQueuePanel');
@@ -46,6 +48,10 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
   const [items, setItems] = useState<QueuedMessage[]>(() =>
     sessionId ? pendingQueueManager.list(sessionId) : [],
   );
+  const [isAcpSession, setIsAcpSession] = useState<boolean>(() => {
+    if (!sessionId) return false;
+    return isAcpFlowSession(FlowChatStore.getInstance().getState().sessions.get(sessionId));
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
 
@@ -58,6 +64,22 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
     const unsubscribe = pendingQueueManager.subscribe((sid, snapshot) => {
       if (sid === sessionId) setItems(snapshot);
     });
+    return unsubscribe;
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setIsAcpSession(false);
+      return;
+    }
+
+    const store = FlowChatStore.getInstance();
+    const sync = () => {
+      setIsAcpSession(isAcpFlowSession(store.getState().sessions.get(sessionId)));
+    };
+
+    sync();
+    const unsubscribe = store.subscribe(sync);
     return unsubscribe;
   }, [sessionId]);
 
@@ -100,6 +122,10 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
   const handleSendNow = useCallback(
     async (item: QueuedMessage) => {
       if (!sessionId) return;
+      if (isAcpSession) {
+        log.warn('Steering is disabled for ACP sessions', { sessionId, itemId: item.id });
+        return;
+      }
       const machine = stateMachineManager.get(sessionId);
       const ctx = machine?.getContext();
       const dialogTurnId = ctx?.currentDialogTurnId ?? null;
@@ -175,7 +201,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
         notificationService.error(t('pendingQueue.errors.sendNowFailed'), { duration: 4000 });
       }
     },
-    [sessionId, t],
+    [isAcpSession, sessionId, t],
   );
 
   const visibleItems = useMemo(() => items, [items]);
@@ -193,7 +219,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
       }}
     >
       <div className="bitfun-pending-queue-panel__header">
-        <Inbox size={12} className="bitfun-pending-queue-panel__header-icon" />
+        <Inbox size={10} className="bitfun-pending-queue-panel__header-icon" />
         <span className="bitfun-pending-queue-panel__title">
           {t('pendingQueue.title', { count: visibleItems.length })}
           <span className="bitfun-pending-queue-panel__hint">
@@ -203,7 +229,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
         </span>
       </div>
       <ul className="bitfun-pending-queue-panel__list">
-        {visibleItems.map((item, index) => {
+        {visibleItems.map(item => {
           const isEditing = editingId === item.id;
           const isSendingNow = item.status === 'sending_now';
           const isSending = item.status === 'sending' || isSendingNow;
@@ -219,7 +245,6 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
             .join(' ');
           return (
             <li key={item.id} className={itemClass}>
-              <span className="bitfun-pending-queue-panel__index">{index + 1}</span>
               <div className="bitfun-pending-queue-panel__content">
                 {isEditing ? (
                   <>
@@ -299,7 +324,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={() => handleEditSave(item)}
                         aria-label={t('pendingQueue.actions.saveEdit')}
                       >
-                        <Check size={14} />
+                        <Check size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                     <Tooltip content={t('pendingQueue.actions.cancelEdit')}>
@@ -309,7 +334,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={handleEditCancel}
                         aria-label={t('pendingQueue.actions.cancelEdit')}
                       >
-                        <XIcon size={14} />
+                        <XIcon size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                   </>
@@ -323,26 +348,28 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={() => handleEditStart(item)}
                         aria-label={t('pendingQueue.actions.edit')}
                       >
-                        <Pencil size={14} />
+                        <Pencil size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip content={t('pendingQueue.tooltip.sendNow')}>
-                      <IconButton
-                        size="small"
-                        className="bitfun-pending-queue-panel__btn bitfun-pending-queue-panel__btn--primary"
-                        disabled={isSending}
-                        onClick={() => {
-                          void handleSendNow(item);
-                        }}
-                        aria-label={t('pendingQueue.actions.sendNow')}
-                      >
-                        {isSendingNow ? (
-                          <Loader2 size={14} className="bitfun-pending-queue-panel__spin" />
-                        ) : (
-                          <Send size={14} />
-                        )}
-                      </IconButton>
-                    </Tooltip>
+                    {!isAcpSession && (
+                      <Tooltip content={t('pendingQueue.tooltip.sendNow')}>
+                        <IconButton
+                          size="small"
+                          className="bitfun-pending-queue-panel__btn bitfun-pending-queue-panel__btn--primary"
+                          disabled={isSending}
+                          onClick={() => {
+                            void handleSendNow(item);
+                          }}
+                          aria-label={t('pendingQueue.actions.sendNow')}
+                        >
+                          {isSendingNow ? (
+                            <Loader2 size={12} strokeWidth={2.5} className="bitfun-pending-queue-panel__spin" />
+                          ) : (
+                            <ArrowUp size={12} strokeWidth={2.5} />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     <Tooltip content={t('pendingQueue.actions.delete')}>
                       <IconButton
                         size="small"
@@ -351,7 +378,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={() => handleDelete(item)}
                         aria-label={t('pendingQueue.actions.delete')}
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                   </>
